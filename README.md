@@ -1,63 +1,83 @@
-<img src="assets/nyxlink_banner.png" alt="NyxLink — A modern Lavalink &amp; NodeLink client for Discord bots" width="100%">
+<p align="center">
+  <img src="https://raw.githubusercontent.com/melodiabl/NyxLink/dev/assets/nyxlink_banner.png" alt="NyxLink" width="100%">
+</p>
 
 # NyxLink
 
-Cliente de audio para bots de Discord derivado de [Moonlink.js](https://github.com/Ecliptia/moonlink.js). El desarrollo parte de Moonlink `dev` 5.3.0-dev.2 y conserva su API pública cuando es posible.
+Cliente de **Lavalink v4 y NodeLink** para bots de Discord, escrito en TypeScript y disponible para JavaScript y TypeScript.
 
-Los backends objetivo son **Lavalink v4 y NodeLink**. Las pruebas locales cubren REST, WebSocket y reanudación de sesiones; el audio audible y la voz real de Discord siguen pendientes; consulta el [estado de desarrollo](docs/development.md) y el [plan de trabajo](tasks/todo.md).
+[Paquete npm](https://www.npmjs.com/package/nyxlink) · [GitHub](https://github.com/melodiabl/NyxLink) · [Reportar un problema](https://github.com/melodiabl/NyxLink/issues)
+
+## Instalación
+
+Requiere **Node.js 22.12 o superior**. Versión de desarrollo actual: **0.1.0-dev.1**.
+
+```sh
+npm install nyxlink@dev
+```
+
+Para fijar la versión:
+
+```sh
+npm install nyxlink@0.1.0-dev.1
+```
+
+## Uso con Discord.js
+
+El ejemplo utiliza Discord.js 14. Instálalo en tu bot con `npm install discord.js` y configura `DISCORD_TOKEN` y `AUDIO_NODE_PASSWORD` en tu entorno.
+
+```js
+const { Client, GatewayIntentBits } = require('discord.js');
+const { Manager, Connectors } = require('nyxlink');
+
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+});
+
+const manager = new Manager({
+  nodes: [{
+    identifier: 'principal',
+    host: process.env.AUDIO_NODE_HOST ?? '127.0.0.1',
+    port: Number(process.env.AUDIO_NODE_PORT ?? 2333),
+    password: process.env.AUDIO_NODE_PASSWORD,
+    secure: false,
+  }],
+  options: { database: { type: 'memory' }, resume: false },
+});
+
+manager.use(new Connectors.DiscordJs(), client);
+manager.on('nodeReady', node => console.log(`Nodo conectado: ${node.identifier}`));
+manager.on('nodeError', (_node, error) => console.error(error.message));
+
+client.login(process.env.DISCORD_TOKEN);
+```
+
+Espera el evento `nodeReady` antes de buscar o reproducir pistas. Los ejemplos completos de búsqueda, cola y cierre están en [JavaScript](examples/discordjs.cjs) y [TypeScript](examples/discordjs.ts).
+
+## API principal
+
+- `manager.search({ query, requester })`: buscar pistas.
+- `manager.players.create({ guildId, voiceChannelId })`: crear un reproductor.
+- `player.queue.add(track)`: añadir una pista a la cola.
+- `await player.play()`: iniciar la reproducción; devuelve si el backend aceptó la operación.
+- `await player.stop()`: detener la reproducción.
+- `await player.setVolumeAsync(50)`: cambiar el volumen esperando la respuesta del backend.
+- `await manager.shutdown()`: cerrar los recursos de NyxLink.
 
 ## Desarrollo
 
-Requiere Node.js 22.12+ o 24 y pnpm 10.34.5.
-
 ```sh
-git clone --branch feat/nyxlink-validation https://github.com/melodiabl/NyxLink.git
+git clone --branch dev https://github.com/melodiabl/NyxLink.git
 cd NyxLink
 corepack pnpm install --frozen-lockfile
-pnpm run typecheck
+pnpm run build
 pnpm test
 pnpm run test:types
-pnpm run pack:check
+pnpm run test:package
 ```
 
-`pnpm test` compila y ejecuta pruebas automáticas sin tokens ni conexiones a Discord. `pnpm run test:bot` ejecuta el bot manual y requiere su propia configuración de pruebas.
+`src/` contiene el código TypeScript. `dist/` contiene el JavaScript compilado, las declaraciones de tipos y los mapas de código; se genera con `pnpm run build` y es la entrada del paquete npm. `tests/`, `scripts/` y `.github/` contienen las pruebas y su automatización.
 
-## Estado de distribución
+## Licencia
 
-Esta rama es de desarrollo y la publicación está desactivada. La identidad elegida es `nyxlink@0.1.0-dev.1`, con `private: true`. Puedes generar e instalar un tarball local siguiendo la [guía de migración](docs/migration.md); no hay una publicación npm anunciada. No uses las estadísticas, versiones o instrucciones npm de Moonlink como si fueran de NyxLink.
-
-## Uso y referencia
-
-Consulta los [ejemplos JavaScript y TypeScript](examples/README.md), la [API pública](docs/api.md), la [migración desde Moonlink](docs/migration.md) y la [búsqueda/caché opcionales](docs/search.md). El [estado consolidado del plan](tasks/master-status.md) distingue entregas terminadas, decisiones sustituidas y validaciones que requieren Discord o proveedores externos.
-
-## Logs
-
-Los eventos `debug` heredados siguen disponibles. Sus mensajes técnicos pueden incluir contraseñas de nodos y tokens de voz: el responsable del bot controla el acceso a la consola y a sus archivos. No se deben reenviar automáticamente a navegadores, canales de Discord ni servicios externos.
-
-El [logger Consola Combinado](docs/logging.md) es opcional: incluye banner ASCII y paneles de estado/failover con información real. Consulta también los [cambios de reproducción, recuperación y volumen](docs/playback.md) y el [changelog](CHANGELOG.md).
-
-## Nodos y compatibilidad local
-
-La segunda entrega incorpora selección/salud de nodos, failover limitado por intentos y adaptadores de capacidades. La [matriz de compatibilidad](docs/backend-compatibility.md) distingue las pruebas reales de protocolo de la reproducción audible en Discord.
-
-En Linux con Podman o Docker puedes repetir el laboratorio local sin tokens de Discord:
-
-```sh
-pnpm run test:backends
-# Con Docker:
-NYXLINK_CONTAINER_ENGINE=docker pnpm run test:backends
-```
-
-El laboratorio descarga imágenes oficiales fijadas por digest, inicia servidores en localhost y elimina sus propios contenedores al finalizar. El resto del plan continúa en [tasks/todo.md](tasks/todo.md).
-
-## Pistas, almacenamiento y voz
-
-La [tercera entrega](docs/tracks-storage-voice.md) añade resolución de pistas en el backend de destino, snapshots con metadatos, un contrato StorageAdapter y coordinación del gateway de voz con protección frente a respuestas obsoletas. Las firmas heredadas se conservan y las pruebas no conectan bots de Discord.
-
-## Estabilidad y cierre
-
-La [cuarta entrega](docs/stability.md) añade `await manager.shutdown()`, limpieza de snapshots/pings y mediciones reproducibles con `pnpm run bench` y `pnpm run test:endurance -- 600`. La [preparación de prerelease](docs/release-readiness.md) enumera las verificaciones pendientes; la publicación sigue bloqueada.
-
-## Licencia y origen
-
-Derivado de Moonlink.js, de **1Lucas1.apk y sus colaboradores**. Se conservan los avisos originales y la licencia [Open Software License 3.0](LICENSE). Los cambios de NyxLink no implican respaldo del proyecto original.
+Mantenido por [melodiabl](https://github.com/melodiabl). NyxLink deriva de Moonlink.js, de 1Lucas1.apk y sus colaboradores, y conserva la licencia [OSL-3.0](LICENSE) y los avisos de origen.
