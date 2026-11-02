@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-11-02T21:16:55.454848+00:00",
+  "package": "nyxlink",
+  "version": "0.1.0-dev.1",
+  "tag": "dev",
+  "registry": "https://registry.npmjs.org/",
+  "sourceCommit": "1abd3987dc580f1cd20b155fb0f56f4e7eb4a426",
+  "sourceTag": "v0.1.0-dev.1",
+  "archiveSha256": "0758d1dbdf481652e692773584e78ea17a032359471474c33b9f710b6fe079b0",
+  "dryRunPassed": true,
+  "publicationPassed": false,
+  "errorCode": "E403",
+  "reason": "npm requires two-factor authentication or a granular publish token with bypass 2FA; account 2FA is disabled",
+  "registryStatusAfterAttempt": 404,
+  "nextStep": "Owner enables npm 2FA; retry the same validated archive after authentication"
+}
