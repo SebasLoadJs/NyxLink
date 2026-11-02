@@ -1,6 +1,6 @@
 # Preparación de prerelease
 
-Identidad autorizada: **nyxlink@0.1.0-dev.1**. El propietario autorizó ahora la publicación manual de desarrollo y autenticó la cuenta npm melodiabl. Se retira private del paquete y publishConfig fija registro público, access=public y tag=dev. Los workflows siguen sin publicar automáticamente. El PR #6 fue fusionado por el propietario en dev; esta preparación parte de ese árbol. La autorización de esta prerelease no declara superadas las validaciones de audio pendientes.
+Identidad autorizada: **nyxlink@0.1.0-dev.1**. El propietario autorizó ahora la publicación manual de desarrollo y autenticó la cuenta npm melodiabl. La [prerelease está publicada y verificada](npm-release.md). Se retiró private del paquete y publishConfig fija registro público, access=public y tag=dev. Los workflows siguen sin publicar automáticamente. El PR #6 fue fusionado por el propietario en dev; esta preparación parte de ese árbol. La autorización de esta prerelease no declara superadas las validaciones de audio pendientes.
 
 ## Evidencia disponible
 

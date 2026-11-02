@@ -1,16 +1,33 @@
 {
-  "timestamp": "2026-11-02T21:16:55.454848+00:00",
+  "timestamp": "2026-11-02T21:22:32.621Z",
   "package": "nyxlink",
   "version": "0.1.0-dev.1",
   "tag": "dev",
+  "distTags": {
+    "latest": "0.1.0-dev.1",
+    "dev": "0.1.0-dev.1"
+  },
   "registry": "https://registry.npmjs.org/",
+  "url": "https://www.npmjs.com/package/nyxlink/v/0.1.0-dev.1",
   "sourceCommit": "1abd3987dc580f1cd20b155fb0f56f4e7eb4a426",
   "sourceTag": "v0.1.0-dev.1",
   "archiveSha256": "0758d1dbdf481652e692773584e78ea17a032359471474c33b9f710b6fe079b0",
+  "registryIntegrity": "sha512-tAG9JeuFIwQTiba0Y1ljYeLpFCi+DcFCCW/f/lA8FPf0ep+AgN+QW6tjMq913Q5edqeGB683oj5lJwTMDwAtZw==",
+  "tarballUrl": "https://registry.npmjs.org/nyxlink/-/nyxlink-0.1.0-dev.1.tgz",
   "dryRunPassed": true,
-  "publicationPassed": false,
-  "errorCode": "E403",
-  "reason": "npm requires two-factor authentication or a granular publish token with bypass 2FA; account 2FA is disabled",
-  "registryStatusAfterAttempt": 404,
-  "nextStep": "Owner enables npm 2FA; retry the same validated archive after authentication"
+  "publicationPassed": true,
+  "registryStatusAfterAttempt": 200,
+  "previousAttempt": {
+    "errorCode": "E403",
+    "reason": "2FA was disabled; owner enabled it and completed browser authentication"
+  },
+  "registryInstallPassed": true,
+  "registryInstallChecks": [
+    "install exact published version from public npm in isolated consumer",
+    "identity, runtime dependencies and license bytes",
+    "CommonJS public exports, metadata and silent lifecycle",
+    "ESM named imports and lifecycle",
+    "TypeScript NodeNext CJS/ESM consumers without skipLibCheck",
+    "TypeScript example compile and CommonJS factory/cleanup without login"
+  ]
 }

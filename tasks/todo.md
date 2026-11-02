@@ -67,3 +67,10 @@
 - [x] V4: Consolidated PR against dev, quality/package checks and CI evidence; preserve external audio/publication blockers.
 
 Final consolidation: [PR #6](https://github.com/melodiabl/NyxLink/pull/6), [validation evidence](../docs/validation.md) and [one-hour report](../docs/performance/endurance-3600.json). External conditions remain explicit above; this does not mark Discord audio or publication complete.
+
+## Publicación npm de desarrollo autorizada posteriormente
+
+- [x] Cuenta melodiabl autenticada, 2FA activado y validación web completada por el propietario.
+- [x] nyxlink@0.1.0-dev.1 publicado con tag dev; integridad y descarga pública coinciden con el tarball validado.
+- [x] Seis comprobaciones de instalación limpia desde npm (CJS/ESM/tipos/ejemplos/licencia); [evidencia](../docs/npm-release.md).
+- [x] Fuente identificada por tag v0.1.0-dev.1; workflows de publicación automática permanecen deshabilitados.

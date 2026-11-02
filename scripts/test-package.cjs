@@ -7,6 +7,8 @@ const { spawnSync } = require('node:child_process');
 const root = path.resolve(__dirname, '..');
 const manifest = require('../package.json');
 const baseline = require('../tests/fixtures/public-exports.json');
+const fromRegistry = process.argv.includes('--registry');
+assert.ok(process.argv.slice(2).every(argument => argument === '--registry'), 'Usage: node scripts/test-package.cjs [--registry]');
 
 function run(command, args, cwd) {
   const result = spawnSync(command, args, { cwd, encoding: 'utf8', timeout: 120000, env: { ...process.env, CI: 'false', COREPACK_ENABLE_PROJECT_SPEC: '0' } });
@@ -24,20 +26,22 @@ async function main() {
   let passed = false;
   let archive;
   try {
-    const packed = run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', directory], root);
-    const [description] = JSON.parse(packed.stdout);
-    archive = path.join(directory, description.filename);
-    assert.equal(path.dirname(archive), directory);
+    if (!fromRegistry) {
+      const packed = run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', directory], root);
+      const [description] = JSON.parse(packed.stdout);
+      archive = path.join(directory, description.filename);
+      assert.equal(path.dirname(archive), directory);
+    }
     const consumer = path.join(directory, 'consumer');
     await fs.mkdir(consumer);
     const types = require('../node_modules/@types/node/package.json').version;
     const compiler = require('../node_modules/typescript/package.json').version;
     const discord = require('../node_modules/discord.js/package.json').version;
     await fs.writeFile(path.join(consumer, 'package.json'), JSON.stringify({ private: true, packageManager: manifest.packageManager,
-      dependencies: { [manifest.name]: `file:${archive}` }, devDependencies: { '@types/node': types, typescript: compiler, 'discord.js': discord } }));
+      dependencies: { [manifest.name]: fromRegistry ? manifest.version : `file:${archive}` }, devDependencies: { '@types/node': types, typescript: compiler, 'discord.js': discord } }));
     const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
-    run(pnpm, ['install', '--prefer-offline', '--ignore-scripts', '--no-frozen-lockfile'], consumer);
-    checks.push('install packed artifact in isolated consumer');
+    run(pnpm, ['install', fromRegistry ? '--prefer-offline=false' : '--prefer-offline', ...(fromRegistry ? ['--force'] : []), '--registry=https://registry.npmjs.org/', '--ignore-scripts', '--no-frozen-lockfile'], consumer);
+    checks.push(fromRegistry ? 'install exact published version from public npm in isolated consumer' : 'install packed artifact in isolated consumer');
     const installed = path.join(consumer, 'node_modules', ...manifest.name.split('/'));
     assert.notEqual(await fs.realpath(installed), root, 'Consumer must use the packed copy');
     const actual = JSON.parse(await fs.readFile(path.join(installed, 'package.json'), 'utf8'));
@@ -79,10 +83,10 @@ async function main() {
     checks.push('TypeScript example compile and CommonJS factory/cleanup without login');
     passed = true;
   } finally {
-    const report = { timestamp: new Date().toISOString(), scope: 'packed local installation; no registry publication or Discord',
+    const report = { timestamp: new Date().toISOString(), scope: fromRegistry ? 'published public npm installation; no Discord' : 'packed local installation; no registry publication or Discord',
       node: process.version, package: manifest.name, version: manifest.version, private: manifest.private, publishConfig: manifest.publishConfig, passed, checks,
       ...(archive ? { sha256: createHash('sha256').update(await fs.readFile(archive)).digest('hex') } : {}) };
-    const reportPath = path.join(root, '.runtime/package/report.json');
+    const reportPath = path.join(root, fromRegistry ? '.runtime/npm-install/report.json' : '.runtime/package/report.json');
     await fs.mkdir(path.dirname(reportPath), { recursive: true });
     await fs.writeFile(reportPath, JSON.stringify(report, null, 2) + '\n');
     await fs.rm(directory, { recursive: true, force: true });
