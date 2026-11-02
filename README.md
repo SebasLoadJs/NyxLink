@@ -1,17 +1,27 @@
-<img src="assets/nyxlink_banner.png" alt="NyxLink — A modern Lavalink &amp; NodeLink client for Discord bots" width="100%">
+<img src="https://raw.githubusercontent.com/melodiabl/NyxLink/v0.1.0-dev.1/assets/nyxlink_banner.png" alt="NyxLink — A modern Lavalink &amp; NodeLink client for Discord bots" width="100%">
 
 # NyxLink
 
 Cliente de audio para bots de Discord derivado de [Moonlink.js](https://github.com/Ecliptia/moonlink.js). El desarrollo parte de Moonlink `dev` 5.3.0-dev.2 y conserva su API pública cuando es posible.
 
-Los backends objetivo son **Lavalink v4 y NodeLink**. Las pruebas locales cubren REST, WebSocket y reanudación de sesiones; el audio audible y la voz real de Discord siguen pendientes; consulta el [estado de desarrollo](docs/development.md) y el [plan de trabajo](tasks/todo.md).
+Los backends objetivo son **Lavalink v4 y NodeLink**. Las pruebas locales cubren REST, WebSocket y reanudación de sesiones; el audio audible y la voz real de Discord siguen pendientes; consulta el [estado de desarrollo](https://github.com/melodiabl/NyxLink/blob/v0.1.0-dev.1/docs/development.md) y el [plan de trabajo](https://github.com/melodiabl/NyxLink/blob/v0.1.0-dev.1/tasks/todo.md).
+
+## Instalación de desarrollo
+
+```sh
+npm install nyxlink@dev
+# Versión exacta:
+npm install nyxlink@0.1.0-dev.1
+```
+
+La versión `0.1.0-dev.1` es experimental. Se verificaron protocolo local, consumidores CJS/ESM/TypeScript y resistencia de una hora; la reproducción audible, DAVE y extensiones con proveedores reales siguen pendientes.
 
 ## Desarrollo
 
 Requiere Node.js 22.12+ o 24 y pnpm 10.34.5.
 
 ```sh
-git clone --branch feat/nyxlink-validation https://github.com/melodiabl/NyxLink.git
+git clone --branch v0.1.0-dev.1 https://github.com/melodiabl/NyxLink.git
 cd NyxLink
 corepack pnpm install --frozen-lockfile
 pnpm run typecheck
@@ -24,21 +34,21 @@ pnpm run pack:check
 
 ## Estado de distribución
 
-Esta rama es de desarrollo y la publicación está desactivada. La identidad elegida es `nyxlink@0.1.0-dev.1`, con `private: true`. Puedes generar e instalar un tarball local siguiendo la [guía de migración](docs/migration.md); no hay una publicación npm anunciada. No uses las estadísticas, versiones o instrucciones npm de Moonlink como si fueran de NyxLink.
+La identidad elegida es `nyxlink@0.1.0-dev.1`, con etiqueta npm `dev`. La publicación es manual y requiere acceso de la cuenta responsable; los workflows no publican automáticamente. No uses las estadísticas, versiones o instrucciones npm de Moonlink como si fueran de NyxLink.
 
 ## Uso y referencia
 
-Consulta los [ejemplos JavaScript y TypeScript](examples/README.md), la [API pública](docs/api.md), la [migración desde Moonlink](docs/migration.md) y la [búsqueda/caché opcionales](docs/search.md). El [estado consolidado del plan](tasks/master-status.md) distingue entregas terminadas, decisiones sustituidas y validaciones que requieren Discord o proveedores externos.
+Consulta los [ejemplos JavaScript y TypeScript](https://github.com/melodiabl/NyxLink/blob/v0.1.0-dev.1/examples/README.md), la [API pública](https://github.com/melodiabl/NyxLink/blob/v0.1.0-dev.1/docs/api.md), la [migración desde Moonlink](https://github.com/melodiabl/NyxLink/blob/v0.1.0-dev.1/docs/migration.md) y la [búsqueda/caché opcionales](https://github.com/melodiabl/NyxLink/blob/v0.1.0-dev.1/docs/search.md). El [estado consolidado del plan](https://github.com/melodiabl/NyxLink/blob/v0.1.0-dev.1/tasks/master-status.md) distingue entregas terminadas, decisiones sustituidas y validaciones que requieren Discord o proveedores externos.
 
 ## Logs
 
 Los eventos `debug` heredados siguen disponibles. Sus mensajes técnicos pueden incluir contraseñas de nodos y tokens de voz: el responsable del bot controla el acceso a la consola y a sus archivos. No se deben reenviar automáticamente a navegadores, canales de Discord ni servicios externos.
 
-El [logger Consola Combinado](docs/logging.md) es opcional: incluye banner ASCII y paneles de estado/failover con información real. Consulta también los [cambios de reproducción, recuperación y volumen](docs/playback.md) y el [changelog](CHANGELOG.md).
+El [logger Consola Combinado](https://github.com/melodiabl/NyxLink/blob/v0.1.0-dev.1/docs/logging.md) es opcional: incluye banner ASCII y paneles de estado/failover con información real. Consulta también los [cambios de reproducción, recuperación y volumen](https://github.com/melodiabl/NyxLink/blob/v0.1.0-dev.1/docs/playback.md) y el [changelog](https://github.com/melodiabl/NyxLink/blob/v0.1.0-dev.1/CHANGELOG.md).
 
 ## Nodos y compatibilidad local
 
-La segunda entrega incorpora selección/salud de nodos, failover limitado por intentos y adaptadores de capacidades. La [matriz de compatibilidad](docs/backend-compatibility.md) distingue las pruebas reales de protocolo de la reproducción audible en Discord.
+La segunda entrega incorpora selección/salud de nodos, failover limitado por intentos y adaptadores de capacidades. La [matriz de compatibilidad](https://github.com/melodiabl/NyxLink/blob/v0.1.0-dev.1/docs/backend-compatibility.md) distingue las pruebas reales de protocolo de la reproducción audible en Discord.
 
 En Linux con Podman o Docker puedes repetir el laboratorio local sin tokens de Discord:
 
@@ -48,16 +58,16 @@ pnpm run test:backends
 NYXLINK_CONTAINER_ENGINE=docker pnpm run test:backends
 ```
 
-El laboratorio descarga imágenes oficiales fijadas por digest, inicia servidores en localhost y elimina sus propios contenedores al finalizar. El resto del plan continúa en [tasks/todo.md](tasks/todo.md).
+El laboratorio descarga imágenes oficiales fijadas por digest, inicia servidores en localhost y elimina sus propios contenedores al finalizar. El resto del plan continúa en [tasks/todo.md](https://github.com/melodiabl/NyxLink/blob/v0.1.0-dev.1/tasks/todo.md).
 
 ## Pistas, almacenamiento y voz
 
-La [tercera entrega](docs/tracks-storage-voice.md) añade resolución de pistas en el backend de destino, snapshots con metadatos, un contrato StorageAdapter y coordinación del gateway de voz con protección frente a respuestas obsoletas. Las firmas heredadas se conservan y las pruebas no conectan bots de Discord.
+La [tercera entrega](https://github.com/melodiabl/NyxLink/blob/v0.1.0-dev.1/docs/tracks-storage-voice.md) añade resolución de pistas en el backend de destino, snapshots con metadatos, un contrato StorageAdapter y coordinación del gateway de voz con protección frente a respuestas obsoletas. Las firmas heredadas se conservan y las pruebas no conectan bots de Discord.
 
 ## Estabilidad y cierre
 
-La [cuarta entrega](docs/stability.md) añade `await manager.shutdown()`, limpieza de snapshots/pings y mediciones reproducibles con `pnpm run bench` y `pnpm run test:endurance -- 600`. La [preparación de prerelease](docs/release-readiness.md) enumera las verificaciones pendientes; la publicación sigue bloqueada.
+La [cuarta entrega](https://github.com/melodiabl/NyxLink/blob/v0.1.0-dev.1/docs/stability.md) añade `await manager.shutdown()`, limpieza de snapshots/pings y mediciones reproducibles con `pnpm run bench` y `pnpm run test:endurance -- 600`. La [preparación de prerelease](https://github.com/melodiabl/NyxLink/blob/v0.1.0-dev.1/docs/release-readiness.md) enumera las verificaciones pendientes; la publicación de desarrollo no certifica esas funciones.
 
 ## Licencia y origen
 
-Derivado de Moonlink.js, de **1Lucas1.apk y sus colaboradores**. Se conservan los avisos originales y la licencia [Open Software License 3.0](LICENSE). Los cambios de NyxLink no implican respaldo del proyecto original.
+Derivado de Moonlink.js, de **1Lucas1.apk y sus colaboradores**. Se conservan los avisos originales y la licencia [Open Software License 3.0](https://github.com/melodiabl/NyxLink/blob/v0.1.0-dev.1/LICENSE). Los cambios de NyxLink no implican respaldo del proyecto original.

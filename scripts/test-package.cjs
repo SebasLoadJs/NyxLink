@@ -15,7 +15,10 @@ function run(command, args, cwd) {
 }
 
 async function main() {
-  assert.equal(manifest.private, true, 'Distribution tests must keep publication blocked');
+  assert.equal(manifest.name, 'nyxlink');
+  assert.equal(manifest.private, false, 'The owner authorized this development publication');
+  assert.match(manifest.version, /^0\.1\.0-dev\.\d+$/);
+  assert.deepEqual(manifest.publishConfig, { registry: 'https://registry.npmjs.org/', access: 'public', tag: 'dev' }, 'Development releases must target the explicit public registry and dev tag');
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'nyxlink-package-'));
   const checks = [];
   let passed = false;
@@ -38,7 +41,8 @@ async function main() {
     const installed = path.join(consumer, 'node_modules', ...manifest.name.split('/'));
     assert.notEqual(await fs.realpath(installed), root, 'Consumer must use the packed copy');
     const actual = JSON.parse(await fs.readFile(path.join(installed, 'package.json'), 'utf8'));
-    assert.equal(actual.name, manifest.name); assert.equal(actual.version, manifest.version); assert.equal(actual.private, true);
+    assert.equal(actual.name, manifest.name); assert.equal(actual.version, manifest.version); assert.equal(actual.private, manifest.private);
+    assert.deepEqual(actual.publishConfig, manifest.publishConfig);
     assert.deepEqual(actual.dependencies, manifest.dependencies);
     const license = await fs.readFile(path.join(installed, 'LICENSE'));
     assert.deepEqual(license, await fs.readFile(path.join(root, 'LICENSE')));
@@ -76,7 +80,7 @@ async function main() {
     passed = true;
   } finally {
     const report = { timestamp: new Date().toISOString(), scope: 'packed local installation; no registry publication or Discord',
-      node: process.version, package: manifest.name, version: manifest.version, passed, checks,
+      node: process.version, package: manifest.name, version: manifest.version, private: manifest.private, publishConfig: manifest.publishConfig, passed, checks,
       ...(archive ? { sha256: createHash('sha256').update(await fs.readFile(archive)).digest('hex') } : {}) };
     const reportPath = path.join(root, '.runtime/package/report.json');
     await fs.mkdir(path.dirname(reportPath), { recursive: true });

@@ -1,5 +1,7 @@
 # Validación final y consolidación
 
+Actualización posterior: el propietario fusionó el PR #6 y autorizó la [prerelease npm de desarrollo](npm-release.md). El estado privado de la preparación descrita aquí corresponde al checkpoint anterior; la configuración actual publica manualmente con tag dev.
+
 [PR #6 hacia dev](https://github.com/melodiabl/NyxLink/pull/6) reúne las entregas 2–4 con la preparación privada final. Los PR anteriores ya fueron fusionados por el usuario en sus bases apiladas, dejando dev con la primera entrega. El PR consolidado no se fusiona automáticamente y no cambia la rama predeterminada.
 
 ## Implementación y distribución

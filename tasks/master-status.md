@@ -1,5 +1,7 @@
 # Estado consolidado del plan
 
+Actualización posterior: el propietario fusionó el PR #6 en dev y autorizó la publicación npm de desarrollo tras autenticar su cuenta. Ver [release npm](../docs/npm-release.md). Los estados de preparación privada de las tablas describen el checkpoint previo y no bloquean esta publicación autorizada.
+
 Referencia: ZIP consolidado del 2 de noviembre de 2026, `00_ACTUALIZACIONES/DECISIONES_VIGENTES.md` y `FEATURES_Y_PLAN_DE_TRABAJO.md`, que prevalecen sobre el CSV histórico. Este documento no convierte una prueba local en certificación de audio Discord. Los enlaces de cada entrega en [todo.md](todo.md) contienen la evidencia técnica.
 
 ## Fases vigentes

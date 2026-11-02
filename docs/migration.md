@@ -1,6 +1,6 @@
 # Migración desde Moonlink
 
-NyxLink parte de Moonlink dev `5.3.0-dev.2`. Su primera identidad propia es `nyxlink@0.1.0-dev.1`, todavía privada. Esta versión no continúa la numeración de releases de Moonlink ni indica una release estable.
+NyxLink parte de Moonlink dev `5.3.0-dev.2`. Su primera identidad propia es `nyxlink@0.1.0-dev.1`, experimental y destinada a la etiqueta npm dev. Esta versión no continúa la numeración de releases de Moonlink ni indica una release estable.
 
 ## Instalar para una prueba local
 
@@ -12,7 +12,7 @@ npm pack --ignore-scripts
 pnpm add /ruta/NyxLink/nyxlink-0.1.0-dev.1.tgz
 ```
 
-Cambia `require('moonlink.js')` por `require('nyxlink')`, o el mismo specifier en tus imports TypeScript/ESM. El artefacto conserva CommonJS y permite imports nombrados en ESM; los consumidores de tipos CJS/ESM se verifican con NodeNext sin skipLibCheck. La [evidencia del tarball](package-evidence.json) registra sus seis comprobaciones y SHA-256. No hay una publicación npm anunciada. Requiere Node 22.12+; CI verifica Node 22 y 24. Discord.js pertenece al bot, no es una dependencia runtime de NyxLink.
+Cambia `require('moonlink.js')` por `require('nyxlink')`, o el mismo specifier en tus imports TypeScript/ESM. El artefacto conserva CommonJS y permite imports nombrados en ESM; los consumidores de tipos CJS/ESM se verifican con NodeNext sin skipLibCheck. La [evidencia del tarball](package-evidence.json) registra sus seis comprobaciones y SHA-256. La publicación de desarrollo fue autorizada por el propietario; usa npm install nyxlink@dev una vez disponible. Requiere Node 22.12+; CI verifica Node 22 y 24. Discord.js pertenece al bot, no es una dependencia runtime de NyxLink.
 
 ## Cambios de comportamiento relevantes
 

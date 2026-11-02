@@ -1,6 +1,6 @@
 # Preparación de prerelease
 
-Identidad autorizada: **nyxlink@0.1.0-dev.1**. Se conserva `private: true` y el workflow de publicación bloqueado. Los PR #1/#3/#4/#5 fueron fusionados por el usuario en sus bases apiladas; la entrega final consolida el resultado mediante un PR a dev. No se anuncia una release npm.
+Identidad autorizada: **nyxlink@0.1.0-dev.1**. El propietario autorizó ahora la publicación manual de desarrollo y autenticó la cuenta npm melodiabl. Se retira private del paquete y publishConfig fija registro público, access=public y tag=dev. Los workflows siguen sin publicar automáticamente. El PR #6 fue fusionado por el propietario en dev; esta preparación parte de ese árbol. La autorización de esta prerelease no declara superadas las validaciones de audio pendientes.
 
 ## Evidencia disponible
 
@@ -11,13 +11,13 @@ Identidad autorizada: **nyxlink@0.1.0-dev.1**. Se conserva `private: true` y el 
 - Benchmark y endurance con métricas y limpieza: [estabilidad](stability.md) registra las duraciones terminadas.
 - [API](api.md), [migración](migration.md), [ejemplos](../examples/README.md), [conciliación del plan](../tasks/master-status.md), banner y OSL-3.0 conservados.
 
-## Condiciones externas pendientes
+## Condiciones pendientes para una versión estable
 
 1. Bot/canal dedicados para audio, permisos, movimientos, reconexión, DAVE y latencia play→trackStart. El usuario confirmó que no existe bot de pruebas disponible.
 2. Proveedores y pistas adecuados para letras encontradas/idiomas, capítulos reales, mixer durante reproducción y extensiones opt-in que se vayan a anunciar. La imagen NodeLink fijada además falla al decodificar el WAV HTTP de prueba; no se oculta ese límite.
-3. Revisión humana del PR consolidado e integración en dev. CI verde no sustituye audio real. La rama predeterminada del repositorio sigue bajo decisión del propietario.
+3. Mantener revisión de las próximas releases. El propietario ya fusionó el PR consolidado en dev. CI verde no sustituye audio real; la rama predeterminada sigue bajo decisión del propietario.
 4. Secreto `QODANA_TOKEN_1916333486` para el workflow Qodana, que lo entrega como QODANA_TOKEN. Su análisis no se declara superado ni se desactiva para ocultar la ausencia.
-5. Confirmar control/titularidad del nombre npm, responsables de release y autorización explícita antes de retirar private/publicar. El nombre elegido no equivale a una reserva en npm.
+5. Mantener el acceso de publicación y revisar la evidencia de cada versión futura. La cuenta melodiabl está autenticada y esta publicación de desarrollo está autorizada; eso no autoriza otras versiones ni cambios de etiqueta estables.
 6. Dimensionar carga/audio y endurance en infraestructura de destino; el laboratorio local no promete SLA ni ausencia de fugas bajo cualquier carga.
 
 ## Reproducir antes de distribuir

@@ -1,9 +1,15 @@
 {
-  "timestamp": "2026-11-02T20:25:16.385Z",
+  "timestamp": "2026-11-02T21:14:02.043Z",
   "scope": "packed local installation; no registry publication or Discord",
   "node": "v22.23.2",
   "package": "nyxlink",
   "version": "0.1.0-dev.1",
+  "private": false,
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public",
+    "tag": "dev"
+  },
   "passed": true,
   "checks": [
     "install packed artifact in isolated consumer",
@@ -13,5 +19,5 @@
     "TypeScript NodeNext CJS/ESM consumers without skipLibCheck",
     "TypeScript example compile and CommonJS factory/cleanup without login"
   ],
-  "sha256": "3239e9cf11d4368033dd53c1e825ba9fcb179e481e11ace5fe4926ab1d57421a"
+  "sha256": "0758d1dbdf481652e692773584e78ea17a032359471474c33b9f710b6fe079b0"
 }
