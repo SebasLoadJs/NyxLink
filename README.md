@@ -1,65 +1,83 @@
-<img src="assets/nyxlink_banner.png" alt="NyxLink — A modern Lavalink &amp; NodeLink client for Discord bots" width="100%">
-<div align="center">
-<hr>
-<img src="https://img.shields.io/badge/Made_with_♥️_in-Brazil-ED186A?style=for-the-badge"><br>
-<a href="https://discord.gg/q8HzGuHuDY">
-  <img src="https://img.shields.io/discord/990369410344701964?color=333&label=Support&logo=discord&style=for-the-badge" alt="Discord">
-</a>
-<a href="https://www.npmjs.com/package/moonlink.js">
-  <img alt="NPM Downloads" src="https://img.shields.io/npm/dm/moonlink.js?style=for-the-badge&logo=npm&color=333">
-</a>
-<a href="https://www.npmjs.com/package/moonlink.js">
-  <img alt="NPM Version" src="https://img.shields.io/npm/v/moonlink.js?style=for-the-badge&logo=npm&color=333">
-</a>
-<br>
-<a href="https://github.com/Ecliptia/moonlink.js">
-  <img alt="GitHub forks" src="https://img.shields.io/github/forks/Ecliptia/moonlink.js?style=for-the-badge&logo=github&color=333">
-</a>
-<a href="https://github.com/Ecliptia/moonlink.js">
-  <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/Ecliptia/moonlink.js?style=for-the-badge&logo=github&color=333">
-</a>
-<a href="https://github.com/sponsors/1lucas1apk">
-  <img alt="GitHub Sponsors" src="https://img.shields.io/github/sponsors/1lucas1apk?style=for-the-badge&logo=github&color=333">
-</a>
-<br>
-<h3>Moonlink.js v5 — Does the leaf even fall? 🍃🌙</h3>
-</div>
-<hr>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/melodiabl/NyxLink/v0.1.0-dev.2/assets/nyxlink_banner.png" alt="NyxLink" width="100%">
+</p>
 
-## Table of Contents
+# NyxLink
 
-- [Documentation](#documentation)
-- [License](#license)
-- [Installation](#installation)
-- [Support](#support)
-- [Acknowledgements](#acknowledgements)
+Cliente de **Lavalink v4 y NodeLink** para bots de Discord, escrito en TypeScript y disponible para JavaScript y TypeScript.
 
-## Documentation
+[Paquete npm](https://www.npmjs.com/package/nyxlink) · [GitHub](https://github.com/melodiabl/NyxLink) · [Reportar un problema](https://github.com/melodiabl/NyxLink/issues)
 
-The full Moonlink.js documentation offers guides, tutorials, and detailed examples.  
-- Learn how to create a music bot: [Creating a Music Bot](https://moonlink.js.org/getting-started/creating-a-music-bot)  
-- Discover projects that use Moonlink.js: [Used By](https://moonlink.js.org/#used-by)
+## Instalación
 
-For more details, please visit the [Official Documentation](https://moonlink.js.org).
+Requiere **Node.js 22.12 o superior**. Versión de desarrollo actual: **0.1.0-dev.2**.
 
-## License
-
-This project is licensed under the [Open Software License ("OSL") v. 3.0](LICENSE) – see the [LICENSE](LICENSE) file for details.
-
-## Installation
-
-```bash
-npm install moonlink.js
-yarn add moonlink.js
-pnpm install moonlink.js
-bun install moonlink.js
+```sh
+npm install nyxlink@dev
 ```
 
-## Support
+Para fijar la versión:
 
-Join our Discord server: [Moonlink.js - Imagine a Music Bot](https://discord.com/invite/xQq2A8vku3) for support, questions, and community discussions.
+```sh
+npm install nyxlink@0.1.0-dev.2
+```
 
-## Acknowledgements
+## Uso con Discord.js
 
-Thank you to everyone who contributed to the development of Moonlink.js, whether by reporting bugs, installing the package, or helping the community.  
-Have a great day! :)
+El ejemplo utiliza Discord.js 14. Instálalo en tu bot con `npm install discord.js` y configura `DISCORD_TOKEN` y `AUDIO_NODE_PASSWORD` en tu entorno.
+
+```js
+const { Client, GatewayIntentBits } = require('discord.js');
+const { Manager, Connectors } = require('nyxlink');
+
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+});
+
+const manager = new Manager({
+  nodes: [{
+    identifier: 'principal',
+    host: process.env.AUDIO_NODE_HOST ?? '127.0.0.1',
+    port: Number(process.env.AUDIO_NODE_PORT ?? 2333),
+    password: process.env.AUDIO_NODE_PASSWORD,
+    secure: false,
+  }],
+  options: { database: { type: 'memory' }, resume: false },
+});
+
+manager.use(new Connectors.DiscordJs(), client);
+manager.on('nodeReady', node => console.log(`Nodo conectado: ${node.identifier}`));
+manager.on('nodeError', (_node, error) => console.error(error.message));
+
+client.login(process.env.DISCORD_TOKEN);
+```
+
+Espera el evento `nodeReady` antes de buscar o reproducir pistas. Los ejemplos completos de búsqueda, cola y cierre están en [JavaScript](examples/discordjs.cjs) y [TypeScript](examples/discordjs.ts).
+
+## API principal
+
+- `manager.search({ query, requester })`: buscar pistas.
+- `manager.players.create({ guildId, voiceChannelId })`: crear un reproductor.
+- `player.queue.add(track)`: añadir una pista a la cola.
+- `await player.play()`: iniciar la reproducción; devuelve si el backend aceptó la operación.
+- `await player.stop()`: detener la reproducción.
+- `await player.setVolumeAsync(50)`: cambiar el volumen esperando la respuesta del backend.
+- `await manager.shutdown()`: cerrar los recursos de NyxLink.
+
+## Desarrollo
+
+```sh
+git clone --branch dev https://github.com/melodiabl/NyxLink.git
+cd NyxLink
+corepack pnpm install --frozen-lockfile
+pnpm run build
+pnpm test
+pnpm run test:types
+pnpm run test:package
+```
+
+`src/` contiene el código TypeScript. `dist/` contiene el JavaScript compilado, las declaraciones de tipos y los mapas de código; se genera con `pnpm run build` y es la entrada del paquete npm. `tests/`, `scripts/` y `.github/` contienen las pruebas y su automatización.
+
+## Licencia
+
+Mantenido por [melodiabl](https://github.com/melodiabl). NyxLink deriva de Moonlink.js, de 1Lucas1.apk y sus colaboradores, y conserva la licencia [OSL-3.0](LICENSE) y los avisos de origen.

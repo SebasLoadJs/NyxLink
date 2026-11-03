@@ -6,6 +6,7 @@ import https from "node:https";
 import zlib from "node:zlib";
 import { URL } from "node:url"; 
 import type { ITrack, ITrackInfo } from "./typings/Interfaces";
+import { HttpError } from './errors/HttpError';
 
 export const structures: Record<string, any> = {};
 
@@ -240,7 +241,7 @@ export type ResponseWithHeaders<T> = {
 
 export function makeRequest<T = any>(
   initialUrl: string,
-  options: http.RequestOptions & { body?: any; returnHeaders: true },
+  options: http.RequestOptions & { body?: any; returnHeaders: true; throwOnError?: boolean },
   timeout?: number,
   retries?: number,
   retryDelay?: number,
@@ -249,7 +250,7 @@ export function makeRequest<T = any>(
 
 export function makeRequest<T = any>(
   initialUrl: string,
-  options: http.RequestOptions & { body?: any; returnHeaders?: false },
+  options: http.RequestOptions & { body?: any; returnHeaders?: false; throwOnError?: boolean },
   timeout?: number,
   retries?: number,
   retryDelay?: number,
@@ -258,7 +259,7 @@ export function makeRequest<T = any>(
 
 export async function makeRequest<T = any>(
   initialUrl: string,
-  options: http.RequestOptions & { body?: any; returnHeaders?: boolean },
+  options: http.RequestOptions & { body?: any; returnHeaders?: boolean; throwOnError?: boolean },
   timeout = 100000,
   retries = 3,
   retryDelay = 1000,
@@ -294,6 +295,7 @@ export async function makeRequest<T = any>(
               },
             };
             delete (requestOptions as { returnHeaders?: boolean }).returnHeaders;
+            delete (requestOptions as { throwOnError?: boolean }).throwOnError;
             delete requestOptions.headers["host"];
 
             const req = transport.request(requestOptions, (res) => {
@@ -312,6 +314,25 @@ export async function makeRequest<T = any>(
               }
 
               if (statusCode && (statusCode < 200 || statusCode >= 300)) {
+                if (options.throwOnError) {
+                  const chunks: Buffer[] = [];
+                  let size = 0;
+                  res.on('data', (chunk: Buffer) => {
+                    size += chunk.length;
+                    if (size > 32768) { req.destroy(); reject(new HttpError(statusCode)); }
+                    else chunks.push(chunk);
+                  });
+                  res.on('error', reject);
+                  res.on('end', () => {
+                    let body: unknown;
+                    try {
+                      let buffer = Buffer.concat(chunks);
+                      body = decodeErrorBody(buffer, res.headers['content-encoding']);
+                    } catch { /* Retain the status if the bounded error body cannot be decoded. */ }
+                    reject(new HttpError(statusCode, body));
+                  });
+                  return;
+                }
                 req.destroy();
                 return reject(
                   new Error(`Server responded with status ${statusCode}`)
@@ -438,6 +459,7 @@ export async function makeRequest<T = any>(
 
       throw new Error("Too many redirects");
     } catch (error) {
+      if (options.throwOnError && attempt >= retries) throw error;
       const is404 = (error as Error).message.includes('status 404');
       
       if (!is404) {
@@ -466,6 +488,16 @@ export type StreamResponse = {
   headers: http.IncomingHttpHeaders;
 };
 
+function decodeErrorBody(buffer: Buffer, encoding: string | undefined): unknown {
+  const options = { maxOutputLength: 32768 };
+  if (encoding === 'gzip') buffer = zlib.gunzipSync(buffer, options);
+  else if (encoding === 'deflate') buffer = zlib.inflateSync(buffer, options);
+  else if (encoding === 'br') buffer = zlib.brotliDecompressSync(buffer, options);
+  else if (encoding === 'zstd' && typeof zlib.zstdDecompressSync === 'function') buffer = zlib.zstdDecompressSync(buffer, options);
+  const text = buffer.toString('utf8');
+  try { return JSON.parse(text); } catch { return text; }
+}
+
 export async function makeStreamRequest(
   initialUrl: string,
   options: http.RequestOptions & { body?: any },
@@ -487,10 +519,17 @@ export async function makeStreamRequest(
       const statusCode = res.statusCode ?? 0;
       if (statusCode < 200 || statusCode >= 300) {
         const chunks: Buffer[] = [];
-        res.on("data", (chunk) => chunks.push(chunk));
-        res.on("end", () => {
-          const body = Buffer.concat(chunks).toString();
-          reject(new Error(`Stream request failed (${statusCode}): ${body || "Unknown error"}`));
+        let size = 0;
+        res.on('data', (chunk: Buffer) => {
+          size += chunk.length;
+          if (size > 32768) { req.destroy(); reject(new HttpError(statusCode)); }
+          else chunks.push(chunk);
+        });
+        res.on('error', reject);
+        res.on('end', () => {
+          let body: unknown;
+          try { body = decodeErrorBody(Buffer.concat(chunks), res.headers['content-encoding']); } catch {}
+          reject(new HttpError(statusCode, body));
         });
         return;
       }

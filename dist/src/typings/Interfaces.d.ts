@@ -3,6 +3,11 @@ import { Player } from "../entities/Player";
 import { Track } from "../entities/Track";
 import { Filters } from "../entities/Filters";
 import { NodeState, PlayerLoop, TrackEndReason, NodeSortStrategy, TPartialTrackProperties } from "./types";
+import type { LoggerOptions } from '../logging/Logger';
+import type { FailoverOptions } from '../nodes/NodeFailover';
+import type { StorageAdapter } from '../database/StorageAdapter';
+import type { BackendKind } from '../backends/BackendAdapter';
+import type { TrackSnapshot } from '../tracks/TrackCodec';
 export interface IManagerEvents {
     debug: (message: string) => void;
     nodeCreate: (node: Node) => void;
@@ -32,6 +37,7 @@ export interface IManagerEvents {
     playerConnectionStatus: (player: Player, status: string | boolean | undefined, payload?: any) => void;
     playerSeek: (player: Player, position: number, payload?: any) => void;
     playerPause: (player: Player, paused: boolean, payload?: any) => void;
+    playerStop: (player: Player) => void;
     playerMoved: (player: Player, oldChannel: string, newChannel: string) => void;
     playerMuteChange: (player: Player, selfMute: boolean, serverMute: boolean) => void;
     playerDeafChange: (player: Player, selfDeaf: boolean, serverDeaf: boolean) => void;
@@ -39,6 +45,7 @@ export interface IManagerEvents {
     playerAutoPlaySet: (player: Player, autoPlay: boolean) => void;
     playerAutoLeaveSet: (player: Player, autoLeave: boolean) => void;
     playerChangedVolume: (player: Player, oldVolume: number, volume: number) => void;
+    playerVolumeError: (player: Player, error: Error, volume: number) => void;
     playerChangedLoop: (player: Player, oldLoop: PlayerLoop, loop: PlayerLoop, oldLoopCount?: number, newLoopCount?: number) => void;
     playerTextChannelIdSet: (player: Player, oldChannel: string, newChannel: string) => void;
     playerVoiceChannelIdSet: (player: Player, oldChannel: string, newChannel: string) => void;
@@ -48,6 +55,7 @@ export interface IManagerEvents {
     playerRecoveryFailed: (player: Player) => void;
     playersMoved: (players: Player[], oldNode: Node, newNode: Node) => void;
     playersOrphaned: (players: Player[], deadNode: Node) => void;
+    playerNodeFailover: (player: Player, report: INodeFailoverReport) => void;
     playerTriggeredPlay: (player: Player, track: Track) => void;
     playerTriggeredPause: (player: Player) => void;
     playerTriggeredResume: (player: Player) => void;
@@ -80,7 +88,15 @@ export interface IManagerEvents {
     eternalBoxInfo: (player: Player, payload?: any) => void;
     eternalBoxJump: (player: Player, payload?: any) => void;
 }
+export interface INodeFailoverReport {
+    source: string;
+    target: string;
+    status: 'in-progress' | 'recovered' | 'failed' | 'cancelled';
+    positionMs?: number;
+    reason?: string;
+}
 export interface IManagerNodeConfig {
+    readyTimeoutMs?: number;
     host: string;
     password: string;
     port: number;
@@ -93,6 +109,9 @@ export interface IManagerNodeConfig {
     priority?: number;
 }
 export interface IManagerOptionsConfig {
+    logging?: LoggerOptions & {
+        banner?: boolean;
+    };
     clientName?: string;
     userAgent?: string;
     noReplace?: boolean;
@@ -113,6 +132,7 @@ export interface IManagerOptionsConfig {
     trackPartial?: TPartialTrackProperties[];
     database?: {
         type: 'memory' | 'local';
+        adapter?: StorageAdapter;
         options?: any;
     };
 }
@@ -132,6 +152,8 @@ export interface IVoiceConnectionOptions {
     autoReconnect?: boolean;
 }
 export interface INodeOptions {
+    failover?: FailoverOptions;
+    maxStatsAgeMs?: number;
     selectionStrategy?: NodeSortStrategy;
     retryDelay?: number;
     retryAmount?: number;
@@ -142,6 +164,13 @@ export interface INodeOptions {
     autoRebalance?: boolean;
 }
 export interface ISearchOptions {
+    timeoutMs?: number;
+    fallbackPlatforms?: string[];
+    cache?: {
+        ttlMs: number;
+        maxEntries?: number;
+    };
+    resolver?: (query: ISearchQuery, node: Node) => Promise<IRESTLoadTracks | null>;
     defaultPlatform?: "youtube" | "youtubemusic" | "soundcloud" | "local";
     resultLimit?: number;
     playlistLoadLimit?: number;
@@ -201,6 +230,7 @@ export interface IManagerConfig {
     send?: (guildId: string, payload: any) => void;
 }
 export interface ISearchQuery {
+    signal?: AbortSignal;
     query: string;
     source?: string;
     requester?: any;
@@ -289,6 +319,7 @@ export interface ITrackInfo {
     position: number;
 }
 export interface ITrack {
+    backend?: BackendKind;
     encoded: string;
     info: ITrackInfo;
     pluginInfo: Record<string, any>;
@@ -312,6 +343,19 @@ export interface IPlayerConfig {
     autoLeave?: boolean;
     loop?: "off" | "track" | "queue";
     loopCount?: number;
+    current?: TrackSnapshot | {
+        encoded: string;
+        requester: any;
+        position?: number;
+    };
+    queue?: Array<TrackSnapshot | {
+        encoded: string;
+        requester: any;
+    }>;
+    previous?: Array<TrackSnapshot | {
+        encoded: string;
+        requester: any;
+    }>;
 }
 export interface IRESTOptions {
     guildId: string;

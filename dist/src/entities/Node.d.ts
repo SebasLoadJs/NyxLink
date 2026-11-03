@@ -1,3 +1,4 @@
+import type { BackendAdapter } from "../backends/BackendAdapter";
 import { IManagerNodeConfig, INodeStats, ITrack, ILyricsData, IFilters } from "../typings/Interfaces";
 import type { Manager } from "../core/Manager";
 import { Rest } from "./Rest";
@@ -18,6 +19,13 @@ type TrackEndEvent = LavalinkEventBase & {
     type: "TrackEndEvent";
     track: ITrack | null;
     reason: TrackEndReason;
+    crossfade?: {
+        durationMs?: number;
+        mode?: string;
+        curve?: string;
+        transition?: string | null;
+        nextTrack?: ITrack | null;
+    };
 };
 type TrackStuckEvent = LavalinkEventBase & {
     type: "TrackStuckEvent";
@@ -146,9 +154,16 @@ export declare class Node {
     priority?: number;
     socket: WebSocket;
     stats?: INodeStats;
+    statsReceivedAt?: number;
     info?: any;
     version?: string;
     isNodeLink: boolean;
+    backend?: BackendAdapter;
+    private backendReady;
+    private authenticationFailed;
+    private connecting;
+    private readyTimeout?;
+    private readonly readyTimeoutMs;
     url: string;
     rest: Rest;
     private lastStats?;
@@ -156,6 +171,8 @@ export declare class Node {
     capabilities: Set<string>;
     constructor(manager: Manager, config: IManagerNodeConfig);
     get latency(): number;
+    get health(): import("../nodes/NodeHealthMonitor").NodeHealth;
+    assertFeature(feature: string): void;
     getPenalties(): number;
     ping(): Promise<number>;
     createYouTubeLiveChat(identifier: string, options?: YouTubeLiveChatOptions): YouTubeLiveChat;
@@ -214,6 +231,7 @@ export declare class Node {
     private handleLyricsLine;
     private handleLyricsNotFound;
     private handleWebSocketClosed;
+    updateRecommendations(player: any, track?: Track): Promise<void>;
     handleAutoPlay(player: any, previousTrack: any): Promise<boolean>;
     private handleQueueEnd;
     protected error({ error }: {

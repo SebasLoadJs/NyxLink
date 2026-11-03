@@ -1,44 +1,66 @@
 {
-  "name": "moonlink.js",
-  "version": "5.2.0",
-  "description": "Moonlink.js — a new version, but seriously… does the leaf even fall? 🍃🌙",
+  "name": "nyxlink",
+  "version": "0.1.0-dev.2",
+  "description": "NyxLink — Lavalink v4 and NodeLink client for Discord bots (development)",
   "keywords": [
-    "bot",
-    "discord.js",
-    "moonlink",
-    "discord",
-    "easy",
+    "nyxlink",
     "lavalink",
-    "music"
+    "nodelink",
+    "discord",
+    "music",
+    "audio",
+    "bot"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "dev": "tsc --watch",
-    "build": "rm -rf dist && tsc",
-    "start": "npm run build && npm run test",
-    "test": "node test-bot/index.js"
+    "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && tsc",
+    "test": "node --test tests/*.test.cjs",
+    "pretest": "pnpm run build",
+    "typecheck": "tsc --noEmit",
+    "test:types": "tsc --noEmit --strict --skipLibCheck --target ES2022 --module commonjs --moduleResolution node tests/types/public-api.ts",
+    "pack:check": "node scripts/check-package.cjs",
+    "test:backends": "pnpm run build && node scripts/test-backends.cjs",
+    "bench": "pnpm run build && node --expose-gc --max-old-space-size=512 scripts/benchmark.cjs",
+    "test:endurance": "pnpm run build && node scripts/endurance.cjs",
+    "test:package": "pnpm run build && node scripts/test-package.cjs",
+    "test:extensions": "pnpm run build && node scripts/test-extensions.cjs",
+    "test:coverage": "pnpm run build && node --test --experimental-test-coverage --test-coverage-exclude='tests/**' tests/*.test.cjs"
   },
-  "homepage": "https://moonlink.js.org",
+  "homepage": "https://github.com/melodiabl/NyxLink#readme",
   "bugs": {
-    "url": "https://github.com/Ecliptia/moonlink.js/issues",
-    "email": "1Lucas1apk@gmail.com"
+    "url": "https://github.com/melodiabl/NyxLink/issues"
   },
-  "license": "Open Software License 3.0",
+  "license": "OSL-3.0",
   "contributors": [
     "1Lucas1.apk"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/Ecliptia/moonlink.js"
+    "url": "https://github.com/melodiabl/NyxLink.git"
   },
   "engines": {
-    "node": ">=22.x.x"
+    "node": ">=22.12.0"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",
     "discord.js": "^14.25.1",
-    "dotenv": "^17.2.3",
     "typescript": "^5.9.3"
+  },
+  "private": false,
+  "packageManager": "pnpm@10.34.5",
+  "files": [
+    "dist",
+    "assets/nyxlink_banner.png",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "consola": "3.4.2"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public",
+    "tag": "dev"
   }
 }

@@ -17,6 +17,7 @@ export class PlayerManager {
     }
 
     public create(options: IPlayerConfig): Player {
+        if (this.manager.destroyed) throw new Error('Manager is shut down');
         validate(options.guildId, (v) => typeof v === "string" && /^\d{17,20}$/.test(v), "IPlayerConfig#guildId must be a valid Discord Snowflake string.");
         validate(options.voiceChannelId, (v) => typeof v === "string" && /^\d{17,20}$/.test(v), "IPlayerConfig#voiceChannelId must be a valid Discord Snowflake string.");
         if (options.textChannelId) {
@@ -39,6 +40,15 @@ export class PlayerManager {
         const player = new (Structure.get("Player"))(this.manager, node, options);
         this.players.set(options.guildId, player);
         
+        // Update basic config fields individually to avoid overwriting existing data (like queue)
+        player.updateData("guildId", options.guildId);
+        player.updateData("voiceChannelId", options.voiceChannelId);
+        if (options.textChannelId) player.updateData("textChannelId", options.textChannelId);
+        if (options.volume !== undefined) player.updateData("volume", options.volume);
+        if (options.autoPlay !== undefined) player.updateData("autoPlay", options.autoPlay);
+        if (options.autoLeave !== undefined) player.updateData("autoLeave", options.autoLeave);
+        if (options.loop !== undefined) player.updateData("loop", options.loop);
+
         this.manager.emit("playerCreate", player);
         this.manager.emit("debug", `Moonlink.js > PlayerManager >> Player created. Guild: ${options.guildId}, Options: ${JSON.stringify(options)}`);
         return player;

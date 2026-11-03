@@ -31,8 +31,13 @@ export declare class Player {
     isResuming: boolean;
     current: Track | null;
     previous: Track[];
+    recommendations: Track[];
     historySize: number;
     lastActivityTime: number;
+    private readonly commands;
+    private destructionPromise?;
+    private volumeRevision;
+    private optimisticVolumeRevision;
     private fading?;
     private nextTrack?;
     private audioTrackId?;
@@ -60,6 +65,7 @@ export declare class Player {
     private resolveEncodedTrack;
     private sendPlayerUpdate;
     updatePlayer(payload: Record<string, any>, noReplace?: boolean): Promise<any>;
+    updateVoice(voice: Record<string, any>): Promise<any>;
     connect({ selfDeaf, selfMute }?: {
         selfDeaf?: boolean;
         selfMute?: boolean;
@@ -73,6 +79,8 @@ export declare class Player {
         noReplace?: boolean;
         audioTrackId?: string;
     } | Track): Promise<boolean>;
+    playAutoPlay(track: Track, ticket: number, automaticTicket: number): Promise<boolean>;
+    private playNext;
     addMix(track: Track | string, options?: {
         volume?: number;
         userData?: Record<string, any>;
@@ -103,9 +111,11 @@ export declare class Player {
     setLoudnessNormalizer(enabled: boolean): Promise<this>;
     createVoiceReceiver(options?: VoiceReceiverOptions): VoiceReceiver;
     pause(): Promise<this>;
+    private pausePlayback;
     resume(options?: {
         timeout?: number;
     }): Promise<this>;
+    private resumePlayback;
     forward(ms: number): Promise<this>;
     rewind(ms: number): Promise<this>;
     setVoiceState(state: {
@@ -117,15 +127,23 @@ export declare class Player {
     toggleDeaf(): Promise<this>;
     search(query: string, source?: string): Promise<any>;
     stop(): Promise<this>;
+    private stopPlayback;
     skip(position?: number): Promise<boolean>;
     seek(position: number): Promise<this>;
+    private seekPlayback;
     setVolume(volume: number): this;
+    setVolumeAsync(volume: number): Promise<this>;
     setLoop(loop: PlayerLoop, count?: number): this;
     setAutoPlay(autoPlay: boolean): this;
     setAutoLeave(autoLeave: boolean): this;
     shuffle(): this;
     destroy(reason?: string): Promise<void>;
-    restart(): Promise<boolean>;
+    private destroyPlayback;
+    restart(options?: {
+        destroyOnFailure?: boolean;
+        startQueued?: boolean;
+    }): Promise<boolean>;
+    private restoreVoiceForRestart;
     transferNode(node: Node | string): Promise<boolean>;
     setVoiceChannelId(voiceChannelId: string): this;
     setTextChannelId(textChannelId: string): this;

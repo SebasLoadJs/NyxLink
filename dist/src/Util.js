@@ -24,6 +24,7 @@ const node_http_1 = __importDefault(require("node:http"));
 const node_https_1 = __importDefault(require("node:https"));
 const node_zlib_1 = __importDefault(require("node:zlib"));
 const node_url_1 = require("node:url");
+const HttpError_1 = require("./errors/HttpError");
 exports.structures = {};
 class Structure {
     static manager;
@@ -234,6 +235,7 @@ async function makeRequest(initialUrl, options, timeout = 100000, retries = 3, r
                         },
                     };
                     delete requestOptions.returnHeaders;
+                    delete requestOptions.throwOnError;
                     delete requestOptions.headers["host"];
                     const req = transport.request(requestOptions, (res) => {
                         const { statusCode, headers } = res;
@@ -247,6 +249,30 @@ async function makeRequest(initialUrl, options, timeout = 100000, retries = 3, r
                             return resolve({ _redirect: headers.location });
                         }
                         if (statusCode && (statusCode < 200 || statusCode >= 300)) {
+                            if (options.throwOnError) {
+                                const chunks = [];
+                                let size = 0;
+                                res.on('data', (chunk) => {
+                                    size += chunk.length;
+                                    if (size > 32768) {
+                                        req.destroy();
+                                        reject(new HttpError_1.HttpError(statusCode));
+                                    }
+                                    else
+                                        chunks.push(chunk);
+                                });
+                                res.on('error', reject);
+                                res.on('end', () => {
+                                    let body;
+                                    try {
+                                        let buffer = Buffer.concat(chunks);
+                                        body = decodeErrorBody(buffer, res.headers['content-encoding']);
+                                    }
+                                    catch { }
+                                    reject(new HttpError_1.HttpError(statusCode, body));
+                                });
+                                return;
+                            }
                             req.destroy();
                             return reject(new Error(`Server responded with status ${statusCode}`));
                         }
@@ -335,6 +361,8 @@ async function makeRequest(initialUrl, options, timeout = 100000, retries = 3, r
             throw new Error("Too many redirects");
         }
         catch (error) {
+            if (options.throwOnError && attempt >= retries)
+                throw error;
             const is404 = error.message.includes('status 404');
             if (!is404) {
                 console.error(`Attempt ${attempt + 1}/${retries + 1} failed for ${initialUrl}: ${error.message}`);
@@ -349,6 +377,24 @@ async function makeRequest(initialUrl, options, timeout = 100000, retries = 3, r
         }
     }
     return undefined;
+}
+function decodeErrorBody(buffer, encoding) {
+    const options = { maxOutputLength: 32768 };
+    if (encoding === 'gzip')
+        buffer = node_zlib_1.default.gunzipSync(buffer, options);
+    else if (encoding === 'deflate')
+        buffer = node_zlib_1.default.inflateSync(buffer, options);
+    else if (encoding === 'br')
+        buffer = node_zlib_1.default.brotliDecompressSync(buffer, options);
+    else if (encoding === 'zstd' && typeof node_zlib_1.default.zstdDecompressSync === 'function')
+        buffer = node_zlib_1.default.zstdDecompressSync(buffer, options);
+    const text = buffer.toString('utf8');
+    try {
+        return JSON.parse(text);
+    }
+    catch {
+        return text;
+    }
 }
 async function makeStreamRequest(initialUrl, options, timeout = 100000) {
     return new Promise((resolve, reject) => {
@@ -365,10 +411,24 @@ async function makeStreamRequest(initialUrl, options, timeout = 100000) {
             const statusCode = res.statusCode ?? 0;
             if (statusCode < 200 || statusCode >= 300) {
                 const chunks = [];
-                res.on("data", (chunk) => chunks.push(chunk));
-                res.on("end", () => {
-                    const body = Buffer.concat(chunks).toString();
-                    reject(new Error(`Stream request failed (${statusCode}): ${body || "Unknown error"}`));
+                let size = 0;
+                res.on('data', (chunk) => {
+                    size += chunk.length;
+                    if (size > 32768) {
+                        req.destroy();
+                        reject(new HttpError_1.HttpError(statusCode));
+                    }
+                    else
+                        chunks.push(chunk);
+                });
+                res.on('error', reject);
+                res.on('end', () => {
+                    let body;
+                    try {
+                        body = decodeErrorBody(Buffer.concat(chunks), res.headers['content-encoding']);
+                    }
+                    catch { }
+                    reject(new HttpError_1.HttpError(statusCode, body));
                 });
                 return;
             }
