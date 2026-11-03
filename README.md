@@ -76,14 +76,16 @@ npm install discord.js@14
 
 ## Inicio rápido
 
-Configura las variables de entorno antes de iniciar tu aplicación:
+Define `BOT_TOKEN` en el entorno para iniciar sesión en Discord. La conexión con el servidor de audio se configura directamente en el array `nodes`:
 
-| Variable | Uso | Valor predeterminado |
-| --- | --- | --- |
-| `DISCORD_TOKEN` | Token del bot de Discord. | Obligatorio |
-| `AUDIO_NODE_PASSWORD` | Contraseña del nodo de audio. | Obligatorio |
-| `AUDIO_NODE_HOST` | Dirección del nodo. | `127.0.0.1` |
-| `AUDIO_NODE_PORT` | Puerto del nodo. | `2333` |
+| Campo del nodo | Uso |
+| --- | --- |
+| `host` | Dirección del servidor de audio. |
+| `port` | Puerto configurado en ese servidor. |
+| `password` | Contraseña del nodo. |
+| `secure` | `true` para HTTPS/WSS; `false` para HTTP/WS. |
+
+Ajusta los valores del ejemplo a tu servidor. NyxLink recibe estos datos de configuración; no exige variables de entorno adicionales para el nodo.
 
 El conector inicializa NyxLink cuando el cliente de Discord está listo y entrega las actualizaciones de voz al nodo. Regístralo **antes de llamar a `client.login()`**.
 
@@ -91,11 +93,10 @@ El conector inicializa NyxLink cuando el cliente de Discord está listo y entreg
 const { Client, GatewayIntentBits } = require('discord.js');
 const { Manager, Connectors } = require('nyxlink');
 
-const token = process.env.DISCORD_TOKEN;
-const password = process.env.AUDIO_NODE_PASSWORD;
+const token = process.env.BOT_TOKEN;
 
-if (!token || !password) {
-  throw new Error('Configura DISCORD_TOKEN y AUDIO_NODE_PASSWORD.');
+if (!token) {
+  throw new Error('Configura BOT_TOKEN.');
 }
 
 const client = new Client({
@@ -104,9 +105,9 @@ const client = new Client({
 
 const nodes = [{
   identifier: 'principal',
-  host: process.env.AUDIO_NODE_HOST ?? '127.0.0.1',
-  port: Number(process.env.AUDIO_NODE_PORT ?? 2333),
-  password,
+  host: 'localhost',
+  port: 3000,
+  password: 'tu-password-del-nodo',
   secure: false,
 }];
 
@@ -275,15 +276,12 @@ NyxLink incluye declaraciones de tipos y permite imports nombrados desde TypeScr
 ```ts
 import { Manager, type IManagerConfig } from 'nyxlink';
 
-const nodePassword = process.env.AUDIO_NODE_PASSWORD;
-if (!nodePassword) throw new Error('Configura AUDIO_NODE_PASSWORD.');
-
 const config: IManagerConfig = {
   nodes: [{
     identifier: 'principal',
-    host: '127.0.0.1',
-    port: 2333,
-    password: nodePassword,
+    host: 'localhost',
+    port: 3000,
+    password: 'tu-password-del-nodo',
     secure: false,
   }],
   options: { database: { type: 'memory' } },
