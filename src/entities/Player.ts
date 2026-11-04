@@ -1,5 +1,6 @@
 import { PlayerCommandQueue } from "../players/PlayerCommandQueue";
 import { playbackGuard } from "../players/PlaybackGuard";
+import { playbackAttempt } from "../players/PlaybackAttempt";
 import { Node } from "./Node";
 import { Queue } from "./Queue";
 import { Manager } from "../core/Manager";
@@ -320,9 +321,23 @@ export class Player {
             finalPayload.voice = voicePayload;
         }
 
-        const response = await this.node.rest.updatePlayer(this.guildId, finalPayload, noReplace);
-        if (response == null) throw new Error("Backend did not acknowledge player update");
-        return response;
+        const attempts = playbackAttempt(this);
+        const attempt = typeof payload.track?.encoded === 'string' ? attempts.begin(this.node, payload.track) : undefined;
+        if (attempt) finalPayload.track = attempt.track;
+        const preload = typeof payload.nextTrack?.encoded === 'string' || payload.nextTrack === null ? attempts.preload(this.node, payload.nextTrack) : undefined;
+        if (preload) finalPayload.nextTrack = preload.track;
+        let acknowledged = false;
+        try {
+            const response = await this.node.rest.updatePlayer(this.guildId, finalPayload, noReplace);
+            if (response == null) throw new Error("Backend did not acknowledge player update");
+            acknowledged = true;
+            if (attempt && !attempt.accepted(response)) throw new Error("Backend did not accept the requested track");
+            return response;
+        } catch (error) {
+            attempt?.rollback();
+            if (!acknowledged) preload?.rollback();
+            throw error;
+        }
     }
 
     /** Sends a raw updatePlayer payload with NodeLink extras applied when supported. */
@@ -369,6 +384,14 @@ export class Player {
     }
 
     private async playNext(options: { track?: Track; encoded?: string, requester?: any, position?: number, noReplace?: boolean, audioTrackId?: string } | Track, ticket: number, allowed = () => true): Promise<boolean> {
+        try {
+            return await this.applyPlayback(options, ticket, allowed);
+        } finally {
+            playbackAttempt(this).retain(ticket);
+        }
+    }
+
+    private async applyPlayback(options: { track?: Track; encoded?: string, requester?: any, position?: number, noReplace?: boolean, audioTrackId?: string } | Track, ticket: number, allowed: () => boolean): Promise<boolean> {
         const guard = playbackGuard(this);
         if (this.destroyed || !guard.isCurrent(ticket) || !allowed()) return false;
         this.recommendations = [];
@@ -617,19 +640,26 @@ export class Player {
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
     public async setNextTrack(track: Track | string, userData?: Record<string, any>): Promise<this> {
-        this.assertNodeLinkFeature("nextTrack");
         const encoded = this.resolveEncodedTrack(track);
-        this.nextTrack = { encoded, userData };
-        await this.sendPlayerUpdate({ nextTrack: this.nextTrack });
-        return this;
+        return this.commands.enqueue(async () => {
+            if (this.destroyed) throw new Error("Cannot update a destroyed player");
+            this.assertNodeLinkFeature("nextTrack");
+            const nextTrack = { encoded, userData: userData ?? (track instanceof Track ? track.userData : undefined) };
+            await this.sendPlayerUpdate({ nextTrack });
+            this.nextTrack = nextTrack;
+            return this;
+        });
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
     public async clearNextTrack(): Promise<this> {
-        this.assertNodeLinkFeature("nextTrack");
-        this.nextTrack = undefined;
-        await this.sendPlayerUpdate({ nextTrack: null });
-        return this;
+        return this.commands.enqueue(async () => {
+            if (this.destroyed) throw new Error("Cannot update a destroyed player");
+            this.assertNodeLinkFeature("nextTrack");
+            await this.sendPlayerUpdate({ nextTrack: null });
+            this.nextTrack = undefined;
+            return this;
+        });
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
@@ -809,14 +839,22 @@ export class Player {
     public async skip(position?: number): Promise<boolean> {
         const oldTrack = this.current;
         if (position !== undefined) {
-            this.manager.emit("debug", `Moonlink.js > Player#skip -> Skipping to position ${position} in queue for guild ${this.guildId}`);
-            const track = this.queue.remove(position);
-            if (!track) {
-                this.manager.emit("debug", `Moonlink.js > Player#skip >> Invalid queue position for guild ${this.guildId}`);
-                return false;
-            }
-            this.manager.emit("playerTriggeredSkip", this, oldTrack, track, position);
-            return await this.play({ track: track instanceof Track ? track : new Track(track) });
+            if (!Number.isInteger(position) || position < 0 || !this.queue.get(position)) return false;
+            const guard = playbackGuard(this);
+            const ticket = guard.invalidate();
+            return this.commands.enqueue(async () => {
+                try {
+                    if (this.destroyed || !guard.isCurrent(ticket)) return false;
+                    const track = this.queue.get(position);
+                    if (!track) return false;
+                    this.manager.emit("playerTriggeredSkip", this, this.current, track, position);
+                    if (this.destroyed || !guard.isCurrent(ticket) || this.queue.get(position) !== track) return false;
+                    this.queue.remove(position);
+                    return await this.playNext({ track: track instanceof Track ? track : new Track(track) }, ticket);
+                } finally {
+                    playbackAttempt(this).retain(ticket);
+                }
+            });
         }
         if (!this.queue.size) {
             if (this.autoPlay) {

@@ -199,6 +199,17 @@ Las canciones añadidas a la cola tienen prioridad sobre las recomendaciones que
 
 `play()`, `skip()` y `transferNode()` devuelven un booleano: compruébalo antes de anunciar que la operación tuvo éxito. `setVolume()` sigue siendo encadenable; usa `setVolumeAsync()` cuando necesites esperar la respuesta del nodo.
 
+Si se solicitan varios saltos simultáneos, las órdenes sustituidas devuelven `false` y conservan las pistas pendientes. Para avanzar varias veces de forma deliberada, espera cada llamada a `skip()`.
+
+<details>
+<summary>Eventos duplicados y repeticiones de una misma pista</summary>
+
+NyxLink correlaciona los intentos de reproducción mediante metadata interna enviada en `track.userData`. Los objetos `Track` de los eventos normales conservan el `userData` del consumidor; `nodeRaw` y el payload del protocolo mantienen los datos recibidos.
+
+Los eventos de un nodo anterior y los eventos identificados como duplicados se ignoran. Si un servidor no devuelve esa metadata, se utiliza el encoding y la secuencia de inicio/fin, con menor capacidad para distinguir eventos tardíos de pistas idénticas.
+
+</details>
+
 ## Configuración
 
 Las opciones se definen al crear `Manager`. Este ejemplo combina búsqueda, caché, recuperación y logs; activa únicamente lo que necesite tu aplicación.

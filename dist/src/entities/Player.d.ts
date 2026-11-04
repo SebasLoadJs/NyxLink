@@ -81,6 +81,7 @@ export declare class Player {
     } | Track): Promise<boolean>;
     playAutoPlay(track: Track, ticket: number, automaticTicket: number): Promise<boolean>;
     private playNext;
+    private applyPlayback;
     addMix(track: Track | string, options?: {
         volume?: number;
         userData?: Record<string, any>;

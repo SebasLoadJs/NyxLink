@@ -29,10 +29,12 @@ type TrackEndEvent = LavalinkEventBase & {
 };
 type TrackStuckEvent = LavalinkEventBase & {
     type: "TrackStuckEvent";
+    track?: ITrack;
     thresholdMs: number;
 };
 type TrackExceptionEvent = LavalinkEventBase & {
     type: "TrackExceptionEvent";
+    track?: ITrack;
     exception: {
         severity: string;
         message?: string;

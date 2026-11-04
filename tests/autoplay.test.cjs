@@ -219,18 +219,16 @@ test('a genuine autoplay playback failure still emits queueEnd after fetching re
   assert.equal(player.current, null);
 });
 
-test('duplicate track-end searches cannot clear or duplicate the latest autoplay attempt', async t => {
+test('duplicate track-end events share one recommendation transition', async t => {
   const { manager, node, player } = createPlayer(t);
   const previous = createTrack('previous');
   const latest = createTrack('latest');
   player.current = previous;
   const firstResponse = deferred();
-  const secondResponse = deferred();
   let searches = 0;
   manager.search = async () => {
     searches++;
     if (searches === 1) return firstResponse.promise;
-    if (searches === 2) return secondResponse.promise;
     return { tracks: [] };
   };
   const ends = [];
@@ -239,11 +237,11 @@ test('duplicate track-end searches cannot clear or duplicate the latest autoplay
   manager.on('autoPlayed', (_player, track) => played.push(track));
   const first = node.handleTrackEnd(player, { reason: 'finished', track: previous.toJSON() });
   const second = node.handleTrackEnd(player, { reason: 'finished', track: previous.toJSON() });
-  firstResponse.resolve({ tracks: [createTrack('obsolete')] });
-  await first;
-  assert.equal(ends.length, 0);
-  secondResponse.resolve({ tracks: [latest] });
   await second;
+  assert.equal(searches, 1);
+  assert.equal(ends.length, 0);
+  firstResponse.resolve({ tracks: [latest] });
+  await first;
   assert.equal(player.current, latest);
   assert.deepEqual(played, [latest]);
   assert.equal(ends.length, 0);

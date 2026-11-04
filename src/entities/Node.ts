@@ -5,6 +5,8 @@ import { FeatureUnavailableError } from '../errors/FeatureUnavailableError';
 import { RecommendationResolver } from "../autoplay/RecommendationResolver";
 import { AutoPlayManager } from "../autoplay/AutoPlayManager";
 import { playbackGuard } from "../players/PlaybackGuard";
+import { playbackAttempt } from "../players/PlaybackAttempt";
+import { TrackCodec } from "../tracks/TrackCodec";
 import { IManagerNodeConfig, INodeStats, ITrack, ILyricsData, IFilters } from "../typings/Interfaces";
 import type { Manager } from "../core/Manager";
 import { Rest } from "./Rest";
@@ -47,11 +49,13 @@ type TrackEndEvent = LavalinkEventBase & {
 
 type TrackStuckEvent = LavalinkEventBase & {
   type: "TrackStuckEvent";
+  track?: ITrack;
   thresholdMs: number;
 };
 
 type TrackExceptionEvent = LavalinkEventBase & {
   type: "TrackExceptionEvent";
+  track?: ITrack;
   exception: { severity: string; message?: string } & Record<string, any>;
 };
 
@@ -672,6 +676,7 @@ export class Node {
     this.manager.emit("nodeRaw", this, payload);
 
     const player = this.manager.players.get(payload.guildId);
+    if (player && (player.destroyed || player.node !== this)) return;
     if (!player && payload.guildId) {
       this.manager.emit(
         "debug",
@@ -890,6 +895,7 @@ export class Node {
    }
 
   protected handleEvent(player: any, payload: LavalinkEventPayload): void {
+    if (player.destroyed || player.node !== this) return;
     switch (payload.type) {
         case "TrackStartEvent":
             this.handleTrackStart(player, payload);
@@ -898,9 +904,11 @@ export class Node {
             this.handleTrackEnd(player, payload);
             break;
         case "TrackStuckEvent":
+            if (payload.track && !playbackAttempt(player).accepts(this, payload.track)) return;
             this.handleTrackStuck(player, payload);
             break;
         case "TrackExceptionEvent":
+            if (payload.track && !playbackAttempt(player).accepts(this, payload.track)) return;
             this.handleTrackException(player, payload);
             break;
         case "MixStartedEvent":
@@ -998,7 +1006,16 @@ export class Node {
   }
 
   private async handleTrackStart(player: any, payload: TrackStartEvent): Promise<void> {
-    const trackData = payload.track ?? player.current?.toJSON?.();
+    const incoming = payload.track ?? player.current?.toJSON?.();
+    if (!incoming) return;
+    const attempts = playbackAttempt(player);
+    const started = attempts.start(this, incoming);
+    if (!started) return;
+    const trackData = attempts.clean(incoming);
+    if (started === 'preloaded') {
+      player.current = new (Structure.get("Track"))(trackData, trackData.userData?.requester ?? player.current?.requester);
+      player.updateData('current', TrackCodec.serialize(player.current));
+    }
     const trackTitle = trackData?.info?.title ?? player.current?.title ?? "Unknown";
     this.manager.emit("debug", `Moonlink.js > Node#handleTrackStart >> Track started for player ${player.guildId}: "${trackTitle}". Track: ${stringifyWithReplacer(trackData ?? payload.track)}.`);
     
@@ -1043,17 +1060,15 @@ export class Node {
       return;
     }
 
-    const trackData = payload.track ?? player.current?.toJSON?.();
+    const incoming = payload.track ?? player.current?.toJSON?.();
+    if (!incoming || !playbackAttempt(player).end(this, incoming)) return;
+    const trackData = playbackAttempt(player).clean(incoming);
     if (trackData && player.current && (!trackData.userData || Object.keys(trackData.userData).length === 0)) {
         trackData.userData = player.current.userData;
     }
     const trackForEvent = trackData
         ? new (Structure.get("Track"))(trackData, player.current?.requester)
         : player.current;
-    if (payload.track?.encoded && player.current?.encoded !== payload.track.encoded) {
-      this.manager.emit("trackEnd", player, trackForEvent, reason, payload);
-      return;
-    }
     const intent = playbackGuard(player).ticket;
     if (!isCrossfadeTransition) {
       player.playing = false;
