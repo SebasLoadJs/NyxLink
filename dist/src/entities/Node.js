@@ -10,6 +10,7 @@ const PlaybackGuard_1 = require("../players/PlaybackGuard");
 const PlaybackAttempt_1 = require("../players/PlaybackAttempt");
 const TrackCodec_1 = require("../tracks/TrackCodec");
 const NodeCircuitBreaker_1 = require("../nodes/NodeCircuitBreaker");
+const RetryDelay_1 = require("../nodes/RetryDelay");
 const Util_1 = require("../Util");
 const types_1 = require("../typings/types");
 const YouTubeLiveChat_1 = require("./YouTubeLiveChat");
@@ -28,6 +29,7 @@ class Node {
     reconnectAttempts = 0;
     retryAmount;
     retryDelay = 60000;
+    retryJitter;
     resumed = false;
     resumeTimeout = 60000;
     resumeUpdateTimeout;
@@ -63,6 +65,7 @@ class Node {
     circuit;
     draining = false;
     constructor(manager, config) {
+        this.retryJitter = (0, RetryDelay_1.retryJitter)(config.retryJitter !== undefined ? config.retryJitter : manager.options.node?.retryJitter);
         this.circuit = new NodeCircuitBreaker_1.NodeCircuitBreaker(manager.options.node?.circuitBreaker);
         this.manager = manager;
         this.uuid = (0, Util_1.generateUUID)(config.host, config.port);
@@ -191,7 +194,7 @@ class Node {
         }
     }
     calculateReconnectDelay() {
-        return Math.min(Math.max(0, this.retryDelay) * Math.pow(2, this.reconnectAttempts), 300000);
+        return (0, RetryDelay_1.retryDelay)(this.retryDelay, this.reconnectAttempts, this.retryJitter, 300000);
     }
     async probe() {
         if (this.destroyed || !this.connected)

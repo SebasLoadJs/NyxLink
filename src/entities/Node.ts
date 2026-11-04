@@ -8,6 +8,7 @@ import { playbackGuard } from "../players/PlaybackGuard";
 import { playbackAttempt } from "../players/PlaybackAttempt";
 import { TrackCodec } from "../tracks/TrackCodec";
 import { NodeCircuitBreaker } from '../nodes/NodeCircuitBreaker';
+import { retryDelay, retryJitter } from '../nodes/RetryDelay';
 import { IManagerNodeConfig, INodeStats, ITrack, ILyricsData, IFilters } from "../typings/Interfaces";
 import type { Manager } from "../core/Manager";
 import { Rest } from "./Rest";
@@ -202,6 +203,7 @@ export class Node {
   public reconnectAttempts: number = 0;
   public retryAmount: number;
   public retryDelay: number = 60000;
+  public readonly retryJitter: number;
   public resumed: boolean = false;
   public resumeTimeout: number = 60000;
   private resumeUpdateTimeout?: NodeJS.Timeout;
@@ -238,6 +240,7 @@ export class Node {
   public draining = false;
 
   constructor(manager: Manager, config: IManagerNodeConfig) {
+    this.retryJitter = retryJitter(config.retryJitter !== undefined ? config.retryJitter : manager.options.node?.retryJitter);
     this.circuit = new NodeCircuitBreaker(manager.options.node?.circuitBreaker);
     this.manager = manager;
     this.uuid = generateUUID(config.host, config.port);
@@ -422,7 +425,7 @@ export class Node {
   }
 
   private calculateReconnectDelay(): number {
-    return Math.min(Math.max(0, this.retryDelay) * Math.pow(2, this.reconnectAttempts), 300000);
+    return retryDelay(this.retryDelay, this.reconnectAttempts, this.retryJitter, 300000);
   }
 
   /** A single protected stats request may close a circuit after its cooldown. */

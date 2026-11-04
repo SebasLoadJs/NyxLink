@@ -123,6 +123,7 @@ export interface IManagerNodeConfig {
     identifier?: string;
     pathVersion?: string;
     retryDelay?: number;
+    retryJitter?: number;
     retryAmount?: number;
     regions?: string[];
     priority?: number;
@@ -173,6 +174,9 @@ export interface IVoiceConnectionOptions {
 }
 
 export interface INodeOptions {
+    retryJitter?: number;
+    recoveryConcurrency?: number;
+    recoveryQueueLimit?: number;
     circuitBreaker?: CircuitBreakerOptions | false;
     failover?: FailoverOptions;
     maxStatsAgeMs?: number;

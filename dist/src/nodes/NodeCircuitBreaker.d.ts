@@ -12,9 +12,11 @@ export declare class NodeCircuitBreaker {
     private failures;
     private windowStart;
     private nextProbe;
+    private probing;
     constructor(options?: CircuitBreakerOptions | false);
     get state(): CircuitState;
     get retryAt(): number;
+    private serverDelay;
     private open;
     private failure;
     run<T>(operation: () => Promise<T>): Promise<T>;

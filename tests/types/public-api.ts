@@ -76,3 +76,10 @@ const protectedManager = new Manager({ nodes: [configuredNode], options: { node:
 // @ts-expect-error A node owns its circuit for the lifetime of the connection object.
 node.circuit = circuit;
 void [circuitState, guarded, retryAt, probe, draining, drained, protectedManager];
+
+const boundedManager = new Manager({ nodes: [configuredNode], options: { node: { recoveryConcurrency: 4, recoveryQueueLimit: 1000, retryJitter: 0.5, failover: { maxAttempts: 3, retryJitter: 1 } } } });
+const jitteredNode: Parameters<NodeManager['add']>[0] = { ...configuredNode, retryJitter: 0.25 };
+const admissionReason: FailoverResult['reason'] = 'queue-full';
+void [boundedManager, jitteredNode, admissionReason];
+const serverWait: number | undefined = new HttpError(429, undefined, '5').retryAfterMs;
+void serverWait;
