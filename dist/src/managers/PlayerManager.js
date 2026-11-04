@@ -2,6 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PlayerManager = void 0;
 const Util_1 = require("../Util");
+const NodeSelector_1 = require("../nodes/NodeSelector");
+const NoEligibleNodeError_1 = require("../errors/NoEligibleNodeError");
 class PlayerManager {
     manager;
     players = new Map();
@@ -26,9 +28,9 @@ class PlayerManager {
             this.manager.emit("debug", `Moonlink.js > PlayerManager >> Player already exists for Guild: ${options.guildId}. Returning existing player.`);
             return this.players.get(options.guildId);
         }
-        const node = this.manager.nodes.findNode();
+        const node = this.manager.nodes.findNode(options.nodeSelection);
         if (!node) {
-            throw new Error("Moonlink.js > PlayerManager#create: No available nodes.");
+            throw new NoEligibleNodeError_1.NoEligibleNodeError(NodeSelector_1.NodeSelector.rejections(this.manager.nodes.nodes.values(), this.manager.options.node, options.nodeSelection));
         }
         const player = new (Util_1.Structure.get("Player"))(this.manager, node, options);
         this.players.set(options.guildId, player);
@@ -44,6 +46,8 @@ class PlayerManager {
             player.updateData("autoLeave", options.autoLeave);
         if (options.loop !== undefined)
             player.updateData("loop", options.loop);
+        if (options.nodeSelection !== undefined)
+            player.updateData('nodeSelection', player.nodeSelection);
         this.manager.emit("playerCreate", player);
         this.manager.emit("debug", `Moonlink.js > PlayerManager >> Player created. Guild: ${options.guildId}, Options: ${JSON.stringify(options)}`);
         return player;

@@ -1,3 +1,4 @@
+import { type NodeRequirements } from '../nodes/NodeSelector';
 import { Node } from "./Node";
 import { Queue } from "./Queue";
 import { Manager } from "../core/Manager";
@@ -11,6 +12,7 @@ import { VoiceReceiver, VoiceReceiverOptions } from "./VoiceReceiver";
 export declare class Player {
     readonly manager: Manager;
     node: Node;
+    readonly nodeSelection: NodeRequirements;
     readonly guildId: string;
     readonly queue: Queue;
     readonly filters: Filters;

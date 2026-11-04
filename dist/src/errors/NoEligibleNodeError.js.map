@@ -1,0 +1,1 @@
+{"version":3,"file":"NoEligibleNodeError.js","sourceRoot":"","sources":["../../../src/errors/NoEligibleNodeError.ts"],"names":[],"mappings":";;;AAEA,MAAa,mBAAoB,SAAQ,KAAK;IAGd;IAFZ,IAAI,GAAG,kBAAkB,CAAC;IAE1C,YAA4B,UAA2B;QACnD,KAAK,CAAC,oDAAoD,CAAC,CAAC;QADpC,eAAU,GAAV,UAAU,CAAiB;QAEnD,IAAI,CAAC,IAAI,GAAG,qBAAqB,CAAC;IACtC,CAAC;CACJ;AAPD,kDAOC"}

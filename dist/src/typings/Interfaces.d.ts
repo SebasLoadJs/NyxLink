@@ -8,6 +8,7 @@ import type { FailoverOptions } from '../nodes/NodeFailover';
 import type { StorageAdapter } from '../database/StorageAdapter';
 import type { BackendKind } from '../backends/BackendAdapter';
 import type { TrackSnapshot } from '../tracks/TrackCodec';
+import type { NodeRequirements } from '../nodes/NodeSelector';
 export interface IManagerEvents {
     debug: (message: string) => void;
     nodeCreate: (node: Node) => void;
@@ -336,6 +337,7 @@ export interface IPlayerConfig {
     voiceChannelId: string;
     textChannelId?: string;
     node?: string;
+    nodeSelection?: NodeRequirements;
     volume?: number;
     selfDeaf?: boolean;
     selfMute?: boolean;
