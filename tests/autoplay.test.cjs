@@ -248,3 +248,69 @@ test('duplicate track-end searches cannot clear or duplicate the latest autoplay
   assert.deepEqual(played, [latest]);
   assert.equal(ends.length, 0);
 });
+
+for (const loop of ['off', 'track', 'queue']) {
+  test(`cleanup never advances the queue or autoplay with loop=${loop}`, async t => {
+    const { manager, node, player, requests } = createPlayer(t);
+    const previous = createTrack('previous');
+    const queued = createTrack('queued');
+    player.current = previous;
+    player.playing = true;
+    player.loop = loop;
+    player.queue.add(queued);
+    let searches = 0;
+    manager.search = async () => { searches++; return { tracks: [createTrack('recommended')] }; };
+
+    await node.handleTrackEnd(player, { reason: 'cleanup', track: previous.toJSON() });
+
+    assert.equal(playbackRequests(requests).length, 0);
+    assert.equal(searches, 0);
+    assert.deepEqual(player.queue.tracks, [queued]);
+    assert.equal(player.playing, false);
+  });
+}
+
+for (const hasRecommendation of [true, false]) {
+  test(`a manual track queued during autoplay search takes priority with recommendation=${hasRecommendation}`, async t => {
+    const { manager, node, player, requests } = createPlayer(t);
+    const previous = createTrack('previous');
+    const manual = createTrack('manual');
+    player.current = previous;
+    const started = deferred();
+    const response = deferred();
+    manager.search = async () => { started.resolve(); return response.promise; };
+    const ended = [];
+    manager.on('queueEnd', () => ended.push(true));
+    const ending = node.handleTrackEnd(player, { reason: 'finished', track: previous.toJSON() });
+    await started.promise;
+    player.queue.add(manual);
+    response.resolve({ tracks: hasRecommendation ? [createTrack('recommended')] : [] });
+    await ending;
+
+    assert.equal(player.current, manual);
+    assert.equal(player.playing, true);
+    assert.deepEqual(playbackRequests(requests).map(({ payload }) => payload.track.encoded), [manual.encoded]);
+    assert.deepEqual(ended, []);
+  });
+}
+
+test('a user stop still prevents a newly queued track from starting after an obsolete search', async t => {
+  const { manager, node, player, requests } = createPlayer(t);
+  const previous = createTrack('previous');
+  const manual = createTrack('manual');
+  player.current = previous;
+  const started = deferred();
+  const response = deferred();
+  manager.search = async () => { started.resolve(); return response.promise; };
+  const ending = node.handleTrackEnd(player, { reason: 'finished', track: previous.toJSON() });
+  await started.promise;
+  await player.stop();
+  player.queue.add(manual);
+  response.resolve({ tracks: [createTrack('recommended')] });
+  await ending;
+
+  assert.equal(player.current, null);
+  assert.equal(player.playing, false);
+  assert.deepEqual(player.queue.tracks, [manual]);
+  assert.equal(playbackRequests(requests).length, 0);
+});

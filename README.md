@@ -195,6 +195,8 @@ async function play(guildId, voiceChannelId, query, requester) {
 | Activar autoplay | `player.setAutoPlay(true)` |
 | Destruir el reproductor | `await player.destroy()` |
 
+Las canciones añadidas a la cola tienen prioridad sobre las recomendaciones que todavía se están buscando. Los eventos de fin `stopped`, `replaced` y `cleanup` no inician otra pista por sí solos.
+
 `play()`, `skip()` y `transferNode()` devuelven un booleano: compruébalo antes de anunciar que la operación tuvo éxito. `setVolume()` sigue siendo encadenable; usa `setVolumeAsync()` cuando necesites esperar la respuesta del nodo.
 
 ## Configuración
