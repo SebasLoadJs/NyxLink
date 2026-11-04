@@ -140,6 +140,7 @@ export declare class Node {
     reconnectAttempts: number;
     retryAmount: number;
     retryDelay: number;
+    readonly retryJitter: number;
     resumed: boolean;
     resumeTimeout: number;
     private resumeUpdateTimeout?;

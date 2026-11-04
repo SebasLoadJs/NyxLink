@@ -11,6 +11,7 @@ class NodeCircuitBreaker {
     failures = 0;
     windowStart = 0;
     nextProbe = 0;
+    probing = false;
     constructor(options) {
         if (options !== undefined && options !== false && (!options || typeof options !== 'object' || Array.isArray(options))) {
             throw new TypeError('Invalid circuit breaker options');
@@ -26,9 +27,12 @@ class NodeCircuitBreaker {
     }
     get state() { return this.status; }
     get retryAt() { return this.nextProbe; }
-    open() {
+    serverDelay(error) {
+        return error instanceof HttpError_1.HttpError && [429, 503].includes(error.statusCode) ? error.retryAfterMs : undefined;
+    }
+    open(error) {
         this.status = 'open';
-        this.nextProbe = Date.now() + this.options.cooldownMs;
+        this.nextProbe = Math.max(this.nextProbe, Date.now() + Math.max(this.options.cooldownMs, this.serverDelay(error) ?? 0));
         this.generation++;
     }
     failure(error) {
@@ -40,13 +44,15 @@ class NodeCircuitBreaker {
     async run(operation) {
         if (!this.enabled)
             return operation();
-        if (this.status === 'half-open' || this.status === 'open' && Date.now() < this.nextProbe) {
+        if (this.probing || this.status === 'open' && Date.now() < this.nextProbe) {
             throw new CircuitOpenError_1.CircuitOpenError(this.nextProbe);
         }
         if (this.status === 'open') {
             this.status = 'half-open';
+            this.probing = true;
             this.generation++;
         }
+        const probe = this.probing;
         const generation = this.generation;
         try {
             const result = await operation();
@@ -63,18 +69,29 @@ class NodeCircuitBreaker {
         catch (error) {
             if (generation === this.generation) {
                 if (this.status === 'half-open')
-                    this.open();
+                    this.open(error);
                 else if (this.failure(error)) {
+                    if (this.serverDelay(error) !== undefined) {
+                        this.open(error);
+                        throw error;
+                    }
                     const now = Date.now();
                     if (!this.failures || now - this.windowStart >= this.options.windowMs) {
                         this.failures = 0;
                         this.windowStart = now;
                     }
                     if (++this.failures >= this.options.failureThreshold)
-                        this.open();
+                        this.open(error);
                 }
             }
+            else if (this.status !== 'closed' && this.serverDelay(error) !== undefined) {
+                this.open(error);
+            }
             throw error;
+        }
+        finally {
+            if (probe)
+                this.probing = false;
         }
     }
 }

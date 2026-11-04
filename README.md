@@ -291,6 +291,14 @@ Para mantenimiento, `manager.nodes.setDraining(identifier)` impide nuevas asigna
 
 `manager.nodes.setDraining(identifier, false)` vuelve a habilitar la selección cuando ya no hay un drenado en curso. El drenado conserva el nodo en el manager; `eject()` mantiene su comportamiento de retirada. Un probe exitoso no elimina la marca de mantenimiento.
 
+Las recuperaciones comparten un límite por manager: `options.node.recoveryConcurrency` permite de 1 a 100 operaciones simultáneas (4 por defecto) y `recoveryQueueLimit` admite de 0 a 10000 en espera (1000 por defecto). La cola respeta el orden de llegada; las solicitudes duplicadas de un mismo reproductor comparten su recuperación. Estos límites se capturan al iniciar la primera recuperación del manager.
+
+Si la cola está llena, `NodeFailover.move()` devuelve `{ status: 'failed', attempts: 0, reason: 'queue-full' }` y emite `playerRecoveryFailed`. La admisión conserva el estado del reproductor; la retirada o desconexión posterior sigue su política `preserveOnFailure`. Mientras espera turno, una orden nueva, el cierre del manager o la destrucción del reproductor cancelan el traslado antes de enviar solicitudes.
+
+`options.node.retryJitter` acepta una proporción de 0 a 1 para variar la espera de reconexión y de failover. El valor predeterminado es 0 y conserva los tiempos existentes. Puedes sobrescribirlo en la configuración de un nodo o en `failover.retryJitter`. Con 0.5, cada espera se distribuye entre la mitad y el total del intervalo calculado; con 1, entre cero y ese total. Se aplica después del límite de cinco minutos del backoff WebSocket y no aumenta los intentos permitidos.
+
+En las solicitudes HTTP protegidas, un HTTP 429 o 503 con [`Retry-After`](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.3) válido abre el circuito desde esa respuesta. `HttpError.retryAfterMs` conserva la espera, indicada en segundos o mediante una fecha HTTP. El siguiente probe espera el mayor valor entre esa demora y el cooldown local; el jitter no reduce la espera del servidor. Los valores inválidos se ignoran.
+
 </details>
 
 <details>

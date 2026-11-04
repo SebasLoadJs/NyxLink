@@ -256,7 +256,7 @@ async function makeRequest(initialUrl, options, timeout = 100000, retries = 3, r
                                     size += chunk.length;
                                     if (size > 32768) {
                                         req.destroy();
-                                        reject(new HttpError_1.HttpError(statusCode));
+                                        reject(new HttpError_1.HttpError(statusCode, undefined, res.headers['retry-after']));
                                     }
                                     else
                                         chunks.push(chunk);
@@ -269,7 +269,7 @@ async function makeRequest(initialUrl, options, timeout = 100000, retries = 3, r
                                         body = decodeErrorBody(buffer, res.headers['content-encoding']);
                                     }
                                     catch { }
-                                    reject(new HttpError_1.HttpError(statusCode, body));
+                                    reject(new HttpError_1.HttpError(statusCode, body, res.headers['retry-after']));
                                 });
                                 return;
                             }
@@ -416,7 +416,7 @@ async function makeStreamRequest(initialUrl, options, timeout = 100000) {
                     size += chunk.length;
                     if (size > 32768) {
                         req.destroy();
-                        reject(new HttpError_1.HttpError(statusCode));
+                        reject(new HttpError_1.HttpError(statusCode, undefined, res.headers['retry-after']));
                     }
                     else
                         chunks.push(chunk);
@@ -428,7 +428,7 @@ async function makeStreamRequest(initialUrl, options, timeout = 100000) {
                         body = decodeErrorBody(Buffer.concat(chunks), res.headers['content-encoding']);
                     }
                     catch { }
-                    reject(new HttpError_1.HttpError(statusCode, body));
+                    reject(new HttpError_1.HttpError(statusCode, body, res.headers['retry-after']));
                 });
                 return;
             }

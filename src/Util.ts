@@ -319,7 +319,7 @@ export async function makeRequest<T = any>(
                   let size = 0;
                   res.on('data', (chunk: Buffer) => {
                     size += chunk.length;
-                    if (size > 32768) { req.destroy(); reject(new HttpError(statusCode)); }
+                    if (size > 32768) { req.destroy(); reject(new HttpError(statusCode, undefined, res.headers['retry-after'])); }
                     else chunks.push(chunk);
                   });
                   res.on('error', reject);
@@ -329,7 +329,7 @@ export async function makeRequest<T = any>(
                       let buffer = Buffer.concat(chunks);
                       body = decodeErrorBody(buffer, res.headers['content-encoding']);
                     } catch { /* Retain the status if the bounded error body cannot be decoded. */ }
-                    reject(new HttpError(statusCode, body));
+                    reject(new HttpError(statusCode, body, res.headers['retry-after']));
                   });
                   return;
                 }
@@ -522,14 +522,14 @@ export async function makeStreamRequest(
         let size = 0;
         res.on('data', (chunk: Buffer) => {
           size += chunk.length;
-          if (size > 32768) { req.destroy(); reject(new HttpError(statusCode)); }
+          if (size > 32768) { req.destroy(); reject(new HttpError(statusCode, undefined, res.headers['retry-after'])); }
           else chunks.push(chunk);
         });
         res.on('error', reject);
         res.on('end', () => {
           let body: unknown;
           try { body = decodeErrorBody(Buffer.concat(chunks), res.headers['content-encoding']); } catch {}
-          reject(new HttpError(statusCode, body));
+          reject(new HttpError(statusCode, body, res.headers['retry-after']));
         });
         return;
       }

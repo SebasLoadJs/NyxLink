@@ -13,6 +13,7 @@ export class NodeCircuitBreaker {
     private failures = 0;
     private windowStart = 0;
     private nextProbe = 0;
+    private probing = false;
 
     constructor(options?: CircuitBreakerOptions | false) {
         if (options !== undefined && options !== false && (!options || typeof options !== 'object' || Array.isArray(options))) {
@@ -30,9 +31,13 @@ export class NodeCircuitBreaker {
     public get state(): CircuitState { return this.status; }
     public get retryAt(): number { return this.nextProbe; }
 
-    private open(): void {
+    private serverDelay(error: unknown): number | undefined {
+        return error instanceof HttpError && [429, 503].includes(error.statusCode) ? error.retryAfterMs : undefined;
+    }
+
+    private open(error?: unknown): void {
         this.status = 'open';
-        this.nextProbe = Date.now() + this.options.cooldownMs;
+        this.nextProbe = Math.max(this.nextProbe, Date.now() + Math.max(this.options.cooldownMs, this.serverDelay(error) ?? 0));
         this.generation++;
     }
 
@@ -44,13 +49,15 @@ export class NodeCircuitBreaker {
 
     public async run<T>(operation: () => Promise<T>): Promise<T> {
         if (!this.enabled) return operation();
-        if (this.status === 'half-open' || this.status === 'open' && Date.now() < this.nextProbe) {
+        if (this.probing || this.status === 'open' && Date.now() < this.nextProbe) {
             throw new CircuitOpenError(this.nextProbe);
         }
         if (this.status === 'open') {
             this.status = 'half-open';
+            this.probing = true;
             this.generation++;
         }
+        const probe = this.probing;
         const generation = this.generation;
         try {
             const result = await operation();
@@ -62,17 +69,26 @@ export class NodeCircuitBreaker {
             return result;
         } catch (error) {
             if (generation === this.generation) {
-                if (this.status === 'half-open') this.open();
+                if (this.status === 'half-open') this.open(error);
                 else if (this.failure(error)) {
+                    if (this.serverDelay(error) !== undefined) {
+                        this.open(error);
+                        throw error;
+                    }
                     const now = Date.now();
                     if (!this.failures || now - this.windowStart >= this.options.windowMs) {
                         this.failures = 0;
                         this.windowStart = now;
                     }
-                    if (++this.failures >= this.options.failureThreshold) this.open();
+                    if (++this.failures >= this.options.failureThreshold) this.open(error);
                 }
+            } else if (this.status !== 'closed' && this.serverDelay(error) !== undefined) {
+                // Concurrent responses may extend an outage, but cannot reopen a recovered circuit.
+                this.open(error);
             }
             throw error;
+        } finally {
+            if (probe) this.probing = false;
         }
     }
 }
