@@ -7,6 +7,8 @@ const FeatureUnavailableError_1 = require("../errors/FeatureUnavailableError");
 const RecommendationResolver_1 = require("../autoplay/RecommendationResolver");
 const AutoPlayManager_1 = require("../autoplay/AutoPlayManager");
 const PlaybackGuard_1 = require("../players/PlaybackGuard");
+const PlaybackAttempt_1 = require("../players/PlaybackAttempt");
+const TrackCodec_1 = require("../tracks/TrackCodec");
 const Util_1 = require("../Util");
 const types_1 = require("../typings/types");
 const YouTubeLiveChat_1 = require("./YouTubeLiveChat");
@@ -435,6 +437,8 @@ class Node {
             return;
         this.manager.emit("nodeRaw", this, payload);
         const player = this.manager.players.get(payload.guildId);
+        if (player && (player.destroyed || player.node !== this))
+            return;
         if (!player && payload.guildId) {
             this.manager.emit("debug", `Moonlink.js > Node >> Payload for non-existent player. GuildId: ${payload.guildId}, OP: ${payload.op}.`);
             return;
@@ -598,6 +602,8 @@ class Node {
         }
     }
     handleEvent(player, payload) {
+        if (player.destroyed || player.node !== this)
+            return;
         switch (payload.type) {
             case "TrackStartEvent":
                 this.handleTrackStart(player, payload);
@@ -606,9 +612,13 @@ class Node {
                 this.handleTrackEnd(player, payload);
                 break;
             case "TrackStuckEvent":
+                if (payload.track && !(0, PlaybackAttempt_1.playbackAttempt)(player).accepts(this, payload.track))
+                    return;
                 this.handleTrackStuck(player, payload);
                 break;
             case "TrackExceptionEvent":
+                if (payload.track && !(0, PlaybackAttempt_1.playbackAttempt)(player).accepts(this, payload.track))
+                    return;
                 this.handleTrackException(player, payload);
                 break;
             case "MixStartedEvent":
@@ -702,7 +712,18 @@ class Node {
         }
     }
     async handleTrackStart(player, payload) {
-        const trackData = payload.track ?? player.current?.toJSON?.();
+        const incoming = payload.track ?? player.current?.toJSON?.();
+        if (!incoming)
+            return;
+        const attempts = (0, PlaybackAttempt_1.playbackAttempt)(player);
+        const started = attempts.start(this, incoming);
+        if (!started)
+            return;
+        const trackData = attempts.clean(incoming);
+        if (started === 'preloaded') {
+            player.current = new (Util_1.Structure.get("Track"))(trackData, trackData.userData?.requester ?? player.current?.requester);
+            player.updateData('current', TrackCodec_1.TrackCodec.serialize(player.current));
+        }
         const trackTitle = trackData?.info?.title ?? player.current?.title ?? "Unknown";
         this.manager.emit("debug", `Moonlink.js > Node#handleTrackStart >> Track started for player ${player.guildId}: "${trackTitle}". Track: ${(0, Util_1.stringifyWithReplacer)(trackData ?? payload.track)}.`);
         player.playing = true;
@@ -738,17 +759,16 @@ class Node {
         if (reason === "replaced") {
             return;
         }
-        const trackData = payload.track ?? player.current?.toJSON?.();
+        const incoming = payload.track ?? player.current?.toJSON?.();
+        if (!incoming || !(0, PlaybackAttempt_1.playbackAttempt)(player).end(this, incoming))
+            return;
+        const trackData = (0, PlaybackAttempt_1.playbackAttempt)(player).clean(incoming);
         if (trackData && player.current && (!trackData.userData || Object.keys(trackData.userData).length === 0)) {
             trackData.userData = player.current.userData;
         }
         const trackForEvent = trackData
             ? new (Util_1.Structure.get("Track"))(trackData, player.current?.requester)
             : player.current;
-        if (payload.track?.encoded && player.current?.encoded !== payload.track.encoded) {
-            this.manager.emit("trackEnd", player, trackForEvent, reason, payload);
-            return;
-        }
         const intent = (0, PlaybackGuard_1.playbackGuard)(player).ticket;
         if (!isCrossfadeTransition) {
             player.playing = false;

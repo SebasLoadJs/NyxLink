@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Player = void 0;
 const PlayerCommandQueue_1 = require("../players/PlayerCommandQueue");
 const PlaybackGuard_1 = require("../players/PlaybackGuard");
+const PlaybackAttempt_1 = require("../players/PlaybackAttempt");
 const Util_1 = require("../Util");
 const Voice_1 = require("./Voice");
 const Track_1 = require("./Track");
@@ -284,10 +285,29 @@ class Player {
             }
             finalPayload.voice = voicePayload;
         }
-        const response = await this.node.rest.updatePlayer(this.guildId, finalPayload, noReplace);
-        if (response == null)
-            throw new Error("Backend did not acknowledge player update");
-        return response;
+        const attempts = (0, PlaybackAttempt_1.playbackAttempt)(this);
+        const attempt = typeof payload.track?.encoded === 'string' ? attempts.begin(this.node, payload.track) : undefined;
+        if (attempt)
+            finalPayload.track = attempt.track;
+        const preload = typeof payload.nextTrack?.encoded === 'string' || payload.nextTrack === null ? attempts.preload(this.node, payload.nextTrack) : undefined;
+        if (preload)
+            finalPayload.nextTrack = preload.track;
+        let acknowledged = false;
+        try {
+            const response = await this.node.rest.updatePlayer(this.guildId, finalPayload, noReplace);
+            if (response == null)
+                throw new Error("Backend did not acknowledge player update");
+            acknowledged = true;
+            if (attempt && !attempt.accepted(response))
+                throw new Error("Backend did not accept the requested track");
+            return response;
+        }
+        catch (error) {
+            attempt?.rollback();
+            if (!acknowledged)
+                preload?.rollback();
+            throw error;
+        }
     }
     async updatePlayer(payload, noReplace) {
         return this.commands.enqueue(() => {
@@ -327,6 +347,14 @@ class Player {
         return this.commands.enqueue(() => this.playNext({ track }, ticket, () => this.autoPlay && (0, PlaybackGuard_1.playbackGuard)(this).isAutoCurrent(automaticTicket)));
     }
     async playNext(options, ticket, allowed = () => true) {
+        try {
+            return await this.applyPlayback(options, ticket, allowed);
+        }
+        finally {
+            (0, PlaybackAttempt_1.playbackAttempt)(this).retain(ticket);
+        }
+    }
+    async applyPlayback(options, ticket, allowed) {
         const guard = (0, PlaybackGuard_1.playbackGuard)(this);
         if (this.destroyed || !guard.isCurrent(ticket) || !allowed())
             return false;
@@ -540,17 +568,26 @@ class Player {
         return this;
     }
     async setNextTrack(track, userData) {
-        this.assertNodeLinkFeature("nextTrack");
         const encoded = this.resolveEncodedTrack(track);
-        this.nextTrack = { encoded, userData };
-        await this.sendPlayerUpdate({ nextTrack: this.nextTrack });
-        return this;
+        return this.commands.enqueue(async () => {
+            if (this.destroyed)
+                throw new Error("Cannot update a destroyed player");
+            this.assertNodeLinkFeature("nextTrack");
+            const nextTrack = { encoded, userData: userData ?? (track instanceof Track_1.Track ? track.userData : undefined) };
+            await this.sendPlayerUpdate({ nextTrack });
+            this.nextTrack = nextTrack;
+            return this;
+        });
     }
     async clearNextTrack() {
-        this.assertNodeLinkFeature("nextTrack");
-        this.nextTrack = undefined;
-        await this.sendPlayerUpdate({ nextTrack: null });
-        return this;
+        return this.commands.enqueue(async () => {
+            if (this.destroyed)
+                throw new Error("Cannot update a destroyed player");
+            this.assertNodeLinkFeature("nextTrack");
+            await this.sendPlayerUpdate({ nextTrack: null });
+            this.nextTrack = undefined;
+            return this;
+        });
     }
     setAudioTrackId(audioTrackId) {
         this.assertNodeLinkFeature("audioTrackId");
@@ -700,14 +737,27 @@ class Player {
     async skip(position) {
         const oldTrack = this.current;
         if (position !== undefined) {
-            this.manager.emit("debug", `Moonlink.js > Player#skip -> Skipping to position ${position} in queue for guild ${this.guildId}`);
-            const track = this.queue.remove(position);
-            if (!track) {
-                this.manager.emit("debug", `Moonlink.js > Player#skip >> Invalid queue position for guild ${this.guildId}`);
+            if (!Number.isInteger(position) || position < 0 || !this.queue.get(position))
                 return false;
-            }
-            this.manager.emit("playerTriggeredSkip", this, oldTrack, track, position);
-            return await this.play({ track: track instanceof Track_1.Track ? track : new Track_1.Track(track) });
+            const guard = (0, PlaybackGuard_1.playbackGuard)(this);
+            const ticket = guard.invalidate();
+            return this.commands.enqueue(async () => {
+                try {
+                    if (this.destroyed || !guard.isCurrent(ticket))
+                        return false;
+                    const track = this.queue.get(position);
+                    if (!track)
+                        return false;
+                    this.manager.emit("playerTriggeredSkip", this, this.current, track, position);
+                    if (this.destroyed || !guard.isCurrent(ticket) || this.queue.get(position) !== track)
+                        return false;
+                    this.queue.remove(position);
+                    return await this.playNext({ track: track instanceof Track_1.Track ? track : new Track_1.Track(track) }, ticket);
+                }
+                finally {
+                    (0, PlaybackAttempt_1.playbackAttempt)(this).retain(ticket);
+                }
+            });
         }
         if (!this.queue.size) {
             if (this.autoPlay) {
