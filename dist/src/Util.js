@@ -333,10 +333,10 @@ async function makeRequest(initialUrl, options, timeout = 100000, retries = 3, r
                             }
                         });
                     });
-                    req.on("error", (err) => reject(new Error(`Request error: ${err.message}`)));
+                    req.on("error", (err) => reject(Object.assign(new Error(`Request error: ${err.message}`, { cause: err }), { code: err.code })));
                     req.on("timeout", () => {
                         req.destroy();
-                        reject(new Error("Request timed out"));
+                        reject(Object.assign(new Error("Request timed out"), { code: 'ETIMEDOUT' }));
                     });
                     req.setTimeout(timeout);
                     if (options.body) {

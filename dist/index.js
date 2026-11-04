@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Connectors = exports.WebSocket = exports.PlayerManager = exports.NodeManager = exports.SearchResult = exports.DeezerSource = exports.SpotifySource = exports.YouTubeLiveChat = exports.VoiceReceiver = exports.Track = exports.Filters = exports.Rest = exports.Queue = exports.Player = exports.Node = exports.Manager = exports.VoicePacketHandler = exports.TrackResolutionError = exports.TrackResolver = exports.TrackCodec = exports.Local = exports.Memory = exports.HttpError = exports.NoEligibleNodeError = exports.FeatureUnavailableError = exports.NodeFailover = exports.NodeHealthMonitor = exports.NodeSelector = exports.NodeLinkAdapter = exports.LavalinkAdapter = exports.BackendDetector = exports.BackendAdapter = exports.formatFailover = exports.formatSystemStatus = exports.formatBox = exports.formatEntry = exports.createBanner = exports.ConsoleReporter = exports.Logger = exports.version = exports.LoadType = exports.VoiceConnectionState = exports.NodeState = void 0;
+exports.Connectors = exports.WebSocket = exports.PlayerManager = exports.NodeManager = exports.SearchResult = exports.DeezerSource = exports.SpotifySource = exports.YouTubeLiveChat = exports.VoiceReceiver = exports.Track = exports.Filters = exports.Rest = exports.Queue = exports.Player = exports.Node = exports.Manager = exports.VoicePacketHandler = exports.TrackResolutionError = exports.TrackResolver = exports.TrackCodec = exports.Local = exports.Memory = exports.HttpError = exports.NoEligibleNodeError = exports.FeatureUnavailableError = exports.NodeFailover = exports.CircuitOpenError = exports.NodeCircuitBreaker = exports.NodeHealthMonitor = exports.NodeSelector = exports.NodeLinkAdapter = exports.LavalinkAdapter = exports.BackendDetector = exports.BackendAdapter = exports.formatFailover = exports.formatSystemStatus = exports.formatBox = exports.formatEntry = exports.createBanner = exports.ConsoleReporter = exports.Logger = exports.version = exports.LoadType = exports.VoiceConnectionState = exports.NodeState = void 0;
 var types_1 = require("./src/typings/types");
 Object.defineProperty(exports, "NodeState", { enumerable: true, get: function () { return types_1.NodeState; } });
 Object.defineProperty(exports, "VoiceConnectionState", { enumerable: true, get: function () { return types_1.VoiceConnectionState; } });
@@ -26,6 +26,10 @@ var NodeSelector_1 = require("./src/nodes/NodeSelector");
 Object.defineProperty(exports, "NodeSelector", { enumerable: true, get: function () { return NodeSelector_1.NodeSelector; } });
 var NodeHealthMonitor_1 = require("./src/nodes/NodeHealthMonitor");
 Object.defineProperty(exports, "NodeHealthMonitor", { enumerable: true, get: function () { return NodeHealthMonitor_1.NodeHealthMonitor; } });
+var NodeCircuitBreaker_1 = require("./src/nodes/NodeCircuitBreaker");
+Object.defineProperty(exports, "NodeCircuitBreaker", { enumerable: true, get: function () { return NodeCircuitBreaker_1.NodeCircuitBreaker; } });
+var CircuitOpenError_1 = require("./src/errors/CircuitOpenError");
+Object.defineProperty(exports, "CircuitOpenError", { enumerable: true, get: function () { return CircuitOpenError_1.CircuitOpenError; } });
 var NodeFailover_1 = require("./src/nodes/NodeFailover");
 Object.defineProperty(exports, "NodeFailover", { enumerable: true, get: function () { return NodeFailover_1.NodeFailover; } });
 var FeatureUnavailableError_1 = require("./src/errors/FeatureUnavailableError");

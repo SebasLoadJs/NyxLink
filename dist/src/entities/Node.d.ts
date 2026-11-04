@@ -1,4 +1,5 @@
 import type { BackendAdapter } from "../backends/BackendAdapter";
+import { NodeCircuitBreaker } from '../nodes/NodeCircuitBreaker';
 import { IManagerNodeConfig, INodeStats, ITrack, ILyricsData, IFilters } from "../typings/Interfaces";
 import type { Manager } from "../core/Manager";
 import { Rest } from "./Rest";
@@ -171,6 +172,8 @@ export declare class Node {
     private lastStats?;
     state: NodeState;
     capabilities: Set<string>;
+    readonly circuit: NodeCircuitBreaker;
+    draining: boolean;
     constructor(manager: Manager, config: IManagerNodeConfig);
     get latency(): number;
     get health(): import("../nodes/NodeHealthMonitor").NodeHealth;
@@ -194,6 +197,7 @@ export declare class Node {
     setState(state: NodeState): void;
     connect(): Promise<void>;
     private calculateReconnectDelay;
+    probe(): Promise<boolean>;
     reconnect(): void;
     private resetResumeUpdateState;
     private cancelResumeWindow;

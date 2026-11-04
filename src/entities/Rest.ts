@@ -69,13 +69,12 @@ export class Rest {
 
     private async featureRequest<T = any>(feature: string, url: string, options: http.RequestOptions & { body?: any }): Promise<T> {
         this.node.assertFeature(feature);
-        try {
-            const result = await makeRequest<T>(url, { ...options, throwOnError: true }, 10000, 0);
-            this.node.backend?.recordFeature(feature, 'available');
-            return result;
-        } catch (error) {
-            this.featureError(feature, error);
-        }
+        const result = await this.node.circuit.run(async () => {
+            try { return await makeRequest<T>(url, { ...options, throwOnError: true }, 10000, 0); }
+            catch (error) { this.featureError(feature, error); }
+        });
+        this.node.backend?.recordFeature(feature, 'available');
+        return result;
     }
 
     private featureError(feature: string, error: unknown): never {
@@ -113,12 +112,12 @@ export class Rest {
         }
         
         try {
-            const res = await makeRequest<any>(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}?${params.toString()}`, {
+            const res = await this.node.circuit.run(() => makeRequest<any>(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}?${params.toString()}`, {
                 method: "PATCH",
                 headers: this.jsonHeaders,
                 body: data,
                 throwOnError: true
-            }, undefined, 0);
+            }, undefined, 0));
             return res || null;
         } catch (error) {
             const err = error as Error;
@@ -157,12 +156,13 @@ export class Rest {
         const params = new URLSearchParams();
         params.append("identifier", identifier);
 
-        const res = await makeRequest<any>(`${this.url}/v4/loadtracks?${params}`, {
+        const protectedRequest = this.node.circuit.enabled;
+        const res = await this.node.circuit.run(() => makeRequest<any>(`${this.url}/v4/loadtracks?${params}`, {
             method: "GET",
             headers: this.authHeaders,
-            throwOnError: options !== undefined,
+            throwOnError: protectedRequest || options !== undefined,
             signal: options?.signal
-        }, options?.timeoutMs ?? 0, options ? 0 : 3);
+        }, options?.timeoutMs ?? (protectedRequest ? 10000 : 0), protectedRequest || options ? 0 : 3));
 
         return res || { loadType: "empty", data: {} };
     }
@@ -214,9 +214,18 @@ export class Rest {
     }
 
     public async getStats(): Promise<INodeStats | null> {
-        const res = await makeRequest<INodeStats>(`${this.url}/v4/stats`, {
-            method: "GET",
-            headers: this.authHeaders
+        const protectedRequest = this.node.circuit.enabled;
+        const res = await this.node.circuit.run(async () => {
+            const stats = await makeRequest<INodeStats>(`${this.url}/v4/stats`, {
+                method: "GET", headers: this.authHeaders, throwOnError: protectedRequest
+            }, protectedRequest ? 10000 : undefined, protectedRequest ? 0 : undefined);
+            if (protectedRequest) {
+                const measurements = [stats?.players, stats?.cpu?.systemLoad, stats?.memory?.used, stats?.memory?.allocated];
+                if (!stats?.memory?.allocated || !measurements.every(value => typeof value === 'number' && Number.isFinite(value) && value >= 0)) {
+                    throw new TypeError('Invalid node statistics');
+                }
+            }
+            return stats;
         });
         return res || null;
     }

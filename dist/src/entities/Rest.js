@@ -64,14 +64,16 @@ class Rest {
     }
     async featureRequest(feature, url, options) {
         this.node.assertFeature(feature);
-        try {
-            const result = await (0, Util_1.makeRequest)(url, { ...options, throwOnError: true }, 10000, 0);
-            this.node.backend?.recordFeature(feature, 'available');
-            return result;
-        }
-        catch (error) {
-            this.featureError(feature, error);
-        }
+        const result = await this.node.circuit.run(async () => {
+            try {
+                return await (0, Util_1.makeRequest)(url, { ...options, throwOnError: true }, 10000, 0);
+            }
+            catch (error) {
+                this.featureError(feature, error);
+            }
+        });
+        this.node.backend?.recordFeature(feature, 'available');
+        return result;
     }
     featureError(feature, error) {
         const body = error instanceof HttpError_1.HttpError ? error.body : undefined;
@@ -104,12 +106,12 @@ class Rest {
             params.append("noReplace", "true");
         }
         try {
-            const res = await (0, Util_1.makeRequest)(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}?${params.toString()}`, {
+            const res = await this.node.circuit.run(() => (0, Util_1.makeRequest)(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}?${params.toString()}`, {
                 method: "PATCH",
                 headers: this.jsonHeaders,
                 body: data,
                 throwOnError: true
-            }, undefined, 0);
+            }, undefined, 0));
             return res || null;
         }
         catch (error) {
@@ -146,12 +148,13 @@ class Rest {
     async loadTracks(identifier, options) {
         const params = new URLSearchParams();
         params.append("identifier", identifier);
-        const res = await (0, Util_1.makeRequest)(`${this.url}/v4/loadtracks?${params}`, {
+        const protectedRequest = this.node.circuit.enabled;
+        const res = await this.node.circuit.run(() => (0, Util_1.makeRequest)(`${this.url}/v4/loadtracks?${params}`, {
             method: "GET",
             headers: this.authHeaders,
-            throwOnError: options !== undefined,
+            throwOnError: protectedRequest || options !== undefined,
             signal: options?.signal
-        }, options?.timeoutMs ?? 0, options ? 0 : 3);
+        }, options?.timeoutMs ?? (protectedRequest ? 10000 : 0), protectedRequest || options ? 0 : 3));
         return res || { loadType: "empty", data: {} };
     }
     async decodeTrack(encodedTrack) {
@@ -195,9 +198,18 @@ class Rest {
         return res || null;
     }
     async getStats() {
-        const res = await (0, Util_1.makeRequest)(`${this.url}/v4/stats`, {
-            method: "GET",
-            headers: this.authHeaders
+        const protectedRequest = this.node.circuit.enabled;
+        const res = await this.node.circuit.run(async () => {
+            const stats = await (0, Util_1.makeRequest)(`${this.url}/v4/stats`, {
+                method: "GET", headers: this.authHeaders, throwOnError: protectedRequest
+            }, protectedRequest ? 10000 : undefined, protectedRequest ? 0 : undefined);
+            if (protectedRequest) {
+                const measurements = [stats?.players, stats?.cpu?.systemLoad, stats?.memory?.used, stats?.memory?.allocated];
+                if (!stats?.memory?.allocated || !measurements.every(value => typeof value === 'number' && Number.isFinite(value) && value >= 0)) {
+                    throw new TypeError('Invalid node statistics');
+                }
+            }
+            return stats;
         });
         return res || null;
     }

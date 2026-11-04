@@ -9,6 +9,7 @@ import type { StorageAdapter } from '../database/StorageAdapter';
 import type { BackendKind } from '../backends/BackendAdapter';
 import type { TrackSnapshot } from '../tracks/TrackCodec';
 import type { NodeRequirements } from '../nodes/NodeSelector';
+import type { CircuitBreakerOptions } from '../nodes/NodeCircuitBreaker';
 export interface IManagerEvents {
     debug: (message: string) => void;
     nodeCreate: (node: Node) => void;
@@ -153,6 +154,7 @@ export interface IVoiceConnectionOptions {
     autoReconnect?: boolean;
 }
 export interface INodeOptions {
+    circuitBreaker?: CircuitBreakerOptions | false;
     failover?: FailoverOptions;
     maxStatsAgeMs?: number;
     selectionStrategy?: NodeSortStrategy;

@@ -1,7 +1,7 @@
 import type { Node } from '../entities/Node';
 import type { INodeOptions } from '../typings/Interfaces';
 export type NodeHealth = {
-    state: 'healthy' | 'unhealthy' | 'unknown' | 'unavailable';
+    state: 'healthy' | 'unhealthy' | 'unknown' | 'unavailable' | 'draining';
     reason: string;
     cpuPercent?: number;
     memoryPercent?: number;

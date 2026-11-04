@@ -12,7 +12,7 @@ export type NodeRequirements = {
     readonly regionPolicy?: 'prefer' | 'require';
 };
 export type NodeSelectionOptions = NodeRequirements & { exclude?: readonly string[]; allowUnhealthyFallback?: boolean };
-export type NodeRejectionReason = 'unavailable' | 'excluded' | 'not-ready' | 'backend' | 'capability' | 'region' | 'unhealthy';
+export type NodeRejectionReason = 'unavailable' | 'excluded' | 'not-ready' | 'backend' | 'capability' | 'region' | 'unhealthy' | 'draining' | 'circuit-open';
 export type NodeRejection = { identifier: string; reasons: NodeRejectionReason[]; missingCapabilities?: string[] };
 
 const measured = (value: unknown, fallback = Infinity): number =>
@@ -37,6 +37,8 @@ export class NodeSelector {
     private static rejection(node: Node, selection: NodeSelectionOptions): NodeRejection | undefined {
         const reasons: NodeRejectionReason[] = [];
         if (!NodeHealthMonitor.available(node)) reasons.push('unavailable');
+        if (node.draining) reasons.push('draining');
+        if (node.circuit && node.circuit.state !== 'closed') reasons.push('circuit-open');
         if (selection.exclude?.includes(node.identifier)) reasons.push('excluded');
         const constrained = selection.backend !== undefined || !!selection.requiredCapabilities?.length || selection.region !== undefined;
         if (constrained && node.state !== NodeState.READY) reasons.push('not-ready');

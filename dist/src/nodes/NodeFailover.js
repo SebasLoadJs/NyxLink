@@ -9,7 +9,13 @@ class NodeFailover {
         const existing = pending.get(player);
         if (existing)
             return existing;
-        const operation = this.attempt(player, source, options).finally(() => pending.delete(player));
+        const guard = (0, PlaybackGuard_1.playbackGuard)(player);
+        const ticket = guard.ticket;
+        const operation = Promise.resolve().then(() => {
+            if (player.destroyed || source.destroyed || !guard.isCurrent(ticket))
+                return { status: 'cancelled', attempts: 0 };
+            return this.attempt(player, source, options);
+        }).finally(() => pending.delete(player));
         pending.set(player, operation);
         return operation;
     }

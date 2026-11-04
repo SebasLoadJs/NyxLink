@@ -1,4 +1,4 @@
-import { Manager, Player, Node, Track, Queue, Rest, Filters, SearchResult, NodeManager, PlayerManager, WebSocket, Connectors, VoiceReceiver, YouTubeLiveChat, SpotifySource, DeezerSource, Logger, NodeSelector, NodeHealthMonitor, NodeFailover, BackendDetector, HttpError, FeatureUnavailableError, NoEligibleNodeError, type NodeRequirements, type NodeSelectionOptions, type NodeRejection, type FailoverResult, type StorageAdapter, type TrackSnapshot, TrackCodec, TrackResolver, TrackResolutionError, VoicePacketHandler, Memory, Local, version } from '../../dist';
+import { Manager, Player, Node, Track, Queue, Rest, Filters, SearchResult, NodeManager, PlayerManager, WebSocket, Connectors, VoiceReceiver, YouTubeLiveChat, SpotifySource, DeezerSource, Logger, NodeSelector, NodeHealthMonitor, NodeFailover, BackendDetector, HttpError, FeatureUnavailableError, NoEligibleNodeError, NodeCircuitBreaker, CircuitOpenError, type CircuitState, type CircuitBreakerOptions, type NodeRequirements, type NodeSelectionOptions, type NodeRejection, type FailoverResult, type StorageAdapter, type TrackSnapshot, TrackCodec, TrackResolver, TrackResolutionError, VoicePacketHandler, Memory, Local, version } from '../../dist';
 
 declare const manager: Manager;
 declare const player: Player;
@@ -62,3 +62,17 @@ constrainedPlayer.nodeSelection.requiredCapabilities?.push('mixer');
 // @ts-expect-error Backend constraints accept only supported backend identities.
 NodeSelector.select([node], {}, { backend: 'native' });
 void [eligible, retainedRequirements, matches, selectionCode];
+
+const circuitOptions: CircuitBreakerOptions = { failureThreshold: 3, windowMs: 30000, cooldownMs: 10000 };
+const circuit = new NodeCircuitBreaker(circuitOptions);
+const circuitState: CircuitState = node.circuit.state;
+const guarded: Promise<number> = circuit.run(async () => 42);
+const retryAt: number = new CircuitOpenError(1000).retryAt;
+const probe: Promise<boolean> = node.probe();
+declare const nodeManager: NodeManager;
+const draining: boolean = nodeManager.setDraining(node.identifier, true);
+const drained: Promise<boolean> = nodeManager.drain(node.identifier);
+const protectedManager = new Manager({ nodes: [configuredNode], options: { node: { circuitBreaker: circuitOptions } } });
+// @ts-expect-error A node owns its circuit for the lifetime of the connection object.
+node.circuit = circuit;
+void [circuitState, guarded, retryAt, probe, draining, drained, protectedManager];

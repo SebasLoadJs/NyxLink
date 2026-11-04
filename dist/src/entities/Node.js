@@ -9,6 +9,7 @@ const AutoPlayManager_1 = require("../autoplay/AutoPlayManager");
 const PlaybackGuard_1 = require("../players/PlaybackGuard");
 const PlaybackAttempt_1 = require("../players/PlaybackAttempt");
 const TrackCodec_1 = require("../tracks/TrackCodec");
+const NodeCircuitBreaker_1 = require("../nodes/NodeCircuitBreaker");
 const Util_1 = require("../Util");
 const types_1 = require("../typings/types");
 const YouTubeLiveChat_1 = require("./YouTubeLiveChat");
@@ -59,7 +60,10 @@ class Node {
     lastStats;
     state = types_1.NodeState.DISCONNECTED;
     capabilities = new Set();
+    circuit;
+    draining = false;
     constructor(manager, config) {
+        this.circuit = new NodeCircuitBreaker_1.NodeCircuitBreaker(manager.options.node?.circuitBreaker);
         this.manager = manager;
         this.uuid = (0, Util_1.generateUUID)(config.host, config.port);
         this.host = config.host;
@@ -188,6 +192,21 @@ class Node {
     }
     calculateReconnectDelay() {
         return Math.min(Math.max(0, this.retryDelay) * Math.pow(2, this.reconnectAttempts), 300000);
+    }
+    async probe() {
+        if (this.destroyed || !this.connected)
+            return false;
+        try {
+            const stats = await this.rest.getStats();
+            if (!stats || this.destroyed || !this.connected)
+                return false;
+            this.stats = stats;
+            this.statsReceivedAt = Date.now();
+            return this.circuit.state === 'closed';
+        }
+        catch {
+            return false;
+        }
     }
     reconnect() {
         if (this.destroyed || this.reconnectTimeout || !Number.isInteger(this.retryAmount) || this.reconnectAttempts >= this.retryAmount)
