@@ -1099,7 +1099,8 @@ export class Node {
         }
     }
 
-    if (reason === "stopped") {
+    // Lavalink marks both reasons as terminal: neither may start the next track.
+    if (reason === "stopped" || reason === "cleanup") {
       this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> Track was ${reason}, skipping queue logic for player ${player.guildId}.`);
       return;
     }
@@ -1147,6 +1148,11 @@ export class Node {
         this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> AutoPlay skipped for player ${player.guildId} due to missing previous track data.`);
     }
 
+    // A user may have queued a track while the recommendation lookup was pending.
+    if (player.queue.size > 0) {
+      await player.play();
+      return;
+    }
     await this.handleQueueEnd(player, trackForEvent);
   }
 

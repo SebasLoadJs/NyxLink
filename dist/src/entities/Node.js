@@ -788,7 +788,7 @@ class Node {
                 this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> Track failed to load after ${maxRetries} attempts for player ${player.guildId}.`);
             }
         }
-        if (reason === "stopped") {
+        if (reason === "stopped" || reason === "cleanup") {
             this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> Track was ${reason}, skipping queue logic for player ${player.guildId}.`);
             return;
         }
@@ -832,6 +832,10 @@ class Node {
         }
         else if (player.autoPlay) {
             this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> AutoPlay skipped for player ${player.guildId} due to missing previous track data.`);
+        }
+        if (player.queue.size > 0) {
+            await player.play();
+            return;
         }
         await this.handleQueueEnd(player, trackForEvent);
     }
