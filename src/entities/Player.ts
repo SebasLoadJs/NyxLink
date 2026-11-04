@@ -1,6 +1,7 @@
 import { PlayerCommandQueue } from "../players/PlayerCommandQueue";
 import { playbackGuard } from "../players/PlaybackGuard";
 import { playbackAttempt } from "../players/PlaybackAttempt";
+import { NodeSelector, type NodeRequirements } from '../nodes/NodeSelector';
 import { Node } from "./Node";
 import { Queue } from "./Queue";
 import { Manager } from "../core/Manager";
@@ -17,6 +18,7 @@ import { VoiceReceiver, VoiceReceiverOptions } from "./VoiceReceiver";
 export class Player {
     public readonly manager: Manager;
     public node: Node;
+    public readonly nodeSelection: NodeRequirements;
     public readonly guildId: string;
     public readonly queue: Queue;
     public readonly filters: Filters;
@@ -64,6 +66,14 @@ export class Player {
     private lastResumeAttempt: number = 0;
 
     constructor(manager: Manager, node: Node, config: IPlayerConfig) {
+        NodeSelector.validate(config.nodeSelection);
+        const requirements = config.nodeSelection ?? {};
+        this.nodeSelection = Object.freeze({
+            ...(requirements.backend !== undefined ? { backend: requirements.backend } : {}),
+            ...(requirements.requiredCapabilities !== undefined ? { requiredCapabilities: Object.freeze([...requirements.requiredCapabilities]) } : {}),
+            ...(requirements.region !== undefined ? { region: requirements.region } : {}),
+            ...(requirements.regionPolicy !== undefined ? { regionPolicy: requirements.regionPolicy } : {}),
+        });
         this.manager = manager;
         this.node = node;
         this.guildId = config.guildId;
@@ -1136,7 +1146,7 @@ export class Player {
 
     public async transferNode(node: Node | string): Promise<boolean> {
         const targetNode = typeof node === "string" ? this.manager.nodes.nodes.get(node) : node;
-        if (this.destroyed || !targetNode || !targetNode.connected || targetNode.identifier === this.node.identifier) return false;
+        if (this.destroyed || !targetNode || !NodeSelector.matches(targetNode, this.nodeSelection) || targetNode.identifier === this.node.identifier) return false;
 
         const oldNode = this.node;
         const guard = playbackGuard(this);
@@ -1151,15 +1161,15 @@ export class Player {
 
         try {
             const moved = await this.commands.enqueue(async () => {
-                if (this.destroyed || !guard.isCurrent(ticket) || !targetNode.connected) return false;
+                if (this.destroyed || !guard.isCurrent(ticket) || !NodeSelector.matches(targetNode, this.nodeSelection)) return false;
                 const resolved = this.current ? await TrackResolver.resolve(this.current, targetNode, oldNode) : null;
-                if (this.destroyed || !guard.isCurrent(ticket) || !targetNode.connected) return false;
+                if (this.destroyed || !guard.isCurrent(ticket) || !NodeSelector.matches(targetNode, this.nodeSelection)) return false;
                 try {
                     await oldNode.rest.destroyPlayer(this.guildId);
                 } catch (error) {
                     this.manager.emit("debug", `NyxLink > Player#transferNode >> Old node cleanup failed: ${error.message}`);
                 }
-                if (this.destroyed || !guard.isCurrent(ticket)) return false;
+                if (this.destroyed || !guard.isCurrent(ticket) || !NodeSelector.matches(targetNode, this.nodeSelection)) return false;
                 for (const track of [...this.queue.tracks, ...this.previous]) {
                     track.backend ??= oldNode.backend?.kind;
                 }
@@ -1184,6 +1194,8 @@ export class Player {
         } catch (error) {
             report(guard.isCurrent(ticket) ? 'failed' : 'cancelled', (error as Error).message);
             return false;
+        } finally {
+            playbackAttempt(this).retain(ticket);
         }
     }
 

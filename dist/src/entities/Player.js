@@ -4,6 +4,7 @@ exports.Player = void 0;
 const PlayerCommandQueue_1 = require("../players/PlayerCommandQueue");
 const PlaybackGuard_1 = require("../players/PlaybackGuard");
 const PlaybackAttempt_1 = require("../players/PlaybackAttempt");
+const NodeSelector_1 = require("../nodes/NodeSelector");
 const Util_1 = require("../Util");
 const Voice_1 = require("./Voice");
 const Track_1 = require("./Track");
@@ -13,6 +14,7 @@ const VoiceReceiver_1 = require("./VoiceReceiver");
 class Player {
     manager;
     node;
+    nodeSelection;
     guildId;
     queue;
     filters;
@@ -54,6 +56,14 @@ class Player {
     isResumeInProgress = false;
     lastResumeAttempt = 0;
     constructor(manager, node, config) {
+        NodeSelector_1.NodeSelector.validate(config.nodeSelection);
+        const requirements = config.nodeSelection ?? {};
+        this.nodeSelection = Object.freeze({
+            ...(requirements.backend !== undefined ? { backend: requirements.backend } : {}),
+            ...(requirements.requiredCapabilities !== undefined ? { requiredCapabilities: Object.freeze([...requirements.requiredCapabilities]) } : {}),
+            ...(requirements.region !== undefined ? { region: requirements.region } : {}),
+            ...(requirements.regionPolicy !== undefined ? { regionPolicy: requirements.regionPolicy } : {}),
+        });
         this.manager = manager;
         this.node = node;
         this.guildId = config.guildId;
@@ -1008,7 +1018,7 @@ class Player {
     }
     async transferNode(node) {
         const targetNode = typeof node === "string" ? this.manager.nodes.nodes.get(node) : node;
-        if (this.destroyed || !targetNode || !targetNode.connected || targetNode.identifier === this.node.identifier)
+        if (this.destroyed || !targetNode || !NodeSelector_1.NodeSelector.matches(targetNode, this.nodeSelection) || targetNode.identifier === this.node.identifier)
             return false;
         const oldNode = this.node;
         const guard = (0, PlaybackGuard_1.playbackGuard)(this);
@@ -1022,10 +1032,10 @@ class Player {
         report('in-progress');
         try {
             const moved = await this.commands.enqueue(async () => {
-                if (this.destroyed || !guard.isCurrent(ticket) || !targetNode.connected)
+                if (this.destroyed || !guard.isCurrent(ticket) || !NodeSelector_1.NodeSelector.matches(targetNode, this.nodeSelection))
                     return false;
                 const resolved = this.current ? await TrackResolver_1.TrackResolver.resolve(this.current, targetNode, oldNode) : null;
-                if (this.destroyed || !guard.isCurrent(ticket) || !targetNode.connected)
+                if (this.destroyed || !guard.isCurrent(ticket) || !NodeSelector_1.NodeSelector.matches(targetNode, this.nodeSelection))
                     return false;
                 try {
                     await oldNode.rest.destroyPlayer(this.guildId);
@@ -1033,7 +1043,7 @@ class Player {
                 catch (error) {
                     this.manager.emit("debug", `NyxLink > Player#transferNode >> Old node cleanup failed: ${error.message}`);
                 }
-                if (this.destroyed || !guard.isCurrent(ticket))
+                if (this.destroyed || !guard.isCurrent(ticket) || !NodeSelector_1.NodeSelector.matches(targetNode, this.nodeSelection))
                     return false;
                 for (const track of [...this.queue.tracks, ...this.previous]) {
                     track.backend ??= oldNode.backend?.kind;
@@ -1059,6 +1069,9 @@ class Player {
         catch (error) {
             report(guard.isCurrent(ticket) ? 'failed' : 'cancelled', error.message);
             return false;
+        }
+        finally {
+            (0, PlaybackAttempt_1.playbackAttempt)(this).retain(ticket);
         }
     }
     setVoiceChannelId(voiceChannelId) {

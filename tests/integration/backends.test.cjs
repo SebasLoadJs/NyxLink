@@ -9,6 +9,7 @@ const lab = JSON.parse(process.env.NYXLINK_BACKENDS_JSON || 'null');
 if (!lab) throw new Error('Run pnpm run test:backends to create the isolated server lab.');
 const evidence = [];
 const trackResolution = [];
+const nodeSelection = [];
 
 for (const backend of lab.backends) {
   test(`${backend.kind}: real v4 REST, WebSocket, auth and reconnection without Discord`, async t => {
@@ -129,6 +130,14 @@ test('tracks resolve in both directions using each destination server', async t 
   });
   await manager.init('523456789012345678'); await ready;
   const nodes = [...manager.nodes.nodes.values()];
+  await t.test('mixed pool selects only a confirmed backend with every required source capability', () => {
+    for (const node of nodes) {
+      const selected = manager.nodes.findNode({ backend: node.backend.kind, requiredCapabilities: ['source:http'] });
+      assert.equal(selected, node);
+      nodeSelection.push({ backend: node.backend.kind, requiredCapabilities: ['source:http'], passed: true });
+    }
+    assert.equal(manager.nodes.findNode({ requiredCapabilities: ['nyxlink-test-missing-capability'] }), undefined);
+  });
   for (const source of nodes) {
     const target = nodes.find(node => node !== source);
     await t.test(`${source.backend.kind} -> ${target.backend.kind}`, async () => {
@@ -150,7 +159,7 @@ test('tracks resolve in both directions using each destination server', async t 
 });
 
 test.after(async () => {
-  const report = { timestamp: new Date().toISOString(), scope: 'local backend protocol; no Discord bot or voice connection', passed: evidence.length === lab.backends.length && evidence.every(result => result.passed) && trackResolution.length === 2, results: evidence, trackResolution };
+  const report = { timestamp: new Date().toISOString(), scope: 'local backend protocol; no Discord bot or voice connection', passed: evidence.length === lab.backends.length && evidence.every(result => result.passed) && trackResolution.length === 2 && nodeSelection.length === lab.backends.length, results: evidence, trackResolution, nodeSelection };
   const target = path.resolve(lab.directory, '../latest-report.json');
   await fs.writeFile(target, JSON.stringify(report, null, 2) + '\n');
   console.log(`Protocol evidence: ${path.relative(process.cwd(), target)}`);

@@ -254,6 +254,29 @@ Añade varios servidores al array `nodes`, cada uno con un `identifier` distinto
 
 `failover.maxAttempts` limita los destinos que se intentan. También puedes trasladar un reproductor explícitamente con `await player.transferNode(identifier)` y comprobar su resultado.
 
+Puedes exigir un backend y capacidades al crear el reproductor:
+
+```js
+const constrainedPlayer = manager.players.create({
+  guildId,
+  voiceChannelId,
+  nodeSelection: {
+    backend: 'nodelink',
+    requiredCapabilities: ['source:http'],
+    region: 'eu',
+    regionPolicy: 'prefer',
+  },
+});
+```
+
+Las regiones son etiquetas que defines con `regions: ['eu']` en cada nodo. `prefer` favorece esa región entre los candidatos de la misma clase de salud; permite otra región si es necesario. `require` la convierte en una restricción obligatoria. La comparación de etiquetas es exacta.
+
+Las solicitudes con backend, capacidades o región requieren nodos `READY`. El backend, las capacidades y la región obligatoria nunca se relajan para encontrar un destino. Solo una capacidad marcada como `available` satisface el requisito: `unknown` y `unavailable` se rechazan. Las fuentes y filtros se obtienen de [`/v4/info`](https://lavalink.dev/api/rest#get-lavalink-info); ser NodeLink no confirma por sí solo los endpoints opcionales.
+
+Los requisitos se copian y se conservan durante failover y `transferNode()`. Un traslado incompatible devuelve `false` antes de modificar la reproducción. Volver a crear un reproductor existente lo devuelve con sus requisitos originales.
+
+`manager.nodes.findNode()` acepta las mismas restricciones, además de `exclude` y `allowUnhealthyFallback`; devuelve `undefined` si no hay candidato. Al crear un reproductor, ese caso lanza `NoEligibleNodeError` con código `NO_ELIGIBLE_NODE` y `rejections` por identificador, motivo y capacidades faltantes. También puedes consultar `NodeSelector.rejections(nodes, options, selection)` para obtener el diagnóstico.
+
 </details>
 
 <details>

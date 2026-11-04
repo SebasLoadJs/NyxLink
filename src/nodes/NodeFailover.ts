@@ -32,7 +32,7 @@ export class NodeFailover {
         let attempts = 0;
         while (attempts < maxAttempts) {
             if (player.destroyed || source.destroyed || !guard.isCurrent(ticket)) return { status: 'cancelled', attempts };
-            const target = player.manager.nodes.findNode({ exclude: [...excluded], allowUnhealthyFallback: false });
+            const target = player.manager.nodes.findNode({ ...player.nodeSelection, exclude: [...excluded], allowUnhealthyFallback: false });
             if (!target) break;
             excluded.add(target.identifier);
             attempts++;

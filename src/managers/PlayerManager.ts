@@ -3,6 +3,8 @@ import { Node } from "../entities/Node";
 import { Player } from "../entities/Player";
 import { Structure, validate, delay } from "../Util";
 import { IPlayerConfig } from "../typings/Interfaces";
+import { NodeSelector } from '../nodes/NodeSelector';
+import { NoEligibleNodeError } from '../errors/NoEligibleNodeError';
 
 export class PlayerManager {
     public readonly manager: Manager;
@@ -32,9 +34,9 @@ export class PlayerManager {
             return this.players.get(options.guildId)!;
         }
 
-        const node = this.manager.nodes.findNode();
+        const node = this.manager.nodes.findNode(options.nodeSelection);
         if (!node) {
-            throw new Error("Moonlink.js > PlayerManager#create: No available nodes.");
+            throw new NoEligibleNodeError(NodeSelector.rejections(this.manager.nodes.nodes.values(), this.manager.options.node, options.nodeSelection));
         }
 
         const player = new (Structure.get("Player"))(this.manager, node, options);
@@ -48,6 +50,7 @@ export class PlayerManager {
         if (options.autoPlay !== undefined) player.updateData("autoPlay", options.autoPlay);
         if (options.autoLeave !== undefined) player.updateData("autoLeave", options.autoLeave);
         if (options.loop !== undefined) player.updateData("loop", options.loop);
+        if (options.nodeSelection !== undefined) player.updateData('nodeSelection', player.nodeSelection);
 
         this.manager.emit("playerCreate", player);
         this.manager.emit("debug", `Moonlink.js > PlayerManager >> Player created. Guild: ${options.guildId}, Options: ${JSON.stringify(options)}`);

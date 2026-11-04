@@ -1,4 +1,4 @@
-import { Manager, Player, Node, Track, Queue, Rest, Filters, SearchResult, NodeManager, PlayerManager, WebSocket, Connectors, VoiceReceiver, YouTubeLiveChat, SpotifySource, DeezerSource, Logger, NodeSelector, NodeHealthMonitor, NodeFailover, BackendDetector, HttpError, FeatureUnavailableError, type FailoverResult, type StorageAdapter, type TrackSnapshot, TrackCodec, TrackResolver, TrackResolutionError, VoicePacketHandler, Memory, Local, version } from '../../dist';
+import { Manager, Player, Node, Track, Queue, Rest, Filters, SearchResult, NodeManager, PlayerManager, WebSocket, Connectors, VoiceReceiver, YouTubeLiveChat, SpotifySource, DeezerSource, Logger, NodeSelector, NodeHealthMonitor, NodeFailover, BackendDetector, HttpError, FeatureUnavailableError, NoEligibleNodeError, type NodeRequirements, type NodeSelectionOptions, type NodeRejection, type FailoverResult, type StorageAdapter, type TrackSnapshot, TrackCodec, TrackResolver, TrackResolutionError, VoicePacketHandler, Memory, Local, version } from '../../dist';
 
 declare const manager: Manager;
 declare const player: Player;
@@ -45,3 +45,20 @@ const searchConfig = new Manager({ nodes: [configuredNode], options: { search: {
 const cancellable = manager.search({ query: 'local fixture', signal: AbortSignal.timeout(1000) });
 const streaming = node.rest.loadStream({ encodedTrack: track.encoded, format: 'wav' }, { signal: AbortSignal.timeout(1000), timeoutMs: 1000 });
 void [searchConfig, cancellable, streaming];
+
+const requirements: NodeRequirements = { backend: 'nodelink', requiredCapabilities: ['source:http'] as const, region: 'eu', regionPolicy: 'require' };
+const selection: NodeSelectionOptions = { ...requirements, exclude: ['maintenance'] as const, allowUnhealthyFallback: false };
+const eligible = manager.nodes.findNode(selection);
+const constrainedPlayer: Player = manager.players.create({ guildId: '123456789012345678', voiceChannelId: '223456789012345678', nodeSelection: requirements });
+const retainedRequirements: NodeRequirements = constrainedPlayer.nodeSelection;
+const rejections: NodeRejection[] = NodeSelector.rejections([node], {}, selection);
+const matches: boolean = NodeSelector.matches(node, requirements);
+const selectionError: NoEligibleNodeError = new NoEligibleNodeError(rejections);
+const selectionCode: 'NO_ELIGIBLE_NODE' = selectionError.code;
+// @ts-expect-error Captured requirements cannot be replaced after player creation.
+constrainedPlayer.nodeSelection = {};
+// @ts-expect-error Captured capabilities cannot be mutated in place.
+constrainedPlayer.nodeSelection.requiredCapabilities?.push('mixer');
+// @ts-expect-error Backend constraints accept only supported backend identities.
+NodeSelector.select([node], {}, { backend: 'native' });
+void [eligible, retainedRequirements, matches, selectionCode];

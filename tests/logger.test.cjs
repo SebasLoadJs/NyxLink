@@ -58,12 +58,12 @@ test('manager options can opt into logging without printing an automatic banner'
 
 test('failover panel follows the confirmed failure result and never prints Recovered', () => {
   const output = run(`
-    const {Manager,Node,Player,Logger}=require('./dist');
+    const {Manager,Node,Player,Logger,NodeState}=require('./dist');
     const m=new Manager({nodes:[{identifier:'old',host:'127.0.0.1',port:2333,password:'test',secure:false}]});
     m.database={set:async()=>{}};
     m.nodes.add({identifier:'old',host:'127.0.0.1',port:2333,password:'test',secure:false});
     const old=m.nodes.nodes.get('old'); old.rest.destroyPlayer=async()=>{};
-    const target=new Node(m,{identifier:'target',host:'127.0.0.2',port:2333,password:'test',secure:false}); target.connected=true;
+    const target=new Node(m,{identifier:'target',host:'127.0.0.2',port:2333,password:'test',secure:false}); target.connected=true; target.state=NodeState.READY;
     const p=new Player(m,old,{guildId:'123456789012345678',voiceChannelId:'223456789012345678'}); p.stopHealthCheck(); p.restart=async()=>false;
     new Logger({level:'info',color:false}).attachManager(m);
     p.transferNode(target).then(result=>{if(result)throw new Error('false success');});
