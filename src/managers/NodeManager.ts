@@ -10,6 +10,7 @@ export class NodeManager {
     public readonly manager: Manager;
     public readonly nodes: Map<string, any> = new Map();
     private readonly nodeConfigs: IManagerNodeConfig[];
+    private readonly drains = new WeakMap<object, Promise<boolean>>();
 
     constructor(manager: Manager, nodeConfigs: IManagerNodeConfig[]) {
         this.manager = manager;
@@ -80,6 +81,42 @@ export class NodeManager {
 
     public findNode(options: NodeSelectionOptions = {}): any | undefined {
         return NodeSelector.select(this.nodes.values(), this.manager.options.node, options);
+    }
+
+    public setDraining(identifier: string, draining = true): boolean {
+        const node = this.nodes.get(identifier);
+        if (typeof draining !== 'boolean') throw new TypeError('draining must be a boolean');
+        if (this.manager.destroyed || !node || node.destroyed || !draining && this.drains.has(node)) return false;
+        node.draining = draining;
+        return true;
+    }
+
+    /** Maintenance preserves nodes and players even if some migrations fail. */
+    public drain(identifier: string): Promise<boolean> {
+        const node = this.nodes.get(identifier);
+        if (this.manager.destroyed || !node || node.destroyed) return Promise.resolve(false);
+        const existing = this.drains.get(node);
+        if (existing) return existing;
+        this.setDraining(identifier);
+        const operation = Promise.resolve().then(() => this.drainPlayers(node)).finally(() => this.drains.delete(node));
+        this.drains.set(node, operation);
+        return operation;
+    }
+
+    private async drainPlayers(node: any): Promise<boolean> {
+        const players = this.manager.players.filter(player => player.node === node);
+        let drained = true;
+        // Serial evacuation bounds maintenance traffic; the source keeps serving its remaining players.
+        for (const player of players) {
+            if (this.manager.destroyed || node.destroyed) return false;
+            if (player.destroyed || player.node !== node) continue;
+            try {
+                const result = await NodeFailover.move(player, node);
+                if (result.status !== 'recovered' && !player.destroyed && player.node === node) drained = false;
+                else if (result.status === 'failed') drained = false;
+            } catch { drained = false; }
+        }
+        return drained && !node.destroyed && !this.manager.destroyed;
     }
 
     public async eject(identifier: string): Promise<boolean> {

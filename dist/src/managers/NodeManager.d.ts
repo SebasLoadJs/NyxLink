@@ -5,6 +5,7 @@ export declare class NodeManager {
     readonly manager: Manager;
     readonly nodes: Map<string, any>;
     private readonly nodeConfigs;
+    private readonly drains;
     constructor(manager: Manager, nodeConfigs: IManagerNodeConfig[]);
     init(): void;
     add(config: IManagerNodeConfig): void;
@@ -16,6 +17,9 @@ export declare class NodeManager {
     get leastUsedNode(): any | undefined;
     get stats(): Record<string, any>;
     findNode(options?: NodeSelectionOptions): any | undefined;
+    setDraining(identifier: string, draining?: boolean): boolean;
+    drain(identifier: string): Promise<boolean>;
+    private drainPlayers;
     eject(identifier: string): Promise<boolean>;
     private _validateConfig;
 }

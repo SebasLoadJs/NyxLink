@@ -11,7 +11,7 @@ export type NodeSelectionOptions = NodeRequirements & {
     exclude?: readonly string[];
     allowUnhealthyFallback?: boolean;
 };
-export type NodeRejectionReason = 'unavailable' | 'excluded' | 'not-ready' | 'backend' | 'capability' | 'region' | 'unhealthy';
+export type NodeRejectionReason = 'unavailable' | 'excluded' | 'not-ready' | 'backend' | 'capability' | 'region' | 'unhealthy' | 'draining' | 'circuit-open';
 export type NodeRejection = {
     identifier: string;
     reasons: NodeRejectionReason[];

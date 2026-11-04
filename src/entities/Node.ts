@@ -7,6 +7,7 @@ import { AutoPlayManager } from "../autoplay/AutoPlayManager";
 import { playbackGuard } from "../players/PlaybackGuard";
 import { playbackAttempt } from "../players/PlaybackAttempt";
 import { TrackCodec } from "../tracks/TrackCodec";
+import { NodeCircuitBreaker } from '../nodes/NodeCircuitBreaker';
 import { IManagerNodeConfig, INodeStats, ITrack, ILyricsData, IFilters } from "../typings/Interfaces";
 import type { Manager } from "../core/Manager";
 import { Rest } from "./Rest";
@@ -233,8 +234,11 @@ export class Node {
   private lastStats?: { players: number; playingPlayers: number };
   public state: NodeState = NodeState.DISCONNECTED;
   public capabilities: Set<string> = new Set();
+  public readonly circuit: NodeCircuitBreaker;
+  public draining = false;
 
   constructor(manager: Manager, config: IManagerNodeConfig) {
+    this.circuit = new NodeCircuitBreaker(manager.options.node?.circuitBreaker);
     this.manager = manager;
     this.uuid = generateUUID(config.host, config.port);
     this.host = config.host;
@@ -419,6 +423,18 @@ export class Node {
 
   private calculateReconnectDelay(): number {
     return Math.min(Math.max(0, this.retryDelay) * Math.pow(2, this.reconnectAttempts), 300000);
+  }
+
+  /** A single protected stats request may close a circuit after its cooldown. */
+  public async probe(): Promise<boolean> {
+    if (this.destroyed || !this.connected) return false;
+    try {
+      const stats = await this.rest.getStats();
+      if (!stats || this.destroyed || !this.connected) return false;
+      this.stats = stats;
+      this.statsReceivedAt = Date.now();
+      return this.circuit.state === 'closed';
+    } catch { return false; }
   }
 
   public reconnect(): void {

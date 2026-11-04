@@ -2,7 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { Manager, Track, TrackResolver } = require('../../dist');
+const { Manager, Track, TrackResolver, HttpError } = require('../../dist');
+const { setTimeout: delay } = require('node:timers/promises');
 const { event } = require('../helpers/v4-server.cjs');
 
 const lab = JSON.parse(process.env.NYXLINK_BACKENDS_JSON || 'null');
@@ -18,7 +19,7 @@ for (const backend of lab.backends) {
       // processing on a cold JVM. Exercise configured 1 s recovery within
       // the 30 s resume window; transport lifecycle races stay in deterministic tests.
       nodes: [{ ...backend, retryAmount: 2, retryDelay: 1000 }], send() {},
-      options: { database: { type: 'memory' }, resume: true, resumeTimeout: 30000 },
+      options: { database: { type: 'memory' }, resume: true, resumeTimeout: 30000, node: { circuitBreaker: { failureThreshold: 1, cooldownMs: 5 } } },
     });
     const errors = [];
     manager.on('nodeError', (_node, error) => errors.push(error));
@@ -50,6 +51,16 @@ for (const backend of lab.backends) {
       const results = await manager.search({ query: lab.mediaUrl, node: node.identifier });
       assert.equal(results.tracks.length, 1);
       checks.push('HTTP load/decode/search');
+    });
+    await t.test('an injected client circuit failure recovers through confirmed server statistics', async () => {
+      await assert.rejects(node.circuit.run(async () => { throw new HttpError(503); }), { statusCode: 503 });
+      assert.equal(manager.nodes.findNode(), undefined);
+      assert.equal(node.circuit.state, 'open');
+      await delay(10);
+      assert.equal(await node.probe(), true);
+      assert.equal(node.circuit.state, 'closed');
+      assert.equal(manager.nodes.findNode(), node);
+      checks.push('client circuit recovery with real stats (injected failure)');
     });
     const guild = '223456789012345678';
     await t.test('create/update/delete a player without sending voice credentials or starting playback', async () => {
@@ -112,7 +123,7 @@ for (const backend of lab.backends) {
       checks.push('terminal auth failure');
     });
     assert.equal(errors.length, 0, errors.map(error => error.message).join('; '));
-    evidence.push({ backend: backend.kind, version: backend.version, image: backend.image, checks, discordAudio: 'not-tested', passed: checks.length === 7 && errors.length === 0 });
+    evidence.push({ backend: backend.kind, version: backend.version, image: backend.image, checks, discordAudio: 'not-tested', passed: checks.length === 8 && errors.length === 0 });
   });
 }
 

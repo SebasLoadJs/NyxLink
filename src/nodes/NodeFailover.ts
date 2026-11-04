@@ -11,7 +11,13 @@ export class NodeFailover {
     public static move(player: Player, source: Node, options: FailoverOptions = player.manager.options.node?.failover ?? {}): Promise<FailoverResult> {
         const existing = pending.get(player);
         if (existing) return existing;
-        const operation = this.attempt(player, source, options).finally(() => pending.delete(player));
+        const guard = playbackGuard(player);
+        const ticket = guard.ticket;
+        // Publish the shared recovery before transfer callbacks can request it again.
+        const operation = Promise.resolve().then(() => {
+            if (player.destroyed || source.destroyed || !guard.isCurrent(ticket)) return { status: 'cancelled' as const, attempts: 0 };
+            return this.attempt(player, source, options);
+        }).finally(() => pending.delete(player));
         pending.set(player, operation);
         return operation;
     }

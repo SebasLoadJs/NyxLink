@@ -419,12 +419,12 @@ export async function makeRequest<T = any>(
               });
             });
 
-            req.on("error", (err) =>
-              reject(new Error(`Request error: ${err.message}`))
+            req.on("error", (err: NodeJS.ErrnoException) =>
+              reject(Object.assign(new Error(`Request error: ${err.message}`, { cause: err }), { code: err.code }))
             );
             req.on("timeout", () => {
               req.destroy();
-              reject(new Error("Request timed out"));
+              reject(Object.assign(new Error("Request timed out"), { code: 'ETIMEDOUT' }));
             });
 
             req.setTimeout(timeout);

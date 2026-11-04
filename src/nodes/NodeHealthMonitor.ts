@@ -3,7 +3,7 @@ import type { INodeOptions } from '../typings/Interfaces';
 import { NodeState } from '../typings/types';
 
 export type NodeHealth = {
-    state: 'healthy' | 'unhealthy' | 'unknown' | 'unavailable';
+    state: 'healthy' | 'unhealthy' | 'unknown' | 'unavailable' | 'draining';
     reason: string;
     cpuPercent?: number;
     memoryPercent?: number;
@@ -19,6 +19,8 @@ export class NodeHealthMonitor {
 
     public static inspect(node: Node, options: INodeOptions = {}, now = Date.now()): NodeHealth {
         if (!this.available(node)) return { state: 'unavailable', reason: 'Node is not connected' };
+        if (node.draining) return { state: 'draining', reason: 'Node is draining' };
+        if (node.circuit && node.circuit.state !== 'closed') return { state: 'unhealthy', reason: 'Node circuit is open' };
         const stats = node.stats;
         if (!stats) return { state: 'unknown', reason: 'No statistics received' };
         if (node.statsReceivedAt && now - node.statsReceivedAt > (options.maxStatsAgeMs ?? 120000)) {

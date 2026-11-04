@@ -23,6 +23,10 @@ class NodeSelector {
         const reasons = [];
         if (!NodeHealthMonitor_1.NodeHealthMonitor.available(node))
             reasons.push('unavailable');
+        if (node.draining)
+            reasons.push('draining');
+        if (node.circuit && node.circuit.state !== 'closed')
+            reasons.push('circuit-open');
         if (selection.exclude?.includes(node.identifier))
             reasons.push('excluded');
         const constrained = selection.backend !== undefined || !!selection.requiredCapabilities?.length || selection.region !== undefined;

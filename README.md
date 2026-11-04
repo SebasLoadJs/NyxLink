@@ -277,6 +277,20 @@ Los requisitos se copian y se conservan durante failover y `transferNode()`. Un 
 
 `manager.nodes.findNode()` acepta las mismas restricciones, además de `exclude` y `allowUnhealthyFallback`; devuelve `undefined` si no hay candidato. Al crear un reproductor, ese caso lanza `NoEligibleNodeError` con código `NO_ELIGIBLE_NODE` y `rejections` por identificador, motivo y capacidades faltantes. También puedes consultar `NodeSelector.rejections(nodes, options, selection)` para obtener el diagnóstico.
 
+Para apartar temporalmente un nodo con fallos repetidos, configura `options.node.circuitBreaker`:
+
+```js
+circuitBreaker: { failureThreshold: 3, windowMs: 30000, cooldownMs: 30000 }
+```
+
+Está desactivado por defecto. Al activarlo, protege las actualizaciones de reproductor, la carga de pistas, las estadísticas y las solicitudes de extensiones. Los fallos de red, HTTP 429 y errores de servidor cuentan para abrir el circuito; un error de pista, un HTTP 4xx o una extensión no disponible no apartan el nodo. Las cargas protegidas y los probes de estadísticas hacen un solo intento con timeout de 10 segundos. La metadata, la limpieza y las operaciones de sesión siguen disponibles para recuperación.
+
+Mientras `node.circuit.state` sea `open` o `half-open`, el selector lo excluye. Las solicitudes protegidas rechazadas fallan con `CircuitOpenError`, código `CIRCUIT_OPEN` y `retryAt` en milisegundos Unix. Después del cooldown, una sola solicitud puede probar la recuperación; las demás se rechazan hasta que termine. `await node.probe()` solicita estadísticas válidas y devuelve si se confirma la recuperación del circuito. No inicia reproducción ni instala polling automático.
+
+Para mantenimiento, `manager.nodes.setDraining(identifier)` impide nuevas asignaciones y conserva los reproductores existentes. `await manager.nodes.drain(identifier)` también intenta trasladarlos, uno a uno, y devuelve `true` si se han evacuado. Los drenados duplicados comparten la operación. Si falla algún traslado, devuelve `false`, conserva los snapshots y mantiene el nodo marcado para mantenimiento; no destruye reproductores por esa causa. Revisa los resultados antes de apagar el servidor.
+
+`manager.nodes.setDraining(identifier, false)` vuelve a habilitar la selección cuando ya no hay un drenado en curso. El drenado conserva el nodo en el manager; `eject()` mantiene su comportamiento de retirada. Un probe exitoso no elimina la marca de mantenimiento.
+
 </details>
 
 <details>

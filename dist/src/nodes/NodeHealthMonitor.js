@@ -11,6 +11,10 @@ class NodeHealthMonitor {
     static inspect(node, options = {}, now = Date.now()) {
         if (!this.available(node))
             return { state: 'unavailable', reason: 'Node is not connected' };
+        if (node.draining)
+            return { state: 'draining', reason: 'Node is draining' };
+        if (node.circuit && node.circuit.state !== 'closed')
+            return { state: 'unhealthy', reason: 'Node circuit is open' };
         const stats = node.stats;
         if (!stats)
             return { state: 'unknown', reason: 'No statistics received' };
