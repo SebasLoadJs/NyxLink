@@ -14,6 +14,13 @@ class PlayerManager {
         return [...this.players.values()];
     }
     create(options) {
+        return this.createOnNode(options, false);
+    }
+    restore(options) {
+        (0, Util_1.validate)(options.node, value => typeof value === 'string' && value.length > 0, 'Session restoration requires a node identifier');
+        return this.createOnNode(options, true);
+    }
+    createOnNode(options, restoring) {
         if (this.manager.destroyed)
             throw new Error('Manager is shut down');
         (0, Util_1.validate)(options.guildId, (v) => typeof v === "string" && /^\d{17,20}$/.test(v), "IPlayerConfig#guildId must be a valid Discord Snowflake string.");
@@ -28,14 +35,23 @@ class PlayerManager {
             this.manager.emit("debug", `Moonlink.js > PlayerManager >> Player already exists for Guild: ${options.guildId}. Returning existing player.`);
             return this.players.get(options.guildId);
         }
-        const node = this.manager.nodes.findNode(options.nodeSelection);
+        if (options.node !== undefined)
+            (0, Util_1.validate)(options.node, value => typeof value === 'string' && value.length > 0, 'IPlayerConfig#node must be a non-empty string');
+        const node = options.node !== undefined ? this.manager.nodes.nodes.get(options.node) : this.manager.nodes.findNode(options.nodeSelection);
         if (!node) {
+            if (options.node !== undefined)
+                throw new NoEligibleNodeError_1.NoEligibleNodeError([{ identifier: options.node, reasons: ['not-found'] }]);
             throw new NoEligibleNodeError_1.NoEligibleNodeError(NodeSelector_1.NodeSelector.rejections(this.manager.nodes.nodes.values(), this.manager.options.node, options.nodeSelection));
         }
+        const rejections = NodeSelector_1.NodeSelector.rejections([node], this.manager.options.node, options.nodeSelection);
+        const blocking = restoring ? rejections.map(rejection => ({ ...rejection, reasons: rejection.reasons.filter(reason => reason !== 'draining' && reason !== 'circuit-open') })) : rejections;
+        if (blocking.some(rejection => rejection.reasons.length > 0))
+            throw new NoEligibleNodeError_1.NoEligibleNodeError(blocking);
         const player = new (Util_1.Structure.get("Player"))(this.manager, node, options);
         this.players.set(options.guildId, player);
         player.updateData("guildId", options.guildId);
         player.updateData("voiceChannelId", options.voiceChannelId);
+        player.updateData('node', node.identifier);
         if (options.textChannelId)
             player.updateData("textChannelId", options.textChannelId);
         if (options.volume !== undefined)

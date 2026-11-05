@@ -98,6 +98,40 @@ for (const backend of lab.backends) {
       assert.equal(node.backend.kind, backend.kind);
       checks.push('session resume');
     });
+    await t.test('a stored empty player is reconstructed on its confirmed resumed server without playback', async () => {
+      const guildId = '423456789012345678';
+      await node.rest.updatePlayer(guildId, { volume: 55, paused: true });
+      await manager.database.set(`players.${guildId}`, { guildId, voiceChannelId: '623456789012345678', node: node.identifier, autoPlay: false });
+      const detach = manager.on('playerCreate', player => {
+        if (player.guildId !== guildId) return;
+        player.stopHealthCheck();
+        player.voice.connect = async () => {};
+      });
+      const update = node.rest.updatePlayer.bind(node.rest);
+      let playbackUpdates = 0;
+      node.rest.updatePlayer = async (...args) => {
+        if (typeof args[1]?.track?.encoded === 'string') playbackUpdates++;
+        return update(...args);
+      };
+      try {
+        const readyAgain = event(manager, 'nodeReady', 15000);
+        const restored = event(manager, 'playerResumed', 15000);
+        node.socket.netSocket.destroy();
+        await readyAgain;
+        const [player] = await restored;
+        assert.equal(player.guildId, guildId);
+        assert.equal(player.node, node);
+        assert.equal(player.volume, 55);
+        assert.equal(player.paused, true);
+        assert.equal(player.playing, false);
+        assert.equal(player.current, null);
+        assert.equal(player.isResuming, false);
+        assert.equal(playbackUpdates, 0);
+        assert.equal(await manager.database.get(`players.${guildId}.node`), node.identifier);
+        await player.destroy('Protocol reconstruction check complete');
+      } finally { detach(); node.rest.updatePlayer = update; }
+      checks.push('stored empty session ownership (voice stubbed)');
+    });
     await t.test('reconnect without resume obtains a new session', async () => {
       manager.options.resume = false;
       const session = node.sessionId;
@@ -123,7 +157,7 @@ for (const backend of lab.backends) {
       checks.push('terminal auth failure');
     });
     assert.equal(errors.length, 0, errors.map(error => error.message).join('; '));
-    evidence.push({ backend: backend.kind, version: backend.version, image: backend.image, checks, discordAudio: 'not-tested', passed: checks.length === 8 && errors.length === 0 });
+    evidence.push({ backend: backend.kind, version: backend.version, image: backend.image, checks, discordAudio: 'not-tested', passed: checks.length === 9 && errors.length === 0 });
   });
 }
 

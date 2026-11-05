@@ -12,7 +12,7 @@ export type NodeRequirements = {
     readonly regionPolicy?: 'prefer' | 'require';
 };
 export type NodeSelectionOptions = NodeRequirements & { exclude?: readonly string[]; allowUnhealthyFallback?: boolean };
-export type NodeRejectionReason = 'unavailable' | 'excluded' | 'not-ready' | 'backend' | 'capability' | 'region' | 'unhealthy' | 'draining' | 'circuit-open';
+export type NodeRejectionReason = 'unavailable' | 'excluded' | 'not-ready' | 'not-found' | 'backend' | 'capability' | 'region' | 'unhealthy' | 'draining' | 'circuit-open';
 export type NodeRejection = { identifier: string; reasons: NodeRejectionReason[]; missingCapabilities?: string[] };
 
 const measured = (value: unknown, fallback = Infinity): number =>

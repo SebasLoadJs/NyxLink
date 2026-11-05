@@ -19,6 +19,16 @@ export class PlayerManager {
     }
 
     public create(options: IPlayerConfig): Player {
+        return this.createOnNode(options, false);
+    }
+
+    /** @internal Adopt an existing server session without treating maintenance as new assignment. */
+    public restore(options: IPlayerConfig): Player {
+        validate(options.node, value => typeof value === 'string' && value.length > 0, 'Session restoration requires a node identifier');
+        return this.createOnNode(options, true);
+    }
+
+    private createOnNode(options: IPlayerConfig, restoring: boolean): Player {
         if (this.manager.destroyed) throw new Error('Manager is shut down');
         validate(options.guildId, (v) => typeof v === "string" && /^\d{17,20}$/.test(v), "IPlayerConfig#guildId must be a valid Discord Snowflake string.");
         validate(options.voiceChannelId, (v) => typeof v === "string" && /^\d{17,20}$/.test(v), "IPlayerConfig#voiceChannelId must be a valid Discord Snowflake string.");
@@ -34,10 +44,15 @@ export class PlayerManager {
             return this.players.get(options.guildId)!;
         }
 
-        const node = this.manager.nodes.findNode(options.nodeSelection);
+        if (options.node !== undefined) validate(options.node, value => typeof value === 'string' && value.length > 0, 'IPlayerConfig#node must be a non-empty string');
+        const node = options.node !== undefined ? this.manager.nodes.nodes.get(options.node) : this.manager.nodes.findNode(options.nodeSelection);
         if (!node) {
+            if (options.node !== undefined) throw new NoEligibleNodeError([{ identifier: options.node, reasons: ['not-found'] }]);
             throw new NoEligibleNodeError(NodeSelector.rejections(this.manager.nodes.nodes.values(), this.manager.options.node, options.nodeSelection));
         }
+        const rejections = NodeSelector.rejections([node], this.manager.options.node, options.nodeSelection);
+        const blocking = restoring ? rejections.map(rejection => ({ ...rejection, reasons: rejection.reasons.filter(reason => reason !== 'draining' && reason !== 'circuit-open') })) : rejections;
+        if (blocking.some(rejection => rejection.reasons.length > 0)) throw new NoEligibleNodeError(blocking);
 
         const player = new (Structure.get("Player"))(this.manager, node, options);
         this.players.set(options.guildId, player);
@@ -45,6 +60,7 @@ export class PlayerManager {
         // Update basic config fields individually to avoid overwriting existing data (like queue)
         player.updateData("guildId", options.guildId);
         player.updateData("voiceChannelId", options.voiceChannelId);
+        player.updateData('node', node.identifier);
         if (options.textChannelId) player.updateData("textChannelId", options.textChannelId);
         if (options.volume !== undefined) player.updateData("volume", options.volume);
         if (options.autoPlay !== undefined) player.updateData("autoPlay", options.autoPlay);
