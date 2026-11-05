@@ -11,6 +11,7 @@ if (!lab) throw new Error('Run pnpm run test:backends to create the isolated ser
 const evidence = [];
 const trackResolution = [];
 const nodeSelection = [];
+const playerMigration = [];
 
 for (const backend of lab.backends) {
   test(`${backend.kind}: real v4 REST, WebSocket, auth and reconnection without Discord`, async t => {
@@ -200,11 +201,56 @@ test('tracks resolve in both directions using each destination server', async t 
       assert.equal(original.backend, source.backend.kind);
       trackResolution.push({ source: source.backend.kind, target: target.backend.kind, passed: true });
     });
+    await t.test(`${source.backend.kind} -> ${target.backend.kind}: empty player rollback, ownership and filter request without voice`, async () => {
+      const guildId = `${7 + nodes.indexOf(source)}23456789012345678`;
+      const player = manager.players.create({ guildId, voiceChannelId: '623456789012345678', node: source.identifier, autoPlay: false });
+      player.stopHealthCheck();
+      // Isolate REST ownership/filter semantics: neither voice path reaches Discord or a backend.
+      player.voice.connect = async () => {};
+      player.restoreVoiceForRestart = async () => true;
+      player.volume = 62;
+      player.paused = true;
+      player.filters.enable('nightcore');
+      await source.rest.updatePlayer(guildId, { volume: 62, paused: true });
+      const update = target.rest.updatePlayer.bind(target.rest);
+      target.rest.updatePlayer = async (...args) => {
+        await update(...args);
+        throw new Error('Injected failure after destination REST acknowledgement');
+      };
+      try {
+        assert.equal(await player.transferNode(target), false);
+        assert.equal(player.node, source);
+        assert.ok((await source.rest.getPlayers()).some(value => value.guildId === guildId));
+        assert.equal((await target.rest.getPlayers()).some(value => value.guildId === guildId), false);
+        assert.equal(await manager.database.get(`players.${guildId}.node`), source.identifier);
+      } finally { target.rest.updatePlayer = update; }
+      let filterRequest;
+      target.rest.updatePlayer = async (...args) => {
+        if (args[1]?.filters) filterRequest = args[1].filters;
+        return update(...args);
+      };
+      assert.equal(await player.transferNode(target), true);
+      target.rest.updatePlayer = update;
+      assert.equal((await source.rest.getPlayers()).some(value => value.guildId === guildId), false);
+      const remote = await target.rest.getPlayer(guildId);
+      assert.equal(remote.volume, 62);
+      assert.equal(remote.paused, true);
+      assert.equal(remote.track, null);
+      assert.equal(filterRequest.timescale.pitch, 1.2);
+      // Pinned NodeLink setFilters() returns false without a track; an HTTP ack alone
+      // cannot demonstrate an applied filter on an empty player. Preserve that distinction.
+      if (target.backend.kind === 'nodelink') assert.deepEqual(remote.filters, {});
+      else assert.equal(remote.filters.timescale.pitch, 1.2);
+      assert.ok(player.filters.toJSON().activeFilters.includes('nightcore'));
+      assert.equal(await manager.database.get(`players.${guildId}.node`), target.identifier);
+      await player.destroy('Protocol migration check complete');
+      playerMigration.push({ source: source.backend.kind, target: target.backend.kind, passed: true, voice: 'stubbed', audio: 'not-tested', remoteEmptyFilters: target.backend.kind === 'nodelink' ? 'ignored by pinned server without a track' : 'confirmed' });
+    });
   }
 });
 
 test.after(async () => {
-  const report = { timestamp: new Date().toISOString(), scope: 'local backend protocol; no Discord bot or voice connection', passed: evidence.length === lab.backends.length && evidence.every(result => result.passed) && trackResolution.length === 2 && nodeSelection.length === lab.backends.length, results: evidence, trackResolution, nodeSelection };
+  const report = { timestamp: new Date().toISOString(), scope: 'local backend protocol; no Discord bot or voice connection', passed: evidence.length === lab.backends.length && evidence.every(result => result.passed) && trackResolution.length === 2 && nodeSelection.length === lab.backends.length && playerMigration.length === 2, results: evidence, trackResolution, nodeSelection, playerMigration };
   const target = path.resolve(lab.directory, '../latest-report.json');
   await fs.writeFile(target, JSON.stringify(report, null, 2) + '\n');
   console.log(`Protocol evidence: ${path.relative(process.cwd(), target)}`);

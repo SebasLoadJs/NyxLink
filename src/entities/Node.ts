@@ -1040,11 +1040,12 @@ export class Node {
     this.manager.emit("debug", `Moonlink.js > Node#handleTrackStart >> Track started for player ${player.guildId}: "${trackTitle}". Track: ${stringifyWithReplacer(trackData ?? payload.track)}.`);
     
     player.playing = true;
-    player.paused = false;
+    const restoring = attempts.isRestoring();
+    if (!restoring) player.paused = false;
     player.updateActivity();
     player.set("lastKnownPosition", null);
     
-    if (player.current) {
+    if (player.current && !restoring) {
         player.current.position = 0;
     }
     

@@ -374,7 +374,7 @@ class Filters {
     reset() {
         return this.clear();
     }
-    async apply() {
+    toPayload() {
         let payload = {};
         if (!this.player.node.isNodeLink && (this.echo || this.chorus || this.compressor || this.highpass || this.phaser || this.spatial)) {
             throw (0, Util_1.nodeLinkOnlyError)("filters");
@@ -409,6 +409,10 @@ class Filters {
                 payload[key] = directFilters[key];
             }
         }
+        return payload;
+    }
+    async apply() {
+        const payload = this.toPayload();
         this.player.manager.emit("debug", `Moonlink.js > Filters >> Applying filters: ${JSON.stringify(payload)}`);
         this.player.manager.emit("filtersUpdate", this.player, this);
         const updatedPlayer = await this.player.updatePlayer({ filters: payload });

@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Player = void 0;
+const PlayerMigration_1 = require("../players/PlayerMigration");
 const PlayerCommandQueue_1 = require("../players/PlayerCommandQueue");
 const PlaybackGuard_1 = require("../players/PlaybackGuard");
 const PlaybackAttempt_1 = require("../players/PlaybackAttempt");
@@ -296,7 +297,7 @@ class Player {
             finalPayload.voice = voicePayload;
         }
         const attempts = (0, PlaybackAttempt_1.playbackAttempt)(this);
-        const attempt = typeof payload.track?.encoded === 'string' ? attempts.begin(this.node, payload.track) : undefined;
+        const attempt = typeof payload.track?.encoded === 'string' ? attempts.begin(this.node, payload.track, typeof payload.paused === 'boolean') : undefined;
         if (attempt)
             finalPayload.track = attempt.track;
         const preload = typeof payload.nextTrack?.encoded === 'string' || payload.nextTrack === null ? attempts.preload(this.node, payload.nextTrack) : undefined;
@@ -927,6 +928,7 @@ class Player {
     async restart(options = {}) {
         const guard = (0, PlaybackGuard_1.playbackGuard)(this);
         const ticket = guard.ticket;
+        const run = (operation) => options[PlayerMigration_1.migrationRestart] ? operation() : this.commands.enqueue(operation);
         if (this.destroyed)
             return false;
         this.manager.emit("debug", `Moonlink.js > Player#restart -> Restarting player for guild ${this.guildId}`);
@@ -965,7 +967,8 @@ class Player {
                 track: { encoded: this.current.encoded, userData: this.current.userData },
                 volume: this.volume,
                 playing: this.playing,
-                paused: this.paused
+                paused: this.paused,
+                filters: this.filters.toPayload()
             };
             if (resumePosition > 0 && this.current.isSeekable && !isAlreadySync) {
                 payload.position = resumePosition;
@@ -980,7 +983,7 @@ class Player {
             if (this.loudnessNormalizer !== undefined) {
                 payload.loudnessNormalizer = this.loudnessNormalizer;
             }
-            const restored = await this.commands.enqueue(async () => {
+            const restored = await run(async () => {
                 if (this.destroyed || !guard.isCurrent(ticket))
                     return false;
                 if (!await this.restoreVoiceForRestart(ticket))
@@ -993,7 +996,7 @@ class Player {
         }
         else if (this.queue.size > 0 && options.startQueued !== false) {
             this.manager.emit("debug", `Moonlink.js > Player#restart -> No current track, playing first from queue for guild ${this.guildId}`);
-            if (!await this.commands.enqueue(async () => {
+            if (!await run(async () => {
                 if (!await this.restoreVoiceForRestart(ticket))
                     return false;
                 return this.playNext({}, ticket);
@@ -1001,6 +1004,13 @@ class Player {
                 return false;
         }
         else {
+            if (options[PlayerMigration_1.migrationRestart]) {
+                if (!await this.restoreVoiceForRestart(ticket))
+                    return false;
+                await this.sendPlayerUpdate({ filters: this.filters.toPayload(), volume: this.volume, paused: this.paused });
+                if (this.destroyed || !guard.isCurrent(ticket))
+                    return false;
+            }
             this.manager.emit("debug", `Moonlink.js > Player#restart >> No track to restore and queue is empty for guild ${this.guildId}`);
             return true;
         }
@@ -1020,64 +1030,8 @@ class Player {
         const targetNode = typeof node === "string" ? this.manager.nodes.nodes.get(node) : node;
         if (this.destroyed || !targetNode || !NodeSelector_1.NodeSelector.matches(targetNode, this.nodeSelection) || targetNode.identifier === this.node.identifier)
             return false;
-        const oldNode = this.node;
-        const guard = (0, PlaybackGuard_1.playbackGuard)(this);
-        const ticket = guard.invalidate();
-        const report = (status, reason) => {
-            this.manager.emit("playerNodeFailover", this, {
-                source: oldNode.identifier, target: targetNode.identifier, status,
-                positionMs: this.current?.position, reason
-            });
-        };
-        report('in-progress');
-        try {
-            const moved = await this.commands.enqueue(async () => {
-                if (this.destroyed || !guard.isCurrent(ticket) || !NodeSelector_1.NodeSelector.matches(targetNode, this.nodeSelection))
-                    return false;
-                const resolved = this.current ? await TrackResolver_1.TrackResolver.resolve(this.current, targetNode, oldNode) : null;
-                if (this.destroyed || !guard.isCurrent(ticket) || !NodeSelector_1.NodeSelector.matches(targetNode, this.nodeSelection))
-                    return false;
-                try {
-                    await oldNode.rest.destroyPlayer(this.guildId);
-                }
-                catch (error) {
-                    this.manager.emit("debug", `NyxLink > Player#transferNode >> Old node cleanup failed: ${error.message}`);
-                }
-                if (this.destroyed || !guard.isCurrent(ticket) || !NodeSelector_1.NodeSelector.matches(targetNode, this.nodeSelection))
-                    return false;
-                for (const track of [...this.queue.tracks, ...this.previous]) {
-                    track.backend ??= oldNode.backend?.kind;
-                }
-                this.updateData('queue', this.queue.tracks.map(track => TrackCodec_1.TrackCodec.serialize(track)));
-                this.updateData('previous', this.previous.map(track => TrackCodec_1.TrackCodec.serialize(track)));
-                this.node = targetNode;
-                if (resolved) {
-                    this.current = resolved;
-                    this.updateData('current', TrackCodec_1.TrackCodec.serialize(resolved));
-                }
-                this.set("lastState", undefined);
-                return true;
-            });
-            if (!moved || !await this.restart({ destroyOnFailure: false, startQueued: false }) || this.destroyed || !guard.isCurrent(ticket)) {
-                report(guard.isCurrent(ticket) ? 'failed' : 'cancelled');
-                return false;
-            }
-            await this.updateData('node', targetNode.identifier);
-            if (this.destroyed || !guard.isCurrent(ticket) || this.node !== targetNode) {
-                report('cancelled');
-                return false;
-            }
-            this.manager.emit("playerSwitchedNode", this, oldNode, targetNode);
-            report('recovered');
-            return true;
-        }
-        catch (error) {
-            report(guard.isCurrent(ticket) ? 'failed' : 'cancelled', error.message);
-            return false;
-        }
-        finally {
-            (0, PlaybackAttempt_1.playbackAttempt)(this).retain(ticket);
-        }
+        const ticket = (0, PlaybackGuard_1.playbackGuard)(this).invalidate();
+        return this.commands.enqueue(() => (0, PlayerMigration_1.migratePlayer)(this, targetNode, ticket));
     }
     setVoiceChannelId(voiceChannelId) {
         (0, Util_1.validate)(voiceChannelId, (v) => typeof v === "string" && v.length > 0, "Player#setVoiceChannelId > Voice channel ID must be a non-empty string.");

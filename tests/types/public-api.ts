@@ -88,3 +88,7 @@ const resumedPlayer: Player = manager.players.restore({ guildId: '32345678901234
 // @ts-expect-error A named node must be identified by its string identifier.
 manager.players.create({ guildId: '123456789012345678', voiceChannelId: '223456789012345678', node: 1 });
 void [pinnedPlayer, resumedPlayer];
+const restart: Promise<boolean> = player.restart({ destroyOnFailure: false, startQueued: false });
+const filterPayload: ReturnType<Filters['toPayload']> = player.filters.toPayload();
+const cleanup: Promise<void> = node.rest.destroyPlayer(player.guildId, { timeoutMs: 10000, signal: new AbortController().signal });
+void [restart, transfer, filterPayload, cleanup];

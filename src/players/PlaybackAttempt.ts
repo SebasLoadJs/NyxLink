@@ -7,7 +7,7 @@ import { playbackGuard } from './PlaybackGuard';
 const markerKey = '__nyxlinkPlaybackAttempt';
 type TrackData = { encoded?: string; userData?: Record<string, any> };
 type Marker = { version: 1; id: string; hadValue: boolean; value?: unknown };
-type Attempt = { id: string; encoded: string; node: Node; ticket: number; started: boolean; ended: boolean; waitForStart: boolean; wire: boolean };
+type Attempt = { id: string; encoded: string; node: Node; ticket: number; started: boolean; ended: boolean; waitForStart: boolean; wire: boolean; restoring?: boolean };
 
 function marker(track: TrackData): Marker | undefined {
     const value = track.userData?.[markerKey];
@@ -45,10 +45,11 @@ export class PlaybackAttempt {
         return { ...track, userData: { ...data, [markerKey]: identity } };
     }
 
-    public begin<T extends TrackData>(node: Node, track: T) {
+    public begin<T extends TrackData>(node: Node, track: T, restoring = false) {
         const previous = this.current;
         const previousPreload = this.preloaded;
         const attempt = this.create(node, track.encoded!);
+        attempt.restoring = restoring;
         this.current = attempt;
         return {
             track: this.decorate(track, attempt),
@@ -132,10 +133,26 @@ export class PlaybackAttempt {
         return !!attempt && !attempt.ended;
     }
 
+    /** Restoration starts retain local pause/seek intent, including later confirmed controls. */
+    public isRestoring(): boolean {
+        return this.current?.restoring === true;
+    }
+
     public retain(ticket: number): void {
         if (this.player.destroyed || !playbackGuard(this.player).isCurrent(ticket)) return;
         if (this.current?.node === this.player.node) this.current.ticket = ticket;
         if (this.preloaded?.node === this.player.node) this.preloaded.ticket = ticket;
+    }
+
+    /** A rejected migration may have received a start before its HTTP acknowledgement failed. */
+    public checkpoint(): (ticket: number) => void {
+        const current = this.current ? { ...this.current } : undefined;
+        const preloaded = this.preloaded ? { ...this.preloaded } : undefined;
+        return ticket => {
+            this.current = current ? { ...current } : undefined;
+            this.preloaded = preloaded ? { ...preloaded } : undefined;
+            this.retain(ticket);
+        };
     }
 
     /** Public tracks retain caller metadata; transport identities never enter snapshots. */

@@ -131,12 +131,17 @@ class Rest {
             throw error;
         }
     }
-    async destroyPlayer(guildId) {
+    async destroyPlayer(guildId, options) {
+        const timeout = options?.timeoutMs ?? 10000;
+        if (options && (!Number.isFinite(timeout) || timeout <= 0 || timeout > 60000))
+            throw new TypeError('Cleanup timeout must be within 1..60000 ms');
         try {
             await (0, Util_1.makeRequest)(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}`, {
                 method: "DELETE",
-                headers: this.authHeaders
-            });
+                headers: this.authHeaders,
+                signal: options?.signal,
+                throwOnError: options !== undefined
+            }, options ? timeout : undefined, options ? 0 : undefined);
         }
         catch (error) {
             const err = error;

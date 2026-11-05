@@ -750,10 +750,12 @@ class Node {
         const trackTitle = trackData?.info?.title ?? player.current?.title ?? "Unknown";
         this.manager.emit("debug", `Moonlink.js > Node#handleTrackStart >> Track started for player ${player.guildId}: "${trackTitle}". Track: ${(0, Util_1.stringifyWithReplacer)(trackData ?? payload.track)}.`);
         player.playing = true;
-        player.paused = false;
+        const restoring = attempts.isRestoring();
+        if (!restoring)
+            player.paused = false;
         player.updateActivity();
         player.set("lastKnownPosition", null);
-        if (player.current) {
+        if (player.current && !restoring) {
             player.current.position = 0;
         }
         const reconnectAttempts = player.get("reconnectAttempts");
