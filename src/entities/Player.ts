@@ -1188,6 +1188,11 @@ export class Player {
                 report(guard.isCurrent(ticket) ? 'failed' : 'cancelled');
                 return false;
             }
+            await this.updateData('node', targetNode.identifier);
+            if (this.destroyed || !guard.isCurrent(ticket) || this.node !== targetNode) {
+                report('cancelled');
+                return false;
+            }
             this.manager.emit("playerSwitchedNode", this, oldNode, targetNode);
             report('recovered');
             return true;

@@ -7,6 +7,8 @@ export declare class PlayerManager {
     constructor(manager: Manager);
     get all(): Player[];
     create(options: IPlayerConfig): Player;
+    restore(options: IPlayerConfig): Player;
+    private createOnNode;
     get(guildId: string): Player | undefined;
     has(guildId: string): boolean;
     get size(): number;

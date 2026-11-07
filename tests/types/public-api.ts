@@ -83,3 +83,8 @@ const admissionReason: FailoverResult['reason'] = 'queue-full';
 void [boundedManager, jitteredNode, admissionReason];
 const serverWait: number | undefined = new HttpError(429, undefined, '5').retryAfterMs;
 void serverWait;
+const pinnedPlayer: Player = manager.players.create({ guildId: '123456789012345678', voiceChannelId: '223456789012345678', node: node.identifier });
+const resumedPlayer: Player = manager.players.restore({ guildId: '323456789012345678', voiceChannelId: '223456789012345678', node: node.identifier });
+// @ts-expect-error A named node must be identified by its string identifier.
+manager.players.create({ guildId: '123456789012345678', voiceChannelId: '223456789012345678', node: 1 });
+void [pinnedPlayer, resumedPlayer];

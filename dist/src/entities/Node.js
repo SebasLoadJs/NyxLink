@@ -10,6 +10,7 @@ const PlaybackGuard_1 = require("../players/PlaybackGuard");
 const PlaybackAttempt_1 = require("../players/PlaybackAttempt");
 const TrackCodec_1 = require("../tracks/TrackCodec");
 const NodeCircuitBreaker_1 = require("../nodes/NodeCircuitBreaker");
+const SessionRecovery_1 = require("../nodes/SessionRecovery");
 const RetryDelay_1 = require("../nodes/RetryDelay");
 const Util_1 = require("../Util");
 const types_1 = require("../typings/types");
@@ -1244,59 +1245,10 @@ class Node {
         this.setState(types_1.NodeState.DESTROYED);
         this.manager.emit('nodeDestroy', this.identifier);
     }
-    async _resumePlayers() {
-        if (this.recoveryInProgress) {
-            this.manager.emit("debug", `Moonlink.js > Node > Resume skipped for ${this.identifier}; recovery in progress.`);
-            return;
-        }
-        const players = await this.rest.getPlayers();
-        if (!players || players?.length === 0) {
-            this.manager.emit("debug", `Moonlink.js > Node > No players to resume on node ${this.uuid}.`);
-            return;
-        }
-        for (const playerInfo of players) {
-            const guildId = playerInfo.guildId;
-            const player = this.manager.players.get(guildId);
-            if (player) {
-                this.manager.emit("debug", `Moonlink.js > Node > Player ${guildId} found in memory. Syncing state with Lavalink.`);
-                player.isResuming = true;
-                player.playing = playerInfo.paused === false;
-                player.paused = playerInfo.paused ?? false;
-                if (player.current) {
-                    player.current.position = playerInfo.state.position;
-                }
-                this.manager.emit("playerResumed", player);
-                player.isResuming = false;
-                continue;
-            }
-            const storage = await this.manager.database.get(`players.${guildId}`);
-            if (!storage) {
-                this.manager.emit("debug", `Moonlink.js > Node > No stored data found for player ${guildId}, skipping resume.`);
-                continue;
-            }
-            this.manager.emit("debug", `Moonlink.js > Node > Attempting to resume player ${guildId} on node ${this.uuid}.`);
-            const reconstructedPlayer = this.manager.players.create({
-                ...storage,
-                guildId: guildId,
-                voiceChannelId: storage.voiceChannelId,
-                textChannelId: storage.textChannelId,
-                selfDeaf: storage.selfDeaf,
-                selfMute: storage.selfMute,
-                volume: playerInfo.volume,
-                node: this.identifier,
-            });
-            this.manager.emit("playerResuming", reconstructedPlayer);
-            reconstructedPlayer.isResuming = true;
-            await reconstructedPlayer.connect();
-            reconstructedPlayer.playing = playerInfo.paused === false;
-            reconstructedPlayer.paused = playerInfo.paused ?? false;
-            if (reconstructedPlayer.current) {
-                reconstructedPlayer.current.position = playerInfo.state.position;
-            }
-            this.manager.emit("debug", `Moonlink.js > Node > Player ${guildId} has been resumed on node ${this.uuid}.`);
-            this.manager.emit("playerResumed", reconstructedPlayer);
-            reconstructedPlayer.isResuming = false;
-        }
+    _resumePlayers() {
+        if (this.recoveryInProgress)
+            return Promise.resolve();
+        return (0, SessionRecovery_1.resumeSessionPlayers)(this);
     }
 }
 exports.Node = Node;

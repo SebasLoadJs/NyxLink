@@ -252,7 +252,13 @@ const configuredManager = new Manager({
 
 Añade varios servidores al array `nodes`, cada uno con un `identifier` distinto. La selección utiliza la disponibilidad y las estadísticas del nodo; `autoMovePlayers` habilita el intento de traslado cuando se pierde la conexión.
 
+`manager.players.create({ guildId, voiceChannelId, node: 'eu-1' })` fija el nodo inicial por identificador. Si no existe o incumple los requisitos, lanza `NoEligibleNodeError`; no elige otro de forma silenciosa. Una guild ya creada conserva su reproductor existente.
+
 `failover.maxAttempts` limita los destinos que se intentan. También puedes trasladar un reproductor explícitamente con `await player.transferNode(identifier)` y comprobar su resultado.
+
+La propiedad del nodo se guarda al crear el reproductor y al confirmar un traslado. Cuando se reanuda una sesión, NyxLink solo sincroniza su nodo propietario y descarta respuestas de una sesión o socket anteriores, órdenes posteriores y pistas que ya no corresponden al intento actual. Los registros heredados sin propietario se reconstruyen en el servidor que confirma la sesión. Un registro inválido o una conexión de voz fallida se informa mediante `nodeError` y no bloquea las demás guilds.
+
+La reconstrucción de sesiones existentes puede recuperar el control de un nodo en mantenimiento o con el circuito abierto; no equivale a asignarle trabajo nuevo. Mantiene los requisitos obligatorios de backend, capacidades y región. No envía una nueva orden de reproducción por reconstruir el estado.
 
 Puedes exigir un backend y capacidades al crear el reproductor:
 
