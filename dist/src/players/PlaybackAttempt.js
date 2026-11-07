@@ -42,10 +42,11 @@ class PlaybackAttempt {
             identity.value = data[markerKey];
         return { ...track, userData: { ...data, [markerKey]: identity } };
     }
-    begin(node, track) {
+    begin(node, track, restoring = false) {
         const previous = this.current;
         const previousPreload = this.preloaded;
         const attempt = this.create(node, track.encoded);
+        attempt.restoring = restoring;
         this.current = attempt;
         return {
             track: this.decorate(track, attempt),
@@ -132,6 +133,9 @@ class PlaybackAttempt {
         const attempt = this.active(node, track);
         return !!attempt && !attempt.ended;
     }
+    isRestoring() {
+        return this.current?.restoring === true;
+    }
     retain(ticket) {
         if (this.player.destroyed || !(0, PlaybackGuard_1.playbackGuard)(this.player).isCurrent(ticket))
             return;
@@ -139,6 +143,15 @@ class PlaybackAttempt {
             this.current.ticket = ticket;
         if (this.preloaded?.node === this.player.node)
             this.preloaded.ticket = ticket;
+    }
+    checkpoint() {
+        const current = this.current ? { ...this.current } : undefined;
+        const preloaded = this.preloaded ? { ...this.preloaded } : undefined;
+        return ticket => {
+            this.current = current ? { ...current } : undefined;
+            this.preloaded = preloaded ? { ...preloaded } : undefined;
+            this.retain(ticket);
+        };
     }
     clean(track) {
         return this.current?.wire ? cleanPlaybackTrack(track) : track;

@@ -138,12 +138,16 @@ export class Rest {
         }
     }
 
-    public async destroyPlayer(guildId: string): Promise<void> {
+    public async destroyPlayer(guildId: string, options?: { timeoutMs?: number; signal?: AbortSignal }): Promise<void> {
+        const timeout = options?.timeoutMs ?? 10000;
+        if (options && (!Number.isFinite(timeout) || timeout <= 0 || timeout > 60000)) throw new TypeError('Cleanup timeout must be within 1..60000 ms');
         try {
             await makeRequest(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}`, {
                 method: "DELETE",
-                headers: this.authHeaders
-            });
+                headers: this.authHeaders,
+                signal: options?.signal,
+                throwOnError: options !== undefined
+            }, options ? timeout : undefined, options ? 0 : undefined);
         } catch (error) {
             const err = error as Error;
             if (!err.message.includes('status 404')) {

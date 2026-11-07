@@ -11,7 +11,7 @@ export declare class PlaybackAttempt {
     constructor(player: Player);
     private create;
     private decorate;
-    begin<T extends TrackData>(node: Node, track: T): {
+    begin<T extends TrackData>(node: Node, track: T, restoring?: boolean): {
         track: T;
         accepted: (response: any) => boolean;
         rollback: () => void;
@@ -24,7 +24,9 @@ export declare class PlaybackAttempt {
     start(node: Node, track: TrackData): 'current' | 'preloaded' | false;
     end(node: Node, track: TrackData): boolean;
     accepts(node: Node, track: TrackData): boolean;
+    isRestoring(): boolean;
     retain(ticket: number): void;
+    checkpoint(): (ticket: number) => void;
     clean<T extends TrackData>(track: T): T;
 }
 export declare function playbackAttempt(player: Player): PlaybackAttempt;

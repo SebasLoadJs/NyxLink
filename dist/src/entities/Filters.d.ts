@@ -64,6 +64,7 @@ export declare class Filters implements IFilters {
     setPluginFilters(filters: Record<string, any>): this;
     clear(): this;
     reset(): this;
+    toPayload(): IFilters;
     apply(): Promise<Player>;
     private mergeFilters;
     private parseString;

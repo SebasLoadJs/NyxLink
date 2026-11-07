@@ -256,6 +256,10 @@ Añade varios servidores al array `nodes`, cada uno con un `identifier` distinto
 
 `failover.maxAttempts` limita los destinos que se intentan. También puedes trasladar un reproductor explícitamente con `await player.transferNode(identifier)` y comprobar su resultado.
 
+El traslado conserva el reproductor remoto de origen hasta confirmar la voz, la restauración y el propietario del destino. Si falla, devuelve `false`, restaura el estado local y limpia el destino parcial; las órdenes pendientes se ejecutan después del rollback. Envía los filtros estándar y los presets activos. NodeLink puede ignorarlos en reproductores sin pista; los conserva localmente, pero una respuesta HTTP correcta no demuestra que estén aplicados al audio. La limpieza de cada nodo tiene un timeout de 10 segundos sin reintentos. Si falla la limpieza del origen después de confirmar el traslado, mantiene el destino, devuelve `true` e informa el error mediante `nodeError`.
+
+Esta protección no garantiza continuidad de audio en Discord, persistencia atómica entre procesos ni reconciliación de eventos del origen recibidos durante el traslado. Si el almacenamiento también falla durante el rollback, conserva el estado local y registra los errores de escritura.
+
 La propiedad del nodo se guarda al crear el reproductor y al confirmar un traslado. Cuando se reanuda una sesión, NyxLink solo sincroniza su nodo propietario y descarta respuestas de una sesión o socket anteriores, órdenes posteriores y pistas que ya no corresponden al intento actual. Los registros heredados sin propietario se reconstruyen en el servidor que confirma la sesión. Un registro inválido o una conexión de voz fallida se informa mediante `nodeError` y no bloquea las demás guilds.
 
 La reconstrucción de sesiones existentes puede recuperar el control de un nodo en mantenimiento o con el circuito abierto; no equivale a asignarle trabajo nuevo. Mantiene los requisitos obligatorios de backend, capacidades y región. No envía una nueva orden de reproducción por reconstruir el estado.

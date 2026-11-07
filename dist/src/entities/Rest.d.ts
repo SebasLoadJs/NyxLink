@@ -21,7 +21,10 @@ export declare class Rest {
     getPlayers(): Promise<IRESTGetPlayers[] | null>;
     getPlayer(guildId: string): Promise<any | null>;
     updatePlayer(guildId: string, data: any, noReplace?: boolean): Promise<any | null>;
-    destroyPlayer(guildId: string): Promise<void>;
+    destroyPlayer(guildId: string, options?: {
+        timeoutMs?: number;
+        signal?: AbortSignal;
+    }): Promise<void>;
     loadTracks(identifier: string, options?: {
         timeoutMs: number;
         signal?: AbortSignal;

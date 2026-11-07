@@ -1,3 +1,4 @@
+import { type RestartOptions } from "../players/PlayerMigration";
 import { type NodeRequirements } from '../nodes/NodeSelector';
 import { Node } from "./Node";
 import { Queue } from "./Queue";
@@ -142,10 +143,7 @@ export declare class Player {
     shuffle(): this;
     destroy(reason?: string): Promise<void>;
     private destroyPlayback;
-    restart(options?: {
-        destroyOnFailure?: boolean;
-        startQueued?: boolean;
-    }): Promise<boolean>;
+    restart(options?: RestartOptions): Promise<boolean>;
     private restoreVoiceForRestart;
     transferNode(node: Node | string): Promise<boolean>;
     setVoiceChannelId(voiceChannelId: string): this;

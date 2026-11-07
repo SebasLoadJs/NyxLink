@@ -409,7 +409,7 @@ export class Filters implements IFilters {
         return this.clear();
     }
 
-    public async apply(): Promise<Player> {
+    public toPayload(): IFilters {
         let payload: IFilters = {};
 
         if (!this.player.node.isNodeLink && (this.echo || this.chorus || this.compressor || this.highpass || this.phaser || this.spatial)) {
@@ -448,6 +448,12 @@ export class Filters implements IFilters {
                 payload[key] = directFilters[key];
             }
         }
+
+        return payload;
+    }
+
+    public async apply(): Promise<Player> {
+        const payload = this.toPayload();
 
         this.player.manager.emit("debug", `Moonlink.js > Filters >> Applying filters: ${JSON.stringify(payload)}`);
         this.player.manager.emit("filtersUpdate", this.player, this);
