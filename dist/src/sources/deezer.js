@@ -4,10 +4,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DeezerSource = void 0;
-const node_http_1 = __importDefault(require("node:http"));
 const node_https_1 = __importDefault(require("node:https"));
 const node_url_1 = require("node:url");
 const Util_1 = require("../Util");
+const RequestPolicy_1 = require("../http/RequestPolicy");
+const HttpPolicyError_1 = require("../errors/HttpPolicyError");
 class DeezerSource {
     name = "Deezer";
     manager;
@@ -25,14 +26,18 @@ class DeezerSource {
             /(?:https?:\/\/)?(?:www\.)?deezer\.com\/(?:[a-z]{2}\/)?(track|album|playlist|artist)\/\d+/.test(query) ||
             shortLink.test(query));
     }
-    async resolveShortLink(url) {
+    async resolveShortLink(url, signal) {
         let current = url.startsWith("http") ? url : `https://${url}`;
-        for (let i = 0; i < 5; i++) {
-            const target = new node_url_1.URL(current);
-            const transport = target.protocol === "https:" ? node_https_1.default : node_http_1.default;
+        const seen = new Set();
+        for (let i = 0; i <= 5; i++) {
+            signal?.throwIfAborted();
+            const target = (0, RequestPolicy_1.requestUrl)(current, ["https://dzr.page.link", "https://deezer.com", "https://www.deezer.com"]);
+            if (seen.has(target.href))
+                throw new HttpPolicyError_1.HttpPolicyError('redirect-limit');
+            seen.add(target.href);
             const next = await new Promise((resolve, reject) => {
-                const req = transport.request({
-                    method: "GET",
+                const req = node_https_1.default.request({
+                    method: "GET", signal: (0, RequestPolicy_1.providerSignal)(signal),
                     hostname: target.hostname,
                     port: target.port || (target.protocol === "https:" ? 443 : 80),
                     path: target.pathname + target.search,
@@ -40,30 +45,38 @@ class DeezerSource {
                 }, (res) => {
                     const statusCode = res.statusCode ?? 0;
                     const location = res.headers.location;
-                    res.resume();
+                    res.destroy();
                     if (statusCode >= 300 && statusCode < 400 && location) {
-                        resolve(new node_url_1.URL(location, current).href);
+                        try {
+                            resolve({ url: (0, RequestPolicy_1.requestUrl)(location, ["https://dzr.page.link", "https://deezer.com", "https://www.deezer.com"], current).href, redirected: true });
+                        }
+                        catch (error) {
+                            reject(error);
+                        }
                         return;
                     }
-                    resolve(current);
+                    resolve({ url: current, redirected: false });
                 });
                 req.on("error", reject);
+                req.setTimeout(10000, () => req.destroy(Object.assign(new Error("Provider request timed out"), { code: "ETIMEDOUT" })));
                 req.end();
             }).catch((error) => {
+                if (error instanceof HttpPolicyError_1.HttpPolicyError || signal?.aborted || error.code === 'ETIMEDOUT')
+                    throw error;
                 this.manager.emit("debug", `Moonlink.js > Deezer > Short link resolve failed: ${error.message}`);
                 return null;
             });
             if (!next)
                 return null;
-            if (next === current)
+            if (!next.redirected)
                 return current;
-            current = next;
+            current = next.url;
         }
-        return current;
+        throw new HttpPolicyError_1.HttpPolicyError("redirect-limit");
     }
-    async apiRequest(path) {
-        const url = path.startsWith("http") ? path : `https://api.deezer.com${path}`;
-        const res = await (0, Util_1.makeRequest)(url, { method: "GET" });
+    async apiRequest(path, signal) {
+        const url = (0, RequestPolicy_1.providerUrl)(path, "https://api.deezer.com");
+        const res = await (0, Util_1.makeRequest)(url, { method: "GET", signal: (0, RequestPolicy_1.providerSignal)(signal), allowedOrigins: ["https://api.deezer.com"], throwOnError: true }, 10000, 0);
         if (!res) {
             this.manager.emit("debug", "Moonlink.js > Deezer > API request failed.");
             return null;
@@ -74,7 +87,7 @@ class DeezerSource {
         const q = query.startsWith("dzsearch:") ? query.slice(9).trim() : query;
         const limit = options?.limit ?? this.options.maxSearchResults ?? 20;
         const params = new node_url_1.URLSearchParams({ q, limit: String(limit) });
-        const data = await this.apiRequest(`/search?${params}`);
+        const data = await this.apiRequest(`/search?${params}`, options?.signal);
         if (!data?.data?.length)
             return { loadType: "empty", data: {} };
         const tracks = data.data.map((t) => this.buildTrack(t));
@@ -83,7 +96,7 @@ class DeezerSource {
     async load(query, options) {
         const shortLink = /^(?:https?:\/\/)?dzr\.page\.link\/[\w-]+$/;
         if (shortLink.test(query)) {
-            const resolved = await this.resolveShortLink(query);
+            const resolved = await this.resolveShortLink(query, options?.signal);
             if (resolved)
                 query = resolved;
         }
@@ -92,15 +105,15 @@ class DeezerSource {
             return { loadType: "error", data: { message: "Invalid Deezer URL" } };
         const [, type, id] = m;
         if (type === "track") {
-            const data = await this.apiRequest(`/track/${id}`);
+            const data = await this.apiRequest(`/track/${id}`, options?.signal);
             if (!data)
                 return { loadType: "error", data: { message: "Track not found." } };
             return { loadType: "track", data: this.buildTrack(data) };
         }
         if (type === "artist") {
-            const artist = await this.apiRequest(`/artist/${id}`);
+            const artist = await this.apiRequest(`/artist/${id}`, options?.signal);
             const limit = options?.limit ?? this.options.maxArtistTracks ?? 20;
-            const top = await this.apiRequest(`/artist/${id}/top?limit=${limit}`);
+            const top = await this.apiRequest(`/artist/${id}/top?limit=${limit}`, options?.signal);
             if (!artist || !top?.data) {
                 return { loadType: "error", data: { message: "Artist not found." } };
             }
@@ -111,7 +124,7 @@ class DeezerSource {
             };
         }
         const path = type === "album" ? `/album/${id}` : `/playlist/${id}`;
-        const col = await this.apiRequest(path);
+        const col = await this.apiRequest(path, options?.signal);
         if (!col?.tracks?.data) {
             return { loadType: "error", data: { message: `${type} not found.` } };
         }

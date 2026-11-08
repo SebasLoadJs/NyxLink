@@ -81,6 +81,10 @@ const boundedManager = new Manager({ nodes: [configuredNode], options: { node: {
 const jitteredNode: Parameters<NodeManager['add']>[0] = { ...configuredNode, retryJitter: 0.25 };
 const admissionReason: FailoverResult['reason'] = 'queue-full';
 void [boundedManager, jitteredNode, admissionReason];
+declare const httpPolicyError: import('../../dist').HttpPolicyError;
+const httpPolicyCode: 'HTTP_POLICY_REJECTED' = httpPolicyError.code;
+const httpPolicyReason: import('../../dist').HttpPolicyReason = 'origin';
+void [httpPolicyCode, httpPolicyReason];
 const serverWait: number | undefined = new HttpError(429, undefined, '5').retryAfterMs;
 void serverWait;
 const pinnedPlayer: Player = manager.players.create({ guildId: '123456789012345678', voiceChannelId: '223456789012345678', node: node.identifier });

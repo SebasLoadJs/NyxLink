@@ -20,6 +20,8 @@ export type { FailoverOptions, FailoverResult } from './src/nodes/NodeFailover';
 export { FeatureUnavailableError } from './src/errors/FeatureUnavailableError';
 export { NoEligibleNodeError } from './src/errors/NoEligibleNodeError';
 export { HttpError } from './src/errors/HttpError';
+export { HttpPolicyError } from './src/errors/HttpPolicyError';
+export type { HttpPolicyReason } from './src/errors/HttpPolicyError';
 export type { StorageAdapter } from './src/database/StorageAdapter';
 export { Memory } from './src/database/Memory';
 export { Local } from './src/database/Local';

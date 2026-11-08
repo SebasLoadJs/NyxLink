@@ -25,6 +25,9 @@ const node_https_1 = __importDefault(require("node:https"));
 const node_zlib_1 = __importDefault(require("node:zlib"));
 const node_url_1 = require("node:url");
 const HttpError_1 = require("./errors/HttpError");
+const HttpPolicyError_1 = require("./errors/HttpPolicyError");
+const RequestPolicy_1 = require("./http/RequestPolicy");
+const promises_1 = require("node:timers/promises");
 exports.structures = {};
 class Structure {
     static manager;
@@ -216,27 +219,36 @@ async function makeRequest(initialUrl, options, timeout = 100000, retries = 3, r
     const acceptEncoding = supportsZstd
         ? "gzip, deflate, br, zstd"
         : "gzip, deflate, br";
-    let currentUrl = initialUrl;
+    const initial = (0, RequestPolicy_1.requestUrl)(initialUrl, options.allowedOrigins);
+    let currentUrl = initial.href;
     for (let attempt = 0; attempt <= retries; attempt++) {
         try {
+            options.signal?.throwIfAborted();
             let redirectCount = 0;
+            let headers = (0, RequestPolicy_1.requestHeaders)(options.headers);
+            let auth = options.auth;
             while (redirectCount <= maxRedirects) {
                 const result = await new Promise((resolve, reject) => {
-                    const urlObject = new node_url_1.URL(currentUrl);
+                    options.signal?.throwIfAborted();
+                    const urlObject = (0, RequestPolicy_1.requestUrl)(currentUrl, options.allowedOrigins);
                     const transport = urlObject.protocol === "https:" ? node_https_1.default : node_http_1.default;
                     const requestOptions = {
                         ...options,
+                        auth,
                         hostname: urlObject.hostname,
                         port: urlObject.port || (urlObject.protocol === "https:" ? 443 : 80),
                         path: urlObject.pathname + urlObject.search,
                         headers: {
-                            ...options.headers,
+                            ...headers,
                             "Accept-Encoding": acceptEncoding,
                         },
                     };
                     delete requestOptions.returnHeaders;
                     delete requestOptions.throwOnError;
-                    delete requestOptions.headers["host"];
+                    delete requestOptions.allowedOrigins;
+                    for (const name of Object.keys(requestOptions.headers))
+                        if (name.toLowerCase() === 'host')
+                            delete requestOptions.headers[name];
                     const req = transport.request(requestOptions, (res) => {
                         const { statusCode, headers } = res;
                         if (statusCode &&
@@ -352,15 +364,24 @@ async function makeRequest(initialUrl, options, timeout = 100000, retries = 3, r
                     result !== null &&
                     result._redirect) {
                     const newLocation = result._redirect;
-                    currentUrl = new node_url_1.URL(newLocation, currentUrl).href;
+                    const next = (0, RequestPolicy_1.requestUrl)(newLocation, options.allowedOrigins, currentUrl);
+                    if (next.origin !== new node_url_1.URL(currentUrl).origin) {
+                        if (options.body !== undefined && options.body !== null)
+                            throw new HttpPolicyError_1.HttpPolicyError('redirect-body');
+                        headers = (0, RequestPolicy_1.publicRedirectHeaders)(headers);
+                        auth = undefined;
+                    }
+                    currentUrl = next.href;
                     redirectCount++;
                     continue;
                 }
                 return result;
             }
-            throw new Error("Too many redirects");
+            throw new HttpPolicyError_1.HttpPolicyError('redirect-limit');
         }
         catch (error) {
+            if (error instanceof HttpPolicyError_1.HttpPolicyError || options.signal?.aborted)
+                throw error;
             if (options.throwOnError && attempt >= retries)
                 throw error;
             const is404 = error.message.includes('status 404');
@@ -368,8 +389,8 @@ async function makeRequest(initialUrl, options, timeout = 100000, retries = 3, r
                 console.error(`Attempt ${attempt + 1}/${retries + 1} failed for ${initialUrl}: ${error.message}`);
             }
             if (attempt < retries) {
-                await delay(retryDelay * Math.pow(2, attempt));
-                currentUrl = initialUrl;
+                await (0, promises_1.setTimeout)(retryDelay * Math.pow(2, attempt), undefined, { signal: options.signal });
+                currentUrl = initial.href;
             }
             else {
                 return undefined;

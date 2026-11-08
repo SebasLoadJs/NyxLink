@@ -2,6 +2,7 @@
   "Connectors",
   "DeezerSource",
   "Filters",
+  "HttpPolicyError",
   "Manager",
   "Node",
   "NodeManager",

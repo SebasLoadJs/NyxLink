@@ -1,5 +1,7 @@
 import { Manager } from "../core/Manager";
 import { encodeTrack, makeRequest } from "../Util";
+import { providerUrl, providerSignal } from "../http/RequestPolicy";
+import { HttpPolicyError } from "../errors/HttpPolicyError";
 import type { ITrack, ITrackInfo, ISpotifyOptions } from "../typings/Interfaces";
 
 const SPOTIFY_API_BASE_URL = "https://api.spotify.com/v1";
@@ -51,7 +53,7 @@ export class SpotifySource {
         return null;
     }
 
-    private async fetchOfficialToken(): Promise<boolean> {
+    private async fetchOfficialToken(signal?: AbortSignal): Promise<boolean> {
         const { clientId, clientSecret } = this.options;
         if (!clientId || !clientSecret) return false;
 
@@ -64,8 +66,9 @@ export class SpotifySource {
                     Authorization: `Basic ${auth}`,
                     "Content-Type": "application/x-www-form-urlencoded",
                 },
-                body: "grant_type=client_credentials",
-            }
+                body: "grant_type=client_credentials", signal: providerSignal(signal),
+                allowedOrigins: ["https://accounts.spotify.com"], throwOnError: true,
+            }, 10000, 0
         );
 
         if (!tokenData?.access_token) {
@@ -77,7 +80,7 @@ export class SpotifySource {
         return true;
     }
 
-    private async ensureTokens(): Promise<boolean> {
+    private async ensureTokens(signal?: AbortSignal): Promise<boolean> {
         if (this.tokenInitialized && this.getActiveToken()) return true;
 
         if (this.options.accessToken) {
@@ -86,13 +89,15 @@ export class SpotifySource {
             return true;
         }
 
-        const success = await this.fetchOfficialToken();
+        const success = await this.fetchOfficialToken(signal);
         this.tokenInitialized = success;
         return success;
     }
 
-    private async apiRequest(path: string): Promise<any | null> {
-        const ok = await this.ensureTokens();
+    private async apiRequest(path: string, signal?: AbortSignal): Promise<any | null> {
+        const url = providerUrl(path, SPOTIFY_API_BASE_URL);
+        signal?.throwIfAborted();
+        const ok = await this.ensureTokens(signal);
         if (!ok) {
             this.manager.emit("debug", "Moonlink.js > Spotify > Tokens not available.");
             return null;
@@ -101,14 +106,13 @@ export class SpotifySource {
         const token = this.getActiveToken();
         if (!token) return null;
 
-        const url = path.startsWith("http") ? path : `${SPOTIFY_API_BASE_URL}${path}`;
         const res = await makeRequest<any>(url, {
-            method: "GET",
+            method: "GET", signal: providerSignal(signal), allowedOrigins: ["https://api.spotify.com"], throwOnError: true,
             headers: {
                 Authorization: `Bearer ${token}`,
                 Accept: "application/json",
             },
-        });
+        }, 10000, 0);
 
         if (!res) {
             this.tokenInitialized = false;
@@ -141,10 +145,10 @@ export class SpotifySource {
         };
     }
 
-    public async search(query: string, options?: { limit?: number }) {
+    public async search(query: string, options?: { limit?: number; signal?: AbortSignal }) {
         const limit = options?.limit ?? this.options.limitLoadSearch ?? 20;
         const data = await this.apiRequest(
-            `/search?q=${encodeURIComponent(query)}&type=track&limit=${limit}&market=${this.options.market ?? "US"}`
+            `/search?q=${encodeURIComponent(query)}&type=track&limit=${limit}&market=${this.options.market ?? "US"}`, options?.signal
         );
 
         if (!data || data.error) {
@@ -162,13 +166,13 @@ export class SpotifySource {
         };
     }
 
-    public async load(rawUrl: string, options?: { limit?: number }) {
+    public async load(rawUrl: string, options?: { limit?: number; signal?: AbortSignal }) {
         const normalized = rawUrl
             .replace(/open\.spotify\.com\/intl-[^/]+\//, "open.spotify.com/")
             .split("?")[0];
 
         if (normalized.startsWith("spsearch:")) {
-            return this.search(normalized.slice(9).trim());
+            return this.search(normalized.slice(9).trim(), options);
         }
 
         if (normalized.startsWith("sprec:")) {
@@ -182,7 +186,7 @@ export class SpotifySource {
 
         switch (link.type) {
             case "track": {
-                const data = await this.apiRequest(`/tracks/${link.id}`);
+                const data = await this.apiRequest(`/tracks/${link.id}`, options?.signal);
                 if (!data || data.error) {
                     return { loadType: "error", data: { message: "Track not found." } };
                 }
@@ -190,9 +194,9 @@ export class SpotifySource {
             }
 
             case "artist": {
-                const artistInfo = await this.apiRequest(`/artists/${link.id}`);
+                const artistInfo = await this.apiRequest(`/artists/${link.id}`, options?.signal);
                 const topTracks = await this.apiRequest(
-                    `/artists/${link.id}/top-tracks?market=${this.options.market ?? "US"}`
+                    `/artists/${link.id}/top-tracks?market=${this.options.market ?? "US"}`, options?.signal
                 );
                 if (!artistInfo || !topTracks?.tracks) {
                     return { loadType: "error", data: { message: "Artist not found." } };
@@ -219,7 +223,7 @@ export class SpotifySource {
                         ? this.options.limitLoadPlaylistPage ?? 100
                         : this.options.limitLoadAlbumPage ?? 50;
 
-                const data = await this.apiRequest(`/${base}/${link.id}?limit=${pageLimit}`);
+                const data = await this.apiRequest(`/${base}/${link.id}?limit=${pageLimit}`, options?.signal);
                 if (!data || data.error) {
                     return { loadType: "error", data: { message: `${link.type} not found.` } };
                 }
@@ -237,8 +241,12 @@ export class SpotifySource {
                         ? this.options.limitLoadPlaylist ?? this.manager.options.search?.playlistLoadLimit
                         : this.options.limitLoadAlbum ?? this.manager.options.search?.playlistLoadLimit);
 
+                const seen = new Set<string>();
                 while (next && (!max || items.length < max)) {
-                    const nextPage = await this.apiRequest(next);
+                    const page = providerUrl(next, SPOTIFY_API_BASE_URL);
+                    if (seen.has(page) || seen.size >= 100) throw new HttpPolicyError("pagination");
+                    seen.add(page);
+                    const nextPage = await this.apiRequest(page, options?.signal);
                     if (!nextPage || nextPage.error) break;
                     const newItems =
                         link.type === "playlist"

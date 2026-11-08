@@ -9,9 +9,11 @@ export declare class DeezerSource {
     private apiRequest;
     search(query: string, options?: {
         limit?: number;
+        signal?: AbortSignal;
     }): Promise<any>;
     load(query: string, options?: {
         limit?: number;
+        signal?: AbortSignal;
     }): Promise<any>;
     private buildTrack;
     resolve(query: string): Promise<any>;

@@ -1,8 +1,9 @@
-import http from "node:http";
 import https from "node:https";
-import { URL, URLSearchParams } from "node:url";
+import { URLSearchParams } from "node:url";
 import { Manager } from "../core/Manager";
 import { encodeTrack, makeRequest } from "../Util";
+import { providerUrl, requestUrl, providerSignal } from "../http/RequestPolicy";
+import { HttpPolicyError } from "../errors/HttpPolicyError";
 import type { ITrack, ITrackInfo, IDeezerOptions } from "../typings/Interfaces";
 
 export class DeezerSource {
@@ -30,15 +31,18 @@ export class DeezerSource {
         );
     }
 
-    private async resolveShortLink(url: string): Promise<string | null> {
+    private async resolveShortLink(url: string, signal?: AbortSignal): Promise<string | null> {
         let current = url.startsWith("http") ? url : `https://${url}`;
-        for (let i = 0; i < 5; i++) {
-            const target = new URL(current);
-            const transport = target.protocol === "https:" ? https : http;
-            const next = await new Promise<string | null>((resolve, reject) => {
-                const req = transport.request(
+        const seen = new Set<string>();
+        for (let i = 0; i <= 5; i++) {
+            signal?.throwIfAborted();
+            const target = requestUrl(current, ["https://dzr.page.link", "https://deezer.com", "https://www.deezer.com"]);
+            if (seen.has(target.href)) throw new HttpPolicyError('redirect-limit');
+            seen.add(target.href);
+            const next = await new Promise<{ url: string; redirected: boolean } | null>((resolve, reject) => {
+                const req = https.request(
                     {
-                        method: "GET",
+                        method: "GET", signal: providerSignal(signal),
                         hostname: target.hostname,
                         port: target.port || (target.protocol === "https:" ? 443 : 80),
                         path: target.pathname + target.search,
@@ -47,17 +51,21 @@ export class DeezerSource {
                     (res) => {
                         const statusCode = res.statusCode ?? 0;
                         const location = res.headers.location;
-                        res.resume();
+                        // Only headers are needed; do not retain an unbounded response stream.
+                        res.destroy();
                         if (statusCode >= 300 && statusCode < 400 && location) {
-                            resolve(new URL(location, current).href);
+                            try { resolve({ url: requestUrl(location, ["https://dzr.page.link", "https://deezer.com", "https://www.deezer.com"], current).href, redirected: true }); }
+                            catch (error) { reject(error); }
                             return;
                         }
-                        resolve(current);
+                        resolve({ url: current, redirected: false });
                     }
                 );
                 req.on("error", reject);
+                req.setTimeout(10000, () => req.destroy(Object.assign(new Error("Provider request timed out"), { code: "ETIMEDOUT" })));
                 req.end();
             }).catch((error) => {
+                if (error instanceof HttpPolicyError || signal?.aborted || error.code === 'ETIMEDOUT') throw error;
                 this.manager.emit(
                     "debug",
                     `Moonlink.js > Deezer > Short link resolve failed: ${(error as Error).message}`
@@ -66,15 +74,15 @@ export class DeezerSource {
             });
 
             if (!next) return null;
-            if (next === current) return current;
-            current = next;
+            if (!next.redirected) return current;
+            current = next.url;
         }
-        return current;
+        throw new HttpPolicyError("redirect-limit");
     }
 
-    private async apiRequest(path: string): Promise<any> {
-        const url = path.startsWith("http") ? path : `https://api.deezer.com${path}`;
-        const res = await makeRequest<any>(url, { method: "GET" });
+    private async apiRequest(path: string, signal?: AbortSignal): Promise<any> {
+        const url = providerUrl(path, "https://api.deezer.com");
+        const res = await makeRequest<any>(url, { method: "GET", signal: providerSignal(signal), allowedOrigins: ["https://api.deezer.com"], throwOnError: true }, 10000, 0);
         if (!res) {
             this.manager.emit("debug", "Moonlink.js > Deezer > API request failed.");
             return null;
@@ -82,20 +90,20 @@ export class DeezerSource {
         return res;
     }
 
-    public async search(query: string, options?: { limit?: number }): Promise<any> {
+    public async search(query: string, options?: { limit?: number; signal?: AbortSignal }): Promise<any> {
         const q = query.startsWith("dzsearch:") ? query.slice(9).trim() : query;
         const limit = options?.limit ?? this.options.maxSearchResults ?? 20;
         const params = new URLSearchParams({ q, limit: String(limit) });
-        const data = await this.apiRequest(`/search?${params}`);
+        const data = await this.apiRequest(`/search?${params}`, options?.signal);
         if (!data?.data?.length) return { loadType: "empty", data: {} };
         const tracks = data.data.map((t: any) => this.buildTrack(t));
         return { loadType: "search", data: tracks };
     }
 
-    public async load(query: string, options?: { limit?: number }): Promise<any> {
+    public async load(query: string, options?: { limit?: number; signal?: AbortSignal }): Promise<any> {
         const shortLink = /^(?:https?:\/\/)?dzr\.page\.link\/[\w-]+$/;
         if (shortLink.test(query)) {
-            const resolved = await this.resolveShortLink(query);
+            const resolved = await this.resolveShortLink(query, options?.signal);
             if (resolved) query = resolved;
         }
 
@@ -106,15 +114,15 @@ export class DeezerSource {
         const [, type, id] = m;
 
         if (type === "track") {
-            const data = await this.apiRequest(`/track/${id}`);
+            const data = await this.apiRequest(`/track/${id}`, options?.signal);
             if (!data) return { loadType: "error", data: { message: "Track not found." } };
             return { loadType: "track", data: this.buildTrack(data) };
         }
 
         if (type === "artist") {
-            const artist = await this.apiRequest(`/artist/${id}`);
+            const artist = await this.apiRequest(`/artist/${id}`, options?.signal);
             const limit = options?.limit ?? this.options.maxArtistTracks ?? 20;
-            const top = await this.apiRequest(`/artist/${id}/top?limit=${limit}`);
+            const top = await this.apiRequest(`/artist/${id}/top?limit=${limit}`, options?.signal);
             if (!artist || !top?.data) {
                 return { loadType: "error", data: { message: "Artist not found." } };
             }
@@ -126,7 +134,7 @@ export class DeezerSource {
         }
 
         const path = type === "album" ? `/album/${id}` : `/playlist/${id}`;
-        const col = await this.apiRequest(path);
+        const col = await this.apiRequest(path, options?.signal);
         if (!col?.tracks?.data) {
             return { loadType: "error", data: { message: `${type} not found.` } };
         }

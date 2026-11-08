@@ -17,12 +17,14 @@ export declare class SpotifySource {
     private buildTrack;
     search(query: string, options?: {
         limit?: number;
+        signal?: AbortSignal;
     }): Promise<{
         loadType: string;
         data: any;
     }>;
     load(rawUrl: string, options?: {
         limit?: number;
+        signal?: AbortSignal;
     }): Promise<{
         loadType: string;
         data: any;
