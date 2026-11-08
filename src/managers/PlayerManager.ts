@@ -5,6 +5,7 @@ import { Structure, validate, delay } from "../Util";
 import { IPlayerConfig } from "../typings/Interfaces";
 import { NodeSelector } from '../nodes/NodeSelector';
 import { NoEligibleNodeError } from '../errors/NoEligibleNodeError';
+import { SnapshotConflictError } from '../database/PlayerSnapshot';
 
 export class PlayerManager {
     public readonly manager: Manager;
@@ -45,6 +46,7 @@ export class PlayerManager {
         }
 
         if (options.node !== undefined) validate(options.node, value => typeof value === 'string' && value.length > 0, 'IPlayerConfig#node must be a non-empty string');
+        if (this.manager.database?.isImportingPlayer(options.guildId)) throw new SnapshotConflictError();
         const node = options.node !== undefined ? this.manager.nodes.nodes.get(options.node) : this.manager.nodes.findNode(options.nodeSelection);
         if (!node) {
             if (options.node !== undefined) throw new NoEligibleNodeError([{ identifier: options.node, reasons: ['not-found'] }]);

@@ -4,6 +4,7 @@ exports.resumeSessionPlayers = resumeSessionPlayers;
 const types_1 = require("../typings/types");
 const PlaybackGuard_1 = require("../players/PlaybackGuard");
 const PlaybackAttempt_1 = require("../players/PlaybackAttempt");
+const PlayerSnapshot_1 = require("../database/PlayerSnapshot");
 const pending = new WeakMap();
 function current(context) {
     const { node } = context;
@@ -86,6 +87,7 @@ async function recover(context, known) {
                     continue;
                 if (storage.node !== undefined && storage.node !== node.identifier)
                     continue;
+                (0, PlayerSnapshot_1.recordRevision)(storage);
                 let player;
                 creating = true;
                 try {

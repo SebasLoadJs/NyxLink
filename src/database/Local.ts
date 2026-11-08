@@ -68,13 +68,28 @@ export class Local extends Memory {
   }
 
   public set<T>(key: string, value: T, log = true): Promise<void> {
+    return this.enqueue(() => this.write(key, value, log));
+  }
+
+  private async write<T>(key: string, value: T, log = true): Promise<void> {
+    if (!key) return;
+    // Validate paths and serialization before either disk or visible state changes.
+    this.parts(key);
+    const entry = JSON.stringify({ op: value === undefined ? 'delete' : 'set', key, value });
+    if (log) await fs.appendFile(this.logPath, `${entry}\n`);
+    await super.set(key, JSON.parse(entry).value);
+  }
+
+  public compareAndSet<T>(key: string, expectedRevision: string | null, value: T | undefined): Promise<boolean> {
     return this.enqueue(async () => {
-      if (!key) return;
-      // Validate paths and serialization before either disk or visible state changes.
       this.parts(key);
-      const entry = JSON.stringify({ op: value === undefined ? 'delete' : 'set', key, value });
-      if (log) await fs.appendFile(this.logPath, `${entry}\n`);
-      await super.set(key, JSON.parse(entry).value);
+      const current = await super.get<{ revision?: string }>(key);
+      if ((current?.revision ?? null) !== expectedRevision) return false;
+      if (value === undefined) {
+        await fs.appendFile(this.logPath, `${JSON.stringify({ op: 'delete', key })}\n`);
+        await super.remove(key);
+      } else await this.write(key, value);
+      return true;
     });
   }
 

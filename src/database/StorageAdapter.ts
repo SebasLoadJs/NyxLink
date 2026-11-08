@@ -10,5 +10,7 @@ export interface StorageAdapter {
     keys(pattern?: string): Promise<string[]>;
     clear(): Promise<void>;
     flush?(): Promise<void>;
+    /** Atomically compare the stored record's revision (null for absent/legacy) and replace/delete it. */
+    compareAndSet?<T>(key: string, expectedRevision: string | null, value: T | undefined): Promise<boolean>;
     shutdown(): Promise<void>;
 }

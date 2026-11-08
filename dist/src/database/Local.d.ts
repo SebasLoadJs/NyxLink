@@ -12,6 +12,8 @@ export declare class Local extends Memory {
     }): Promise<void>;
     private enqueue;
     set<T>(key: string, value: T, log?: boolean): Promise<void>;
+    private write;
+    compareAndSet<T>(key: string, expectedRevision: string | null, value: T | undefined): Promise<boolean>;
     remove(key: string, log?: boolean): Promise<boolean>;
     clear(): Promise<void>;
     get<T>(key: string): Promise<T | undefined>;

@@ -81,14 +81,30 @@ class Local extends Memory_1.Memory {
         return result;
     }
     set(key, value, log = true) {
+        return this.enqueue(() => this.write(key, value, log));
+    }
+    async write(key, value, log = true) {
+        if (!key)
+            return;
+        this.parts(key);
+        const entry = JSON.stringify({ op: value === undefined ? 'delete' : 'set', key, value });
+        if (log)
+            await node_fs_1.promises.appendFile(this.logPath, `${entry}\n`);
+        await super.set(key, JSON.parse(entry).value);
+    }
+    compareAndSet(key, expectedRevision, value) {
         return this.enqueue(async () => {
-            if (!key)
-                return;
             this.parts(key);
-            const entry = JSON.stringify({ op: value === undefined ? 'delete' : 'set', key, value });
-            if (log)
-                await node_fs_1.promises.appendFile(this.logPath, `${entry}\n`);
-            await super.set(key, JSON.parse(entry).value);
+            const current = await super.get(key);
+            if ((current?.revision ?? null) !== expectedRevision)
+                return false;
+            if (value === undefined) {
+                await node_fs_1.promises.appendFile(this.logPath, `${JSON.stringify({ op: 'delete', key })}\n`);
+                await super.remove(key);
+            }
+            else
+                await this.write(key, value);
+            return true;
         });
     }
     remove(key, log = true) {

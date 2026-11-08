@@ -12,6 +12,7 @@ const Track_1 = require("./Track");
 const TrackCodec_1 = require("../tracks/TrackCodec");
 const TrackResolver_1 = require("../tracks/TrackResolver");
 const VoiceReceiver_1 = require("./VoiceReceiver");
+const PlayerSnapshot_1 = require("../database/PlayerSnapshot");
 class Player {
     manager;
     node;
@@ -265,6 +266,16 @@ class Player {
         const operation = this.manager.database.set(dbPath, data);
         void operation.catch(error => this.manager.emit('debug', `NyxLink > Storage > Write failed for ${dbPath}: ${error.message}`));
         return operation;
+    }
+    exportSnapshot() {
+        return this.commands.enqueue(async () => {
+            if (this.destroyed)
+                throw new Error('Cannot export a destroyed player');
+            const record = await this.manager.database.get(`players.${this.guildId}`);
+            if (this.destroyed)
+                throw new Error('Cannot export a destroyed player');
+            return PlayerSnapshot_1.PlayerSnapshotCodec.capture(this, (0, PlayerSnapshot_1.recordRevision)(record));
+        });
     }
     assertNodeLinkFeature(feature) {
         this.node.assertFeature(feature);

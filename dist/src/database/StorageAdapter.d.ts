@@ -8,5 +8,6 @@ export interface StorageAdapter {
     keys(pattern?: string): Promise<string[]>;
     clear(): Promise<void>;
     flush?(): Promise<void>;
+    compareAndSet?<T>(key: string, expectedRevision: string | null, value: T | undefined): Promise<boolean>;
     shutdown(): Promise<void>;
 }

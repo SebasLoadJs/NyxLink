@@ -1,4 +1,4 @@
-import { Manager, Player, Node, Track, Queue, Rest, Filters, SearchResult, NodeManager, PlayerManager, WebSocket, Connectors, VoiceReceiver, YouTubeLiveChat, SpotifySource, DeezerSource, Logger, NodeSelector, NodeHealthMonitor, NodeFailover, BackendDetector, HttpError, FeatureUnavailableError, NoEligibleNodeError, NodeCircuitBreaker, CircuitOpenError, type CircuitState, type CircuitBreakerOptions, type NodeRequirements, type NodeSelectionOptions, type NodeRejection, type FailoverResult, type StorageAdapter, type TrackSnapshot, TrackCodec, TrackResolver, TrackResolutionError, VoicePacketHandler, Memory, Local, version } from '../../dist';
+import { Manager, Player, Node, Track, Queue, Rest, Filters, SearchResult, NodeManager, PlayerManager, WebSocket, Connectors, VoiceReceiver, YouTubeLiveChat, SpotifySource, DeezerSource, Logger, NodeSelector, NodeHealthMonitor, NodeFailover, BackendDetector, HttpError, FeatureUnavailableError, NoEligibleNodeError, NodeCircuitBreaker, CircuitOpenError, type CircuitState, type CircuitBreakerOptions, type NodeRequirements, type NodeSelectionOptions, type NodeRejection, type FailoverResult, type StorageAdapter, type TrackSnapshot, TrackCodec, TrackResolver, TrackResolutionError, VoicePacketHandler, Memory, Local, version, PlayerSnapshotCodec, SnapshotConflictError, SnapshotValidationError, type PlayerSnapshot } from '../../dist';
 
 declare const manager: Manager;
 declare const player: Player;
@@ -92,3 +92,13 @@ const restart: Promise<boolean> = player.restart({ destroyOnFailure: false, star
 const filterPayload: ReturnType<Filters['toPayload']> = player.filters.toPayload();
 const cleanup: Promise<void> = node.rest.destroyPlayer(player.guildId, { timeoutMs: 10000, signal: new AbortController().signal });
 void [restart, transfer, filterPayload, cleanup];
+const backup: Promise<PlayerSnapshot> = player.exportSnapshot();
+const persisted: Promise<PlayerSnapshot | undefined> = manager.database.exportPlayer(player.guildId);
+const imported: Promise<PlayerSnapshot> = manager.database.importPlayer('{}', null);
+const parsed: PlayerSnapshot = PlayerSnapshotCodec.parse('{}');
+const compare: Promise<boolean> = new Memory().compareAndSet('record', null, { revision: 'opaque' });
+// @ts-expect-error Snapshot import requires an explicit expected revision.
+manager.database.importPlayer(parsed);
+const conflictCode: 'SNAPSHOT_CONFLICT' = new SnapshotConflictError().code;
+const validationCode: 'INVALID_SNAPSHOT' = new SnapshotValidationError('Invalid').code;
+void [backup, persisted, imported, parsed, compare, conflictCode, validationCode];

@@ -316,6 +316,22 @@ En las solicitudes HTTP protegidas, un HTTP 429 o 503 con [`Retry-After`](https:
 
 `database: { type: 'memory' }` mantiene el estado en el proceso. `database: { type: 'local' }` utiliza persistencia en disco y debe usarse con un solo proceso por directorio. El contrato `StorageAdapter` permite integrar otro proveedor.
 
+`await player.exportSnapshot()` captura el estado después de las órdenes pendientes. Devuelve `{ schemaVersion: 1, revision, data }` con configuración, pista, cola, historial y filtros como datos JSON independientes. Conserva metadata y backend de cada pista; excluye los campos de conexión de voz. La metadata proporcionada por tu aplicación no se redacta automáticamente.
+
+```js
+const backupJSON = JSON.stringify(await player.exportSnapshot());
+
+// En otro inicio, antes de crear el reproductor de esa guild:
+const stored = await manager.database.exportPlayer(guildId);
+const imported = await manager.database.importPlayer(backupJSON, stored?.revision ?? null);
+```
+
+La importación reemplaza el registro almacenado; no crea un reproductor ni inicia voz o audio. Requiere indicar la revisión esperada del destino y rechaza guilds activas en ese manager. `revision` es un identificador opaco: compara igualdad, no orden. Cada escritura o borrado de campos en `players.<guildId>` cambia la revisión. Un conflicto devuelve `SnapshotConflictError` (`SNAPSHOT_CONFLICT`); relee el estado antes de decidir si corresponde reintentar. Las escrituras ordinarias pueden rebasar un conflicto hasta ocho veces.
+
+`PlayerSnapshotCodec.parse()` valida un objeto o JSON versionado; `fromRecord()` admite registros heredados sin versión y les asigna revisión `null`. Un formato futuro o inválido devuelve `SnapshotValidationError` (`INVALID_SNAPSHOT`); las sesiones reanudadas tampoco adoptan formatos futuros. La copia JSON tiene un límite de 16 MiB. Las lecturas de registros de player devuelven copias; modificar una copia no guarda cambios.
+
+`StorageAdapter.compareAndSet()` es opcional. `Memory` y `Local` implementan comparación y reemplazo atómicos dentro de su ámbito; `Local` sigue requiriendo un solo proceso por directorio. Un adaptador antiguo sin ese método conserva la serialización de su manager. Para compartir almacenamiento entre procesos, el adaptador debe implementar CAS en el servicio de almacenamiento. Esto no aporta leases ni exclusión de controladores activos. Las escrituras directas al proveedor o reemplazos de la colección completa quedan fuera del contrato de revisiones por guild. Los reemplazos completos generan más datos de WAL que una actualización de campo. Para añadir muchas pistas, usa `player.queue.add(tracks)` en un solo lote: cada llamada guarda una copia de la cola.
+
 El logger está desactivado por defecto. `logging` activa la salida de Consola y `banner: true` muestra el banner de terminal. Los eventos `debug` contienen información técnica y pueden incluir credenciales: revisa su contenido antes de compartirlos.
 
 </details>
