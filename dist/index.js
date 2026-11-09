@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Connectors = exports.WebSocket = exports.PlayerManager = exports.NodeManager = exports.SearchResult = exports.DeezerSource = exports.SpotifySource = exports.YouTubeLiveChat = exports.VoiceReceiver = exports.Track = exports.Filters = exports.Rest = exports.Queue = exports.Player = exports.Node = exports.Manager = exports.VoicePacketHandler = exports.TrackResolutionError = exports.TrackResolver = exports.TrackCodec = exports.Local = exports.Memory = exports.HttpError = exports.NoEligibleNodeError = exports.FeatureUnavailableError = exports.NodeFailover = exports.CircuitOpenError = exports.NodeCircuitBreaker = exports.NodeHealthMonitor = exports.NodeSelector = exports.NodeLinkAdapter = exports.LavalinkAdapter = exports.BackendDetector = exports.BackendAdapter = exports.formatFailover = exports.formatSystemStatus = exports.formatBox = exports.formatEntry = exports.createBanner = exports.ConsoleReporter = exports.Logger = exports.version = exports.LoadType = exports.VoiceConnectionState = exports.NodeState = void 0;
+exports.Connectors = exports.WebSocket = exports.PlayerManager = exports.NodeManager = exports.SearchResult = exports.DeezerSource = exports.SpotifySource = exports.YouTubeLiveChat = exports.VoiceReceiver = exports.Track = exports.Filters = exports.Rest = exports.Queue = exports.Player = exports.Node = exports.Manager = exports.VoicePacketHandler = exports.TrackResolutionError = exports.TrackResolver = exports.TrackCodec = exports.SnapshotValidationError = exports.SnapshotConflictError = exports.PlayerSnapshotCodec = exports.Local = exports.Memory = exports.HttpError = exports.NoEligibleNodeError = exports.FeatureUnavailableError = exports.NodeFailover = exports.CircuitOpenError = exports.NodeCircuitBreaker = exports.NodeHealthMonitor = exports.NodeSelector = exports.NodeLinkAdapter = exports.LavalinkAdapter = exports.BackendDetector = exports.BackendAdapter = exports.formatFailover = exports.formatSystemStatus = exports.formatBox = exports.formatEntry = exports.createBanner = exports.ConsoleReporter = exports.Logger = exports.version = exports.LoadType = exports.VoiceConnectionState = exports.NodeState = void 0;
 var types_1 = require("./src/typings/types");
 Object.defineProperty(exports, "NodeState", { enumerable: true, get: function () { return types_1.NodeState; } });
 Object.defineProperty(exports, "VoiceConnectionState", { enumerable: true, get: function () { return types_1.VoiceConnectionState; } });
@@ -42,6 +42,10 @@ var Memory_1 = require("./src/database/Memory");
 Object.defineProperty(exports, "Memory", { enumerable: true, get: function () { return Memory_1.Memory; } });
 var Local_1 = require("./src/database/Local");
 Object.defineProperty(exports, "Local", { enumerable: true, get: function () { return Local_1.Local; } });
+var PlayerSnapshot_1 = require("./src/database/PlayerSnapshot");
+Object.defineProperty(exports, "PlayerSnapshotCodec", { enumerable: true, get: function () { return PlayerSnapshot_1.PlayerSnapshotCodec; } });
+Object.defineProperty(exports, "SnapshotConflictError", { enumerable: true, get: function () { return PlayerSnapshot_1.SnapshotConflictError; } });
+Object.defineProperty(exports, "SnapshotValidationError", { enumerable: true, get: function () { return PlayerSnapshot_1.SnapshotValidationError; } });
 var TrackCodec_1 = require("./src/tracks/TrackCodec");
 Object.defineProperty(exports, "TrackCodec", { enumerable: true, get: function () { return TrackCodec_1.TrackCodec; } });
 var TrackResolver_1 = require("./src/tracks/TrackResolver");

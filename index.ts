@@ -23,6 +23,8 @@ export { HttpError } from './src/errors/HttpError';
 export type { StorageAdapter } from './src/database/StorageAdapter';
 export { Memory } from './src/database/Memory';
 export { Local } from './src/database/Local';
+export { PlayerSnapshotCodec, SnapshotConflictError, SnapshotValidationError } from './src/database/PlayerSnapshot';
+export type { PlayerSnapshot, PlayerSnapshotData } from './src/database/PlayerSnapshot';
 export { TrackCodec } from './src/tracks/TrackCodec';
 export type { TrackSnapshot } from './src/tracks/TrackCodec';
 export { TrackResolver, TrackResolutionError } from './src/tracks/TrackResolver';

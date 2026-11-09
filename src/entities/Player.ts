@@ -15,6 +15,7 @@ import { Track } from "./Track";
 import { TrackCodec } from '../tracks/TrackCodec';
 import { TrackResolver } from '../tracks/TrackResolver';
 import { VoiceReceiver, VoiceReceiverOptions } from "./VoiceReceiver";
+import { PlayerSnapshotCodec, recordRevision, type PlayerSnapshot } from '../database/PlayerSnapshot';
 
 export class Player {
     public readonly manager: Manager;
@@ -295,6 +296,15 @@ export class Player {
         // Background writes report failures; callers that await still receive rejection.
         void operation.catch(error => this.manager.emit('debug', `NyxLink > Storage > Write failed for ${dbPath}: ${error.message}`));
         return operation;
+    }
+
+    public exportSnapshot(): Promise<PlayerSnapshot> {
+        return this.commands.enqueue(async () => {
+            if (this.destroyed) throw new Error('Cannot export a destroyed player');
+            const record = await this.manager.database.get(`players.${this.guildId}`);
+            if (this.destroyed) throw new Error('Cannot export a destroyed player');
+            return PlayerSnapshotCodec.capture(this, recordRevision(record));
+        });
     }
 
     private assertNodeLinkFeature(feature: string): void {

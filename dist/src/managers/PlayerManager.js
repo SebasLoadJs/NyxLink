@@ -4,6 +4,7 @@ exports.PlayerManager = void 0;
 const Util_1 = require("../Util");
 const NodeSelector_1 = require("../nodes/NodeSelector");
 const NoEligibleNodeError_1 = require("../errors/NoEligibleNodeError");
+const PlayerSnapshot_1 = require("../database/PlayerSnapshot");
 class PlayerManager {
     manager;
     players = new Map();
@@ -37,6 +38,8 @@ class PlayerManager {
         }
         if (options.node !== undefined)
             (0, Util_1.validate)(options.node, value => typeof value === 'string' && value.length > 0, 'IPlayerConfig#node must be a non-empty string');
+        if (this.manager.database?.isImportingPlayer(options.guildId))
+            throw new PlayerSnapshot_1.SnapshotConflictError();
         const node = options.node !== undefined ? this.manager.nodes.nodes.get(options.node) : this.manager.nodes.findNode(options.nodeSelection);
         if (!node) {
             if (options.node !== undefined)

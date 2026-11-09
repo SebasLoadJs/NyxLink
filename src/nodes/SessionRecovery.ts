@@ -4,6 +4,7 @@ import type { IPlayerConfig, IRESTGetPlayers } from '../typings/Interfaces';
 import { NodeState } from '../typings/types';
 import { playbackGuard } from '../players/PlaybackGuard';
 import { playbackAttempt } from '../players/PlaybackAttempt';
+import { recordRevision } from '../database/PlayerSnapshot';
 
 type Context = { node: Node; sessionId: string; socket: Node['socket'] };
 type Snapshot = { player: Player; ticket: number; track: Player['current']; position?: number; paused: boolean; playing: boolean; channel: string };
@@ -77,6 +78,7 @@ async function recover(context: Context, known: Map<string, Snapshot>): Promise<
                 if (!current(context)) return;
                 if (!storage || touched.has(row.guildId) || manager.players.has(row.guildId)) continue;
                 if (storage.node !== undefined && storage.node !== node.identifier) continue;
+                recordRevision(storage);
                 let player: Player;
                 creating = true;
                 try { player = manager.players.restore({ ...storage, guildId: row.guildId, volume: row.volume, node: node.identifier }); }

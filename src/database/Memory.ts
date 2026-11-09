@@ -15,7 +15,7 @@ export class Memory implements StorageAdapter {
     return parts;
   }
 
-  public async get<T>(key: string): Promise<T | undefined> {
+  protected read<T>(key: string): T | undefined {
     if (!key) return undefined;
     let value: any = this.store;
     let parts: string[];
@@ -27,7 +27,21 @@ export class Memory implements StorageAdapter {
     return value as T;
   }
 
-  public async set<T>(key: string, value: T): Promise<void> {
+  public async get<T>(key: string): Promise<T | undefined> { return this.read<T>(key); }
+
+  public async compareAndSet<T>(key: string, expectedRevision: string | null, value: T | undefined): Promise<boolean> {
+    this.parts(key);
+    const current = this.read<{ revision?: string }>(key);
+    if ((current?.revision ?? null) !== expectedRevision) return false;
+    // No await between comparison and mutation: concurrent managers share this atomic step.
+    if (value === undefined) this.removeValue(key);
+    else this.storeValue(key, value);
+    return true;
+  }
+
+  public async set<T>(key: string, value: T): Promise<void> { this.storeValue(key, value); }
+
+  protected storeValue<T>(key: string, value: T): void {
     if (!key) return;
     const parts = this.parts(key);
     let current = this.store;
@@ -40,7 +54,9 @@ export class Memory implements StorageAdapter {
 
   public async has(key: string): Promise<boolean> { return await this.get(key) !== undefined; }
 
-  public async remove(key: string): Promise<boolean> {
+  public async remove(key: string): Promise<boolean> { return this.removeValue(key); }
+
+  protected removeValue(key: string): boolean {
     if (!key) return false;
     const parts = this.parts(key);
     let current: any = this.store;

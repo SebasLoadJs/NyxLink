@@ -11,7 +11,7 @@ class Memory {
         }
         return parts;
     }
-    async get(key) {
+    read(key) {
         if (!key)
             return undefined;
         let value = this.store;
@@ -29,7 +29,20 @@ class Memory {
         }
         return value;
     }
-    async set(key, value) {
+    async get(key) { return this.read(key); }
+    async compareAndSet(key, expectedRevision, value) {
+        this.parts(key);
+        const current = this.read(key);
+        if ((current?.revision ?? null) !== expectedRevision)
+            return false;
+        if (value === undefined)
+            this.removeValue(key);
+        else
+            this.storeValue(key, value);
+        return true;
+    }
+    async set(key, value) { this.storeValue(key, value); }
+    storeValue(key, value) {
         if (!key)
             return;
         const parts = this.parts(key);
@@ -42,7 +55,8 @@ class Memory {
         current[parts.at(-1)] = value;
     }
     async has(key) { return await this.get(key) !== undefined; }
-    async remove(key) {
+    async remove(key) { return this.removeValue(key); }
+    removeValue(key) {
         if (!key)
             return false;
         const parts = this.parts(key);

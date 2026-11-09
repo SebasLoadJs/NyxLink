@@ -10,6 +10,7 @@ import { Filters } from "./Filters";
 import { Voice } from "./Voice";
 import { Track } from "./Track";
 import { VoiceReceiver, VoiceReceiverOptions } from "./VoiceReceiver";
+import { type PlayerSnapshot } from '../database/PlayerSnapshot';
 export declare class Player {
     readonly manager: Manager;
     node: Node;
@@ -64,6 +65,7 @@ export declare class Player {
     set(key: string, value: unknown): this;
     get<T>(key: string): T | undefined;
     updateData<T>(path?: string, data?: T): Promise<void>;
+    exportSnapshot(): Promise<PlayerSnapshot>;
     private assertNodeLinkFeature;
     private resolveEncodedTrack;
     private sendPlayerUpdate;
