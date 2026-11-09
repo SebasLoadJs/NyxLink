@@ -244,6 +244,11 @@ const configuredManager = new Manager({
 - El fallback se aplica a búsquedas del backend cuando el resultado está vacío o contiene un error de carga. Una URL se envía intacta y los errores HTTP, incluido 429, se propagan.
 - La caché es opcional y pertenece al manager: aplica TTL, limita entradas y asigna el requester al devolver cada resultado.
 - Las fuentes nativas y los resolvers personalizados no comparten esa caché. Un `signal` permite cancelar la espera; los resolvers personalizados deben cooperar para cancelar su propio tráfico.
+- `search.timeoutMs` limita la operación completa: resolución nativa, resolver personalizado y fallbacks comparten el mismo plazo. Su vencimiento rechaza con código `ETIMEDOUT`. Las fuentes Spotify/Deezer reciben la cancelación y cada petición HTTP nativa tiene además un límite de 10 segundos sin reintentos automáticos.
+
+Las APIs nativas solo aceptan sus orígenes HTTPS oficiales. Spotify limita la paginación a 100 páginas adicionales y rechaza URLs repetidas. Los enlaces cortos de Deezer solo siguen orígenes HTTPS de Deezer y hasta cinco redirecciones. Una URL o redirección bloqueada rechaza con `HttpPolicyError` (`HTTP_POLICY_REJECTED`), sin incluir la URL en ese error.
+
+El helper HTTP elimina `Authorization`, `Proxy-Authorization`, `Cookie`, `Cookie2` y la autenticación básica de opciones al cambiar de origen; no vuelve a adjuntarlos si la cadena regresa al origen inicial. Rechaza redirecciones a otro origen cuando hay un body. Estas protecciones no controlan las URLs, redirecciones ni la resolución DNS que ejecuta un servidor de audio remoto: configura también su política de red.
 
 </details>
 

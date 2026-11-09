@@ -33,11 +33,13 @@ export declare function makeRequest<T = any>(initialUrl: string, options: http.R
     body?: any;
     returnHeaders: true;
     throwOnError?: boolean;
+    allowedOrigins?: readonly string[];
 }, timeout?: number, retries?: number, retryDelay?: number, maxRedirects?: number): Promise<ResponseWithHeaders<T> | undefined>;
 export declare function makeRequest<T = any>(initialUrl: string, options: http.RequestOptions & {
     body?: any;
     returnHeaders?: false;
     throwOnError?: boolean;
+    allowedOrigins?: readonly string[];
 }, timeout?: number, retries?: number, retryDelay?: number, maxRedirects?: number): Promise<T | undefined>;
 export type StreamResponse = {
     stream: http.IncomingMessage;

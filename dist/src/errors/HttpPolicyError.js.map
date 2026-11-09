@@ -1,0 +1,1 @@
+{"version":3,"file":"HttpPolicyError.js","sourceRoot":"","sources":["../../../src/errors/HttpPolicyError.ts"],"names":[],"mappings":";;;AAGA,MAAa,eAAgB,SAAQ,KAAK;IAEV;IADZ,IAAI,GAAG,sBAAsB,CAAC;IAC9C,YAA4B,MAAwB;QAChD,KAAK,CAAC,4BAA4B,MAAM,SAAS,CAAC,CAAC;QAD3B,WAAM,GAAN,MAAM,CAAkB;QAEhD,IAAI,CAAC,IAAI,GAAG,iBAAiB,CAAC;IAClC,CAAC;CACJ;AAND,0CAMC"}

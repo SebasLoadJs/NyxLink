@@ -50,9 +50,12 @@ export class SearchService {
         if (!query || typeof query !== 'object' || Array.isArray(query)) throw new TypeError('Search options must be an object');
         if (typeof query.query !== 'string' || !query.query.trim()) throw new TypeError('Search query must be a non-empty string');
         if (query.source !== undefined && typeof query.source !== 'string') throw new TypeError('Search source must be a string');
+        const timeoutMs = this.manager.options.search?.timeoutMs ?? 10000;
+        if (!Number.isFinite(timeoutMs) || timeoutMs < 1 || timeoutMs > 120000) throw new TypeError("Search timeoutMs must be 1..120000");
         const controller = new AbortController();
         const signal = query.signal ? AbortSignal.any([controller.signal, query.signal]) : controller.signal;
         signal.throwIfAborted();
+        const timer = setTimeout(() => controller.abort(Object.assign(new Error("Search timed out"), { code: "ETIMEDOUT" })), timeoutMs);
         this.pending.add(controller);
         try {
             const native = await this.wait(this.native({ ...query, signal }), signal);
@@ -64,8 +67,6 @@ export class SearchService {
             const node = query.node ? this.manager.nodes.nodes.get(query.node) : this.manager.nodes.findNode();
             if (!node || node.destroyed || !node.connected) throw new Error('No available nodes for searching');
             const options = this.manager.options.search ?? {};
-            const timeoutMs = options.timeoutMs ?? 10000;
-            if (!Number.isFinite(timeoutMs) || timeoutMs < 1 || timeoutMs > 120000) throw new TypeError('Search timeoutMs must be 1..120000');
             const fallback = options.fallbackPlatforms ?? [];
             if (!Array.isArray(fallback) || fallback.length > 3 || fallback.some(source => typeof source !== 'string' || !source)) throw new TypeError('Search fallbackPlatforms requires at most three source names');
             let isUrl = false;
@@ -107,6 +108,6 @@ export class SearchService {
             }
             this.manager.emit('debug', `Moonlink.js > Manager <- Search result for query "${query.query}". LoadType: ${response.loadType}`);
             return this.present(response, query, node);
-        } finally { this.pending.delete(controller); }
+        } finally { clearTimeout(timer); this.pending.delete(controller); }
     }
 }

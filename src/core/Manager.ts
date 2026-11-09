@@ -293,12 +293,12 @@ export class Manager extends EventEmitter<IManagerEvents> {
 
         const spotify = this.getSpotifySource();
         if (spotify && spotify.match(query)) {
-            return spotify.load(query);
+            return spotify.load(query, { signal: options.signal });
         }
 
         const deezer = this.getDeezerSource();
         if (deezer && deezer.match(query)) {
-            return deezer.load(query);
+            return deezer.load(query, { signal: options.signal });
         }
 
         return null;

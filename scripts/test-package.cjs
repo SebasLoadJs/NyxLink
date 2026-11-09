@@ -75,7 +75,7 @@ async function main() {
     const esm = run(process.execPath, ['esm.mjs'], consumer);
     assert.equal(esm.stdout, ''); assert.equal(esm.stderr, '');
     checks.push('ESM named imports and lifecycle');
-    const fixture = (await fs.readFile(path.join(root, 'tests/types/public-api.ts'), 'utf8')).replace("'../../dist'", specifier);
+    const fixture = (await fs.readFile(path.join(root, 'tests/types/public-api.ts'), 'utf8')).replaceAll("'../../dist'", specifier);
     for (const extension of ['cts', 'mts']) await fs.writeFile(path.join(consumer, `consumer.${extension}`), fixture);
     const tsc = path.join(consumer, 'node_modules/typescript/bin/tsc');
     run(process.execPath, [tsc, '--noEmit', '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', 'consumer.cts', 'consumer.mts'], consumer);

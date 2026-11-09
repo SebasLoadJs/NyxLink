@@ -7,6 +7,9 @@ import zlib from "node:zlib";
 import { URL } from "node:url"; 
 import type { ITrack, ITrackInfo } from "./typings/Interfaces";
 import { HttpError } from './errors/HttpError';
+import { HttpPolicyError } from './errors/HttpPolicyError';
+import { requestUrl, requestHeaders, publicRedirectHeaders } from './http/RequestPolicy';
+import { setTimeout as retryWait } from 'node:timers/promises';
 
 export const structures: Record<string, any> = {};
 
@@ -241,7 +244,7 @@ export type ResponseWithHeaders<T> = {
 
 export function makeRequest<T = any>(
   initialUrl: string,
-  options: http.RequestOptions & { body?: any; returnHeaders: true; throwOnError?: boolean },
+  options: http.RequestOptions & { body?: any; returnHeaders: true; throwOnError?: boolean; allowedOrigins?: readonly string[] },
   timeout?: number,
   retries?: number,
   retryDelay?: number,
@@ -250,7 +253,7 @@ export function makeRequest<T = any>(
 
 export function makeRequest<T = any>(
   initialUrl: string,
-  options: http.RequestOptions & { body?: any; returnHeaders?: false; throwOnError?: boolean },
+  options: http.RequestOptions & { body?: any; returnHeaders?: false; throwOnError?: boolean; allowedOrigins?: readonly string[] },
   timeout?: number,
   retries?: number,
   retryDelay?: number,
@@ -259,7 +262,7 @@ export function makeRequest<T = any>(
 
 export async function makeRequest<T = any>(
   initialUrl: string,
-  options: http.RequestOptions & { body?: any; returnHeaders?: boolean; throwOnError?: boolean },
+  options: http.RequestOptions & { body?: any; returnHeaders?: boolean; throwOnError?: boolean; allowedOrigins?: readonly string[] },
   timeout = 100000,
   retries = 3,
   retryDelay = 1000,
@@ -272,31 +275,38 @@ export async function makeRequest<T = any>(
   const acceptEncoding = supportsZstd
     ? "gzip, deflate, br, zstd"
     : "gzip, deflate, br";
-  let currentUrl = initialUrl;
+  const initial = requestUrl(initialUrl, options.allowedOrigins);
+  let currentUrl = initial.href;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
+      options.signal?.throwIfAborted();
       let redirectCount = 0;
+      let headers = requestHeaders(options.headers);
+      let auth = options.auth;
 
       while (redirectCount <= maxRedirects) {
         const result = await new Promise<T | { _redirect: string } | ResponseWithHeaders<T>>
           ((resolve, reject) => {
-            const urlObject = new URL(currentUrl);
+            options.signal?.throwIfAborted();
+            const urlObject = requestUrl(currentUrl, options.allowedOrigins);
             const transport = urlObject.protocol === "https:" ? https : http;
 
             const requestOptions: http.RequestOptions = {
               ...options,
+              auth,
               hostname: urlObject.hostname,
               port: urlObject.port || (urlObject.protocol === "https:" ? 443 : 80),
               path: urlObject.pathname + urlObject.search,
               headers: {
-                ...options.headers,
+                ...headers,
                 "Accept-Encoding": acceptEncoding,
               },
             };
             delete (requestOptions as { returnHeaders?: boolean }).returnHeaders;
             delete (requestOptions as { throwOnError?: boolean }).throwOnError;
-            delete requestOptions.headers["host"];
+            delete (requestOptions as { allowedOrigins?: readonly string[] }).allowedOrigins;
+            for (const name of Object.keys(requestOptions.headers)) if (name.toLowerCase() === 'host') delete requestOptions.headers[name];
 
             const req = transport.request(requestOptions, (res) => {
               const { statusCode, headers } = res;
@@ -449,7 +459,13 @@ export async function makeRequest<T = any>(
           (result as any)._redirect
         ) {
           const newLocation = (result as any)._redirect;
-          currentUrl = new URL(newLocation, currentUrl).href;
+          const next = requestUrl(newLocation, options.allowedOrigins, currentUrl);
+          if (next.origin !== new URL(currentUrl).origin) {
+            if (options.body !== undefined && options.body !== null) throw new HttpPolicyError('redirect-body');
+            headers = publicRedirectHeaders(headers);
+            auth = undefined;
+          }
+          currentUrl = next.href;
           redirectCount++;
           continue;
         }
@@ -457,8 +473,9 @@ export async function makeRequest<T = any>(
         return result as T;
       }
 
-      throw new Error("Too many redirects");
+      throw new HttpPolicyError('redirect-limit');
     } catch (error) {
+      if (error instanceof HttpPolicyError || options.signal?.aborted) throw error;
       if (options.throwOnError && attempt >= retries) throw error;
       const is404 = (error as Error).message.includes('status 404');
       
@@ -471,8 +488,8 @@ export async function makeRequest<T = any>(
       }
 
       if (attempt < retries) {
-        await delay(retryDelay * Math.pow(2, attempt));
-        currentUrl = initialUrl;
+        await retryWait(retryDelay * Math.pow(2, attempt), undefined, { signal: options.signal });
+        currentUrl = initial.href;
       } else {
         return undefined;
       }
