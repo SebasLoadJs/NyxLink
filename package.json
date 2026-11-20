@@ -1,6 +1,6 @@
 {
   "name": "nyxlink",
-  "version": "0.1.0-dev.2",
+  "version": "0.1.0-dev.3",
   "description": "NyxLink — Lavalink v4 and NodeLink client for Discord bots (development)",
   "keywords": [
     "nyxlink",
@@ -28,9 +28,9 @@
     "test:extensions": "pnpm run build && node scripts/test-extensions.cjs",
     "test:coverage": "pnpm run build && node --test --experimental-test-coverage --test-coverage-exclude='tests/**' tests/*.test.cjs"
   },
-  "homepage": "https://github.com/melodiabl/NyxLink#readme",
+  "homepage": "https://github.com/SebasLoadJs/NyxLink#readme",
   "bugs": {
-    "url": "https://github.com/melodiabl/NyxLink/issues"
+    "url": "https://github.com/SebasLoadJs/NyxLink/issues"
   },
   "license": "OSL-3.0",
   "contributors": [
@@ -38,7 +38,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/melodiabl/NyxLink.git"
+    "url": "https://github.com/SebasLoadJs/NyxLink.git"
   },
   "engines": {
     "node": ">=22.12.0"

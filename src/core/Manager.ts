@@ -57,8 +57,8 @@ export class Manager extends EventEmitter<IManagerEvents> {
         this.send = config.send || null;
         
         this.options = { 
-            clientName: `NyxLink/${version} (https://github.com/melodiabl/NyxLink)`,
-            userAgent: `NyxLink/${version} (https://github.com/melodiabl/NyxLink)`,
+            clientName: `NyxLink/${version} (https://github.com/SebasLoadJs/NyxLink)`,
+            userAgent: `NyxLink/${version} (https://github.com/SebasLoadJs/NyxLink)`,
             noReplace: false,
             resume: true,
             resumeTimeout: 60000,

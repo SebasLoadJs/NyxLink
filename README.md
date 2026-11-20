@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/melodiabl/NyxLink/v0.1.0-dev.2/assets/nyxlink_banner.png" alt="NyxLink — A modern Lavalink &amp; NodeLink client for Discord bots" width="100%">
+  <img src="https://raw.githubusercontent.com/SebasLoadJs/NyxLink/v0.1.0-dev.2/assets/nyxlink_banner.png" alt="NyxLink — A modern Lavalink &amp; NodeLink client for Discord bots" width="100%">
 </p>
 
 <h1 align="center">NyxLink</h1>
@@ -12,8 +12,8 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/nyxlink/v/0.1.0-dev.2"><img src="https://img.shields.io/npm/v/nyxlink/dev?style=flat-square&amp;color=818cf8&amp;label=npm%20dev" alt="Versión npm del canal dev"></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-%3E%3D22.12.0-43853d?style=flat-square" alt="Node.js 22.12 o superior"></a>
-  <a href="https://github.com/melodiabl/NyxLink/actions/workflows/pr.yml"><img src="https://github.com/melodiabl/NyxLink/actions/workflows/pr.yml/badge.svg?branch=v5.2" alt="Estado de CI"></a>
-  <a href="https://github.com/melodiabl/NyxLink/blob/v5.2/dist/index.d.ts"><img src="https://img.shields.io/badge/TypeScript-types%20included-3178c6?style=flat-square" alt="Declaraciones TypeScript incluidas"></a>
+  <a href="https://github.com/SebasLoadJs/NyxLink/actions/workflows/pr.yml"><img src="https://github.com/SebasLoadJs/NyxLink/actions/workflows/pr.yml/badge.svg?branch=v5.2" alt="Estado de CI"></a>
+  <a href="https://github.com/SebasLoadJs/NyxLink/blob/v5.2/dist/index.d.ts"><img src="https://img.shields.io/badge/TypeScript-types%20included-3178c6?style=flat-square" alt="Declaraciones TypeScript incluidas"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-OSL--3.0-a78bfa?style=flat-square" alt="Licencia OSL-3.0"></a>
 </p>
 
@@ -22,8 +22,8 @@
   <a href="#inicio-rápido">Inicio rápido</a> ·
   <a href="#buscar-y-reproducir">Reproducción</a> ·
   <a href="#configuración">Configuración</a> ·
-  <a href="https://github.com/melodiabl/NyxLink/releases">Releases</a> ·
-  <a href="https://github.com/melodiabl/NyxLink/issues">Soporte</a>
+  <a href="https://github.com/SebasLoadJs/NyxLink/releases">Releases</a> ·
+  <a href="https://github.com/SebasLoadJs/NyxLink/issues">Soporte</a>
 </p>
 
 ---
@@ -356,7 +356,7 @@ Las extensiones de NodeLink —como letras, mixer o streaming directo— requier
 | `queueEnd` | Se agota la cola de reproducción. |
 | `playerDestroy` | Se destruye un reproductor. |
 
-Los eventos y sus argumentos están definidos en [`IManagerEvents`](https://github.com/melodiabl/NyxLink/blob/v5.2/src/typings/Interfaces.ts).
+Los eventos y sus argumentos están definidos en [`IManagerEvents`](https://github.com/SebasLoadJs/NyxLink/blob/v5.2/src/typings/Interfaces.ts).
 
 ## TypeScript y ejemplos
 
@@ -381,8 +381,8 @@ const typedManager = new Manager(config);
 
 | Ejemplo | Contenido |
 | --- | --- |
-| [JavaScript / CommonJS](https://github.com/melodiabl/NyxLink/blob/v5.2/examples/discordjs.cjs) | Cliente Discord.js, búsqueda, cola y cierre. |
-| [TypeScript](https://github.com/melodiabl/NyxLink/blob/v5.2/examples/discordjs.ts) | La misma integración con configuración tipada. |
+| [JavaScript / CommonJS](https://github.com/SebasLoadJs/NyxLink/blob/v5.2/examples/discordjs.cjs) | Cliente Discord.js, búsqueda, cola y cierre. |
+| [TypeScript](https://github.com/SebasLoadJs/NyxLink/blob/v5.2/examples/discordjs.ts) | La misma integración con configuración tipada. |
 
 ### Cierre de la aplicación
 
@@ -401,7 +401,7 @@ Llama a esta función desde el cierre de tu aplicación. `manager.shutdown()` es
 ## Desarrollo
 
 ```sh
-git clone https://github.com/melodiabl/NyxLink.git
+git clone https://github.com/SebasLoadJs/NyxLink.git
 cd NyxLink
 corepack pnpm install --frozen-lockfile
 pnpm run build
@@ -423,8 +423,8 @@ Las integraciones locales con servidores se ejecutan mediante `pnpm run test:bac
 
 ## Soporte y licencia
 
-[Abre un issue](https://github.com/melodiabl/NyxLink/issues) con la versión de NyxLink, Node.js y el backend, además de una reproducción mínima del problema. Revisa los logs antes de adjuntarlos.
+[Abre un issue](https://github.com/SebasLoadJs/NyxLink/issues) con la versión de NyxLink, Node.js y el backend, además de una reproducción mínima del problema. Revisa los logs antes de adjuntarlos.
 
-Mantenido por [melodiabl](https://github.com/melodiabl). Distribuido bajo [OSL-3.0](LICENSE).
+Mantenido por [SebasLoadJs](https://github.com/SebasLoadJs). Distribuido bajo [OSL-3.0](LICENSE).
 
 Derivado de Moonlink.js, de 1Lucas1.apk y sus colaboradores. Se conservan la licencia y los avisos de origen.

@@ -41,8 +41,8 @@ class Manager extends Util_1.EventEmitter {
         (0, Util_1.validate)(config.options, (value) => value == null || (typeof value === "object" && !Array.isArray(value)), "Manager config 'options' must be a plain object if provided.");
         this.send = config.send || null;
         this.options = {
-            clientName: `NyxLink/${__1.version} (https://github.com/melodiabl/NyxLink)`,
-            userAgent: `NyxLink/${__1.version} (https://github.com/melodiabl/NyxLink)`,
+            clientName: `NyxLink/${__1.version} (https://github.com/SebasLoadJs/NyxLink)`,
+            userAgent: `NyxLink/${__1.version} (https://github.com/SebasLoadJs/NyxLink)`,
             noReplace: false,
             resume: true,
             resumeTimeout: 60000,
