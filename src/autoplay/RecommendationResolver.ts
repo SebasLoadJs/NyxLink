@@ -55,13 +55,19 @@ export class RecommendationResolver {
 
       if (!uri || !searchSource) {
         if (source !== "youtube") {
-          const res = await node.manager.search({ query: `${track.title} ${track.author}`, node: node.identifier });
-          if (res?.tracks?.length > 0) {
-            uri = `https://www.youtube.com/watch?v=${res.tracks[0].identifier}&list=RD${res.tracks[0].identifier}`;
-            searchSource = "youtube";
-          } else {
-            return;
-          }
+          const res = await node.manager.search({
+            query: `${track.title} ${track.author}`,
+            node: node.identifier,
+            source: "youtube",
+          });
+          // A configured fallback or a custom resolver may still return another source.
+          const seed = res?.loadType !== "error" && res?.tracks?.find((candidate: Track) =>
+            (candidate.sourceName === "youtube" || candidate.sourceName === "youtubemusic") &&
+            typeof candidate.identifier === "string" && /^[A-Za-z0-9_-]{11}$/.test(candidate.identifier)
+          );
+          if (!seed) return;
+          uri = `https://www.youtube.com/watch?v=${seed.identifier}&list=RD${seed.identifier}`;
+          searchSource = "youtube";
         } else {
           return;
         }
