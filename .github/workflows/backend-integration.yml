@@ -45,3 +45,33 @@ jobs:
             .runtime/extensions/report.json
           include-hidden-files: true
           if-no-files-found: warn
+
+  modern-nodelink:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NYXLINK_CONTAINER_ENGINE: docker
+      NYXLINK_NODELINK_PROFILE: modern
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - name: Modern NodeLink protocol regression
+        run: node scripts/test-backends.cjs
+      - name: Modern NodeLink extensions
+        if: always()
+        run: node scripts/test-nodelink-modern.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: modern-nodelink-evidence
+          path: |
+            .runtime/integration/latest-report.json
+            .runtime/extensions/modern-report.json
+          include-hidden-files: true
+          if-no-files-found: warn

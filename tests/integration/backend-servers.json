@@ -6,5 +6,9 @@
   "nodelink": {
     "image": "ghcr.io/performanc/nodelink@sha256:19d8f9a8951d0e13f21977aac7e5ec4dc3199526b8dcb28e9c8a2e3ac058dfe8",
     "commit": "804e0d6d0f1af30384e0a2d12ddbc8d79e85cf35"
+  },
+  "nodelinkModern": {
+    "image": "ghcr.io/performanc/nodelink@sha256:922acc221c5f3239a795ba616e925c01b86f9f41a3ac3bc5c1b2b91859fcc64e",
+    "commit": "97bbce1e169f18811c69836e3d0fa7f87e1d13fe"
   }
 }

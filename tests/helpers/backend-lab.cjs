@@ -7,7 +7,10 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { setTimeout: delay } = require('node:timers/promises');
 const exec = promisify(execFile);
-const images = require('../integration/backend-servers.json');
+const pinnedImages = require('../integration/backend-servers.json');
+const profile = process.env.NYXLINK_NODELINK_PROFILE || 'baseline';
+if (!['baseline', 'modern'].includes(profile)) throw new Error('Unknown NodeLink test profile');
+const images = { lavalink: pinnedImages.lavalink, nodelink: profile === 'modern' ? pinnedImages.nodelinkModern : pinnedImages.nodelink };
 
 function tone() {
   const samples = 48000;
@@ -94,6 +97,10 @@ async function withBackendLab(run, options = {}) {
       if (!info) {
         const logs = await command(['logs', '--tail', '25', name]).catch(error => ({ stdout: error.message }));
         throw new Error(`${kind} failed to start: ${logs.stdout}`);
+      }
+      if (kind === 'nodelink') {
+        const revision = await command(['inspect', '--format', '{{ index .Config.Labels "org.opencontainers.image.revision" }}', name]);
+        if (revision.stdout.trim() !== images[kind].commit) throw new Error('NodeLink container revision does not match pinned profile');
       }
       backends.push({ kind, host: '127.0.0.1', port, password, secure: false, identifier: `lab-${kind}`, version: info.version.semver, image: images[kind].image });
     }
