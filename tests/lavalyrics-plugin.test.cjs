@@ -95,7 +95,7 @@ test('LavaLyrics reads a validated 200 response via the plugin route only', asyn
 });
 
 test('LavaLyrics 204 without content is a valid unavailable-lyrics result', async t => {
-  const { node } = await setup(t, (_req, res) => { res.writeHead(204); res.end(); }, 'lavalyrics');
+  const { node } = await setup(t, (_req, res) => { res.writeHead(204, { 'content-type': 'application/json' }); res.end(); }, 'lavalyrics');
   assert.equal(await node.rest.getLavaLyrics('encoded'), null);
   assert.equal(node.backend.featureStatus('lavalyrics'), 'available');
 });
