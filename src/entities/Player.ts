@@ -1043,12 +1043,13 @@ export class Player {
         // at call time. The generation is enough to bind that seek to the play.
         if (!guard.isCurrent(ticket) || (track !== null && this.current !== track)) return this;
 
+        const activeTrack = this.current;
         this.manager.emit("debug", `NyxLink > Player#seek -> Seeking to position ${position}ms for guild ${this.guildId}`);
         this.manager.emit("playerTriggeredSeek", this, position);
         await this.sendPlayerUpdate({ position });
         // A subsequent playback intent may have superseded this seek while HTTP was in flight.
-        if (guard.isCurrent(ticket) && !this.destroyed && this.current === track && track) {
-            track.position = position;
+        if (guard.isCurrent(ticket) && !this.destroyed && this.current === activeTrack && activeTrack) {
+            activeTrack.position = position;
         }
         this.manager.emit("debug", `NyxLink > Player#seek >> Sent seek request to node ${this.node.identifier}`);
 
