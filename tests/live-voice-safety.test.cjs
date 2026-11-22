@@ -2,7 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 const { EventEmitter } = require('node:events');
-const { validateConfiguration, redactDiagnostic, event } = require('../scripts/test-live-voice.cjs');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const os = require('node:os');
+const { validateConfiguration, redactDiagnostic, event, writePrivateReport } = require('../scripts/test-live-voice.cjs');
 
 function config(){
  return {
@@ -83,4 +86,19 @@ test('node readiness waiter clears itself when the predicate fails',async()=>{
  manager.emit('nodeReady',{id:'expected'});
  await assert.rejects(waiting.promise,/bad event/);
  assert.equal(manager.listenerCount('nodeReady'),0);
+});
+
+test('live voice reports replace pre-existing public files with private atomic writes',async t=>{
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'nyxlink-voice-'));
+ t.after(()=>fs.rm(dir,{recursive:true,force:true}));
+ const target=path.join(dir,'nested','report.json');
+ await fs.mkdir(path.dirname(target),{recursive:true});
+ await fs.writeFile(target,'previous',{mode:0o644});
+ await fs.chmod(target,0o644);
+ const report={success:false,audioMeasured:false,events:[]};
+ await writePrivateReport(target,report);
+ assert.deepEqual(JSON.parse(await fs.readFile(target,'utf8')),report);
+ if(process.platform!=='win32')assert.equal((await fs.stat(target)).mode&0o777,0o600);
+ const files=await fs.readdir(path.dirname(target));
+ assert.deepEqual(files,['report.json']);
 });
