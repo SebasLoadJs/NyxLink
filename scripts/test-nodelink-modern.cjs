@@ -87,14 +87,27 @@ let image;
           'Quarter-volume stream must attenuate the actual PCM signal');
         checks.push('volume 25 versus 100: actual PCM RMS attenuation confirmed');
 
-        const resumed = await streamAudio(node.rest, encoded, { position: 500 });
-        const trimmedMs = full.evidence.durationMs - resumed.evidence.durationMs;
+        // Seeking a one-second fixture leaves a very short decoder tail.
+        // Use a separate three-second fixture so the seek can be checked
+        // independently of EOF buffering and short-media behavior.
+        const longer = await node.rest.loadTracks(lab.seekMediaUrl);
+        assert.equal(longer.loadType, 'track');
+        const durationMs = longer.data.info.length;
+        assert.ok(durationMs > 2500 && durationMs < 3500, 'Expected three-second seek fixture');
+        let resumed;
+        try {
+          resumed = await streamAudio(node.rest, longer.data.encoded, { position: 500 });
+        } catch (error) {
+          throw new Error('Three-second WAV seek at 500 ms failed: ' + 
+            (error?.code || error?.name || 'unknown') + ' - ' + error.message);
+        }
+        const trimmedMs = durationMs - resumed.evidence.durationMs;
         assert.ok(trimmedMs > 300 && trimmedMs < 700,
           '500 ms seek must shorten decoded stream by roughly half a second; got ' +
           trimmedMs.toFixed(1) + ' ms');
         assert.ok(resumed.evidence.rms > 10 && resumed.evidence.nonZero > 1000,
           'Seeked stream must still contain valid non-silent PCM');
-        checks.push('500 ms seek: verified shorter non-silent decoded stream');
+        checks.push('500 ms seek: verified shorter non-silent decoded three-second fixture');
         const lyrics = await node.rest.loadLyrics(loaded.data.encoded,{type:'onlyCaptions',source:'youtube',lang:'es'});
         assert.ok(lyrics && ['empty','error','lyrics'].includes(lyrics.loadType));
         checks.push('captions request with disabled providers');
