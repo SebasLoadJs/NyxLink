@@ -1,4 +1,4 @@
-import type { LyricsRequestOptions, SourceHealthResponse } from '../backends/NodeLinkContracts';
+import type { LyricsRequestOptions, SourceHealthResponse, NodeLinkStreamFormats } from '../backends/NodeLinkContracts';
 import type { LavaLyricsData, LavaLyricsOptions } from '../backends/LavaLyricsContracts';
 import type { LavalinkSponsorBlockCategory } from '../backends/LavalinkSponsorBlockContracts';
 import { SourceHealthMonitor } from '../nodes/SourceHealthMonitor';
@@ -356,6 +356,30 @@ export class Node {
 
   public getSourceHealth(): Promise<SourceHealthResponse> {
     return this.rest.getSourceHealth();
+  }
+
+  /** Newer NodeLink source format catalogue; returns JSON, not audio. */
+  public getStreamFormats(
+    track: string | ITrack | Track | { encoded?: string },
+    options: { itag?: number; signal?: AbortSignal; timeoutMs?: number } = {}
+  ): Promise<NodeLinkStreamFormats> {
+    const encoded = typeof track === 'string' ? track : track?.encoded;
+    if (!encoded) throw new TypeError('getStreamFormats requires an encoded track');
+    return this.rest.getStreamFormats(encoded, options);
+  }
+
+  /** Newer NodeLink: original compressed bytes, not decoded PCM. */
+  public loadSourceStream(
+    track: string | ITrack | Track | { encoded?: string },
+    options: { itag?: number; position?: number; range?: string; signal?: AbortSignal; timeoutMs?: number } = {}
+  ): Promise<{ stream: NodeJS.ReadableStream; headers: Record<string, any>; statusCode: number }> {
+    const encoded = typeof track === 'string' ? track : track?.encoded;
+    if (!encoded) throw new TypeError('loadSourceStream requires an encoded track');
+    const { itag, position, range, signal, timeoutMs } = options;
+    return this.rest.loadStream(
+      { encodedTrack: encoded, format: 'passthrough', ...(itag === undefined ? {} : { itag }), ...(position === undefined ? {} : { position }) },
+      { range, signal, timeoutMs }
+    );
   }
 
   /**
