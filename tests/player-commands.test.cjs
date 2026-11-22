@@ -456,3 +456,14 @@ test('acknowledged stop clears paused state locally and in storage', async t => 
   assert.equal(saved.paused, false);
   assert.equal(saved.current, null);
 });
+
+test('failed stop preserves paused state until backend acknowledgement', async t => {
+  const { node, player } = createPlayer(t);
+  const current = createTrack('paused-stop-rejected');
+  player.current = current;
+  player.paused = true;
+  node.rest.updatePlayer = async () => { throw new Error('stop rejected'); };
+  await assert.rejects(player.stop(), /stop rejected/);
+  assert.equal(player.current, current);
+  assert.equal(player.paused, true);
+});
