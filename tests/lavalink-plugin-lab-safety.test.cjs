@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const pins = require('./integration/backend-servers.json');
-const { renderConfig, validateProfile } = require('./helpers/lavalink-plugin-lab.cjs');
+const { renderConfig, validateProfile, startupErrorCode } = require('./helpers/lavalink-plugin-lab.cjs');
 
 const password = 'a'.repeat(48);
 
@@ -31,4 +31,19 @@ test('plugin test YAML uses fixed repositories and only an isolated password', (
   assert.throws(() => renderConfig(0, password));
   assert.throws(() => renderConfig(2333, "unsafe'password"));
   assert.throws(() => renderConfig(65536, password));
+});
+
+test('startup diagnostics return only fixed classifications, never Java error text', () => {
+  const cases = [
+    ['java.nio.file.AccessDeniedException: /opt/Lavalink/plugins', 'PLUGIN_DIRECTORY_PERMISSION'],
+    ['Failed to download plugin because artifact was unresolved', 'PLUGIN_ARTIFACT_RESOLUTION'],
+    ['java.lang.UnsupportedClassVersionError: bad class file', 'JAVA_RUNTIME_INCOMPATIBLE'],
+    ['Failed to load plugin from archive', 'PLUGIN_LOAD_FAILURE'],
+    ['Address already in use', 'SERVER_PORT_CONFLICT'],
+    ['private-token https://private.example/secret=123', 'LAVALINK_START_FAILURE']
+  ];
+  for (const [message, code] of cases) {
+    assert.equal(startupErrorCode(message), code);
+    assert.ok(!startupErrorCode(message).includes(message));
+  }
 });
