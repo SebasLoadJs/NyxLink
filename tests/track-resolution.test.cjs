@@ -168,3 +168,22 @@ test('NodeLink HTTP tracks preserve the documented unknown-duration sentinel', a
   assert.equal(resolved.duration, -1);
   assert.equal(resolved.backend, 'nodelink');
 });
+
+test('partial tracks retain source URI and complete duration during cross-backend resolution', async t => {
+  const {manager,player}=createPlayer(t);
+  const destination=target(manager);
+  const record=createTrack('partial').toJSON();
+  const partial=new Track(record,undefined,undefined,['title']);
+  partial.backend='lavalink';
+  player.queue.add(partial);
+  assert.equal(partial.uri,undefined);
+  assert.equal(player.queue.duration,180000);
+  destination.rest.loadTracks=async uri=>{
+    assert.equal(uri,record.info.uri);
+    return {loadType:'track',data:{...record,encoded:'target-partial'}};
+  };
+  const {TrackResolver}=require('../dist');
+  const resolved=await TrackResolver.resolve(partial,destination);
+  assert.equal(resolved.encoded,'target-partial');
+  assert.equal(resolved.getInfo().length,180000);
+});

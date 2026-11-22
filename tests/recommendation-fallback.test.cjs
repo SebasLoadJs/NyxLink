@@ -55,3 +55,23 @@ test('direct YouTube recommendation path does not require an extra lookup', asyn
   assert.equal(calls.length, 1);
   assert.deepEqual(player.recommendations, [recommendation]);
 });
+
+test('autoplay uses hidden source identifiers of partial tracks and excludes duplicate history', async () => {
+  const {Track}=require('../dist');
+  const make = id => new Track({
+    encoded: 'encoded-'+id, info: {
+      title:'Track',author:'Artist',identifier:id,sourceName:'youtube',
+      length:180000,isSeekable:true,isStream:false,uri:'https://www.youtube.com/watch?v='+id,position:0
+    },pluginInfo:{},userData:{}
+  }, undefined, undefined, ['title']);
+  const seed=make('dQw4w9WgXcQ');
+  const history=make('abcdefghijk');
+  const fresh=make('lmnopqrstuv');
+  const {node,player,calls}=fixture([{loadType:'playlist',tracks:[history,fresh]}]);
+  player.previous=[history];
+  assert.equal(seed.identifier,undefined);
+  await RecommendationResolver.update(node,player,seed);
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].query,'https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDdQw4w9WgXcQ');
+  assert.deepEqual(player.recommendations,[fresh]);
+});

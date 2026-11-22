@@ -1,9 +1,14 @@
 import type { Node } from '../entities/Node';
 import type { Player } from '../entities/Player';
-import type { Track } from '../entities/Track';
+import { Track } from '../entities/Track';
 import { playbackGuard } from '../players/PlaybackGuard';
 
 const requests = new WeakMap<Player, object>();
+
+// Legacy callers may supply a track-shaped object; actual Tracks retain complete metadata.
+function trackInfo(track: Track): { sourceName?: string; identifier?: string } {
+  return track instanceof Track ? track.getInfo() : track;
+}
 
 /** Searches against an explicit seed without changing playback state. */
 export class RecommendationResolver {
@@ -12,13 +17,15 @@ export class RecommendationResolver {
     requests.set(player, request);
     const guard = playbackGuard(player);
     const ticket = guard.ticket;
-    if (!track || !track.sourceName || !track.identifier) return;
+    if (!track) return;
+    const info = trackInfo(track);
+    if (!info.sourceName || !info.identifier) return;
 
     try {
       let uri: string | null = null;
       let searchSource: string | null = null;
-      const source = track.sourceName.toLowerCase();
-      const identifier = track.identifier;
+      const source = info.sourceName.toLowerCase();
+      const identifier = info.identifier;
 
       switch (source) {
         case "youtube":
@@ -61,7 +68,7 @@ export class RecommendationResolver {
             source: "youtube",
           });
           // A configured fallback or a custom resolver may still return another source.
-          const seed = res?.loadType !== "error" && res?.tracks?.find((candidate: Track) =>
+          const seed = res?.loadType !== "error" && res?.tracks?.map(trackInfo).find(candidate =>
             (candidate.sourceName === "youtube" || candidate.sourceName === "youtubemusic") &&
             typeof candidate.identifier === "string" && /^[A-Za-z0-9_-]{11}$/.test(candidate.identifier)
           );
@@ -91,8 +98,9 @@ export class RecommendationResolver {
 
       const getTrackKey = (t: any): string | null => {
         if (!t) return null;
-        const id = t.identifier ?? t.info?.identifier;
-        const src = (t.sourceName ?? t.info?.sourceName ?? "unknown").toLowerCase();
+        const metadata = t instanceof Track ? t.getInfo() : t.info ?? t;
+        const id = t.identifier ?? metadata.identifier;
+        const src = (t.sourceName ?? metadata.sourceName ?? "unknown").toLowerCase();
         if (id) return `${src}:${id}`;
         return t.encoded || null;
       };
