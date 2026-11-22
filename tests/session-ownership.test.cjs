@@ -316,3 +316,24 @@ test('a failed reconstructed voice connection does not leave isResuming set or b
   assert.deepEqual(resumed, [secondGuild]);
   assert.equal(failures.length, 1);
 });
+
+
+test('mismatched stored track never creates a ghost player or changes persisted ownership', async t => {
+  const {manager,nodes:[source]}=pool(t);
+  await manager.database.set(`players.${firstGuild}`,stored(firstGuild));
+  let created=0;
+  manager.on('playerCreate',()=>created++);
+  source.rest.getPlayers=async()=>[remote(firstGuild,{track:createTrack('different-track').toJSON()})];
+  await source._resumePlayers();
+  assert.equal(created,0);
+  assert.equal(manager.players.has(firstGuild),false);
+  assert.equal((await manager.database.get(`players.${firstGuild}`)).node,undefined);
+});
+
+test('missing remote track cannot adopt a stored active track', async t => {
+  const {manager,nodes:[source]}=pool(t);
+  await manager.database.set(`players.${firstGuild}`,stored(firstGuild));
+  source.rest.getPlayers=async()=>[remote(firstGuild,{track:null})];
+  await source._resumePlayers();
+  assert.equal(manager.players.has(firstGuild),false);
+});

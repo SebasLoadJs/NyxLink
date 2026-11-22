@@ -431,12 +431,20 @@ export class Node {
 
   /** A single protected stats request may close a circuit after its cooldown. */
   public async probe(): Promise<boolean> {
-    if (this.destroyed || !this.connected) return false;
+    if (this.destroyed || this.manager.destroyed || !this.connected) return false;
+    const socket = this.socket;
+    const session = this.sessionId;
+    const previousStats = this.stats;
+    const previousTimestamp = this.statsReceivedAt;
     try {
       const stats = await this.rest.getStats();
-      if (!stats || this.destroyed || !this.connected) return false;
-      this.stats = stats;
-      this.statsReceivedAt = Date.now();
+      if (!stats || this.destroyed || this.manager.destroyed || !this.connected ||
+          this.socket !== socket || this.sessionId !== session) return false;
+      // A newer WebSocket stats event (or another completed probe) wins.
+      if (this.stats === previousStats && this.statsReceivedAt === previousTimestamp) {
+        this.stats = stats;
+        this.statsReceivedAt = Date.now();
+      }
       return this.circuit.state === 'closed';
     } catch { return false; }
   }

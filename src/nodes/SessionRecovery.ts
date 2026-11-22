@@ -49,8 +49,8 @@ async function recover(context: Context, known: Map<string, Snapshot>): Promise<
     const { node } = context;
     const manager = node.manager;
     const touched = new Set<string>();
-    let creating = false;
-    const detachCreate = manager.on('playerCreate', player => { if (!creating) touched.add(player.guildId); });
+    let creating: string | undefined;
+    const detachCreate = manager.on('playerCreate', player => { if (creating !== player.guildId) touched.add(player.guildId); });
     const detachDestroy = manager.on('playerDestroyed', player => touched.add(player.guildId));
     try {
         const rows = await node.rest.getPlayers();
@@ -79,10 +79,13 @@ async function recover(context: Context, known: Map<string, Snapshot>): Promise<
                 if (!storage || touched.has(row.guildId) || manager.players.has(row.guildId)) continue;
                 if (storage.node !== undefined && storage.node !== node.identifier) continue;
                 recordRevision(storage);
+                // Do not publish or persist a reconstructed player until the stored track
+                // has been matched to the actual resumed session.
+                if (storage.current ? storage.current.encoded !== row.track?.encoded : !!row.track?.encoded) continue;
                 let player: Player;
-                creating = true;
+                creating = row.guildId;
                 try { player = manager.players.restore({ ...storage, guildId: row.guildId, volume: row.volume, node: node.identifier }); }
-                finally { creating = false; }
+                finally { creating = undefined; }
                 // A playerCreate callback may already have stopped, replaced or destroyed this player.
                 if (player.destroyed || player.node !== node || manager.players.get(row.guildId) !== player || playbackGuard(player).ticket !== 0 || touched.has(row.guildId)) continue;
                 const initial = snapshot(player);

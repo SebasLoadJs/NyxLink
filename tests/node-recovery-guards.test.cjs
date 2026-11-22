@@ -330,3 +330,35 @@ test('missing, destroyed and shut-down nodes cannot begin a drain or be rehabili
   assert.equal(closed.nodes.setDraining(other.identifier), false);
   assert.notEqual(other.draining, true);
 });
+
+
+test('a probe from an older session cannot install stale statistics', async t => {
+  const {nodes:[source]}=pool(t,['source']);
+  const response=deferred();
+  source.sessionId='old';
+  source.rest.getStats=()=>response.promise;
+  const probing=source.probe();
+  const newer={players:8,cpu:{systemLoad:0.1},memory:{used:1,allocated:10}};
+  source.sessionId='new';
+  source.stats=newer;
+  response.resolve({players:1,cpu:{systemLoad:0.9},memory:{used:9,allocated:10}});
+  assert.equal(await probing,false);
+  assert.equal(source.stats,newer);
+});
+
+test('a newer stats event wins over a pending same-session probe', async t => {
+  const {nodes:[source]}=pool(t,['source']);
+  const response=deferred();
+  source.rest.getStats=()=>response.promise;
+  const probing=source.probe();
+  const newer={players:8,cpu:{systemLoad:0.1},memory:{used:1,allocated:10}};
+  source.stats=newer;
+  response.resolve({players:1,cpu:{systemLoad:0.9},memory:{used:9,allocated:10}});
+  assert.equal(await probing,true);
+  assert.equal(source.stats,newer);
+});
+
+test('a zero timestamp is not mistaken for missing statistics age', () => {
+  const node=audioNode('old',{statsReceivedAt:0});
+  assert.equal(NodeHealthMonitor.inspect(node,{maxStatsAgeMs:100},101).state,'unknown');
+});
