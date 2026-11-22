@@ -1039,7 +1039,9 @@ export class Player {
 
         // A queued seek must never move a replacement track or a migrated player.
         const guard = playbackGuard(this);
-        if (!guard.isCurrent(ticket) || this.current !== track) return this;
+        // When play() is queued just before seek(), current can still be null
+        // at call time. The generation is enough to bind that seek to the play.
+        if (!guard.isCurrent(ticket) || (track !== null && this.current !== track)) return this;
 
         this.manager.emit("debug", `NyxLink > Player#seek -> Seeking to position ${position}ms for guild ${this.guildId}`);
         this.manager.emit("playerTriggeredSeek", this, position);
