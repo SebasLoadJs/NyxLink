@@ -1,4 +1,5 @@
-import type { ITrack, IRESTLoadTracks } from '../typings/Interfaces';
+import type { ITrack, IRESTLoadTracks, IRESTGetPlayers } from '../typings/Interfaces';
+import type { PlayerUpdateAcknowledgement, SessionUpdateResponse } from './ProtocolContracts';
 
 export class ProtocolResponseError extends TypeError {
     public readonly code = 'INVALID_PROTOCOL_RESPONSE';
@@ -58,5 +59,45 @@ export function validateLoadResponse(value: unknown): asserts value is IRESTLoad
             if (!record(data) || typeof data.message !== 'string') throw new ProtocolResponseError('search', 'error message');
             break;
         default: throw new ProtocolResponseError('search', 'loadType');
+    }
+}
+
+function nonnegative(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+/** Read responses must identify a real guild and provide the state used by recovery. */
+export function validatePlayerRead(value: unknown, guildId?: string): asserts value is IRESTGetPlayers {
+    const operation = 'get player';
+    if (!record(value) || typeof value.guildId !== 'string' || !/^\d{17,20}$/.test(value.guildId) ||
+        (guildId !== undefined && value.guildId !== guildId)) {
+        throw new ProtocolResponseError(operation, 'guild identity');
+    }
+    if (!nonnegative(value.volume) || value.volume > 1000 || typeof value.paused !== 'boolean' ||
+        !record(value.state) || !nonnegative(value.state.position)) {
+        throw new ProtocolResponseError(operation, 'playback state');
+    }
+    if (value.track !== null && value.track !== undefined) validateTrackResponse(value.track, operation);
+}
+
+/** Preserve partial acknowledgements from compatible servers while verifying known fields. */
+export function validatePlayerAcknowledgement(value: unknown, guildId: string): asserts value is PlayerUpdateAcknowledgement {
+    const operation = 'update player';
+    if (!record(value)) throw new ProtocolResponseError(operation, 'envelope');
+    if (value.guildId !== undefined && value.guildId !== guildId) throw new ProtocolResponseError(operation, 'guild identity');
+    if (value.volume !== undefined && (!nonnegative(value.volume) || value.volume > 1000)) throw new ProtocolResponseError(operation, 'volume');
+    if (value.paused !== undefined && typeof value.paused !== 'boolean') throw new ProtocolResponseError(operation, 'paused');
+    if (value.state !== undefined && (!record(value.state) || !nonnegative(value.state.position))) throw new ProtocolResponseError(operation, 'playback state');
+    if (value.track !== undefined && value.track !== null) {
+        if (!record(value.track) || (value.track.encoded !== null && (typeof value.track.encoded !== 'string' || !value.track.encoded))) {
+            throw new ProtocolResponseError(operation, 'track acknowledgement');
+        }
+        if (value.track.info !== undefined) validateTrackResponse(value.track, operation);
+    }
+}
+
+export function validateSessionResponse(value: unknown): asserts value is SessionUpdateResponse {
+    if (!record(value) || typeof value.resuming !== 'boolean' || !nonnegative(value.timeout)) {
+        throw new ProtocolResponseError('update session', 'resume configuration');
     }
 }

@@ -529,10 +529,13 @@ export class Node {
     const socket = this.socket;
     const active = () => !this.destroyed && this.connected && this.socket === socket && this.sessionId === sessionId;
     try {
-      await this.rest.updateSession(
+      const response = await this.rest.updateSession(
         this.manager.options.resume,
         this.resumeTimeout / 1000
       );
+      if (response == null || response.resuming !== this.manager.options.resume) {
+        throw new Error('Backend did not confirm resume configuration');
+      }
       if (!active()) return;
       this.resetResumeUpdateState();
       this.manager.emit(

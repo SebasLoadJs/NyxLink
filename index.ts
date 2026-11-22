@@ -10,7 +10,7 @@ export type { CapabilityDescription, CapabilityEvidence } from './src/backends/C
 export type { BackendInventoryEntry } from './src/backends/BackendInventory';
 export { ProtocolResponseError } from './src/backends/ProtocolValidation';
 export type { ExtensionOperation, ExtensionRoute, ExtensionRouteParameters } from './src/backends/ExtensionRoutes';
-export type { CommonPlayerUpdate, NodeLinkPlayerUpdate, PlayerUpdatePayload, PlayerTrackUpdate, PlayerVoiceUpdate, SessionUpdateResponse } from './src/backends/ProtocolContracts';
+export type { CommonPlayerUpdate, NodeLinkPlayerUpdate, PlayerUpdatePayload, PlayerTrackUpdate, PlayerVoiceUpdate, PlayerUpdateAcknowledgement, SessionUpdateResponse } from './src/backends/ProtocolContracts';
 export { BackendDetector } from './src/backends/BackendDetector';
 export { LavalinkAdapter } from './src/backends/LavalinkAdapter';
 export { NodeLinkAdapter } from './src/backends/NodeLinkAdapter';

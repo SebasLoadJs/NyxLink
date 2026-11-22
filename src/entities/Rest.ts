@@ -1,9 +1,9 @@
 import type http from "node:http";
-import { validateLoadResponse, validateTrackResponse, ProtocolResponseError } from "../backends/ProtocolValidation";
+import { validateLoadResponse, validateTrackResponse, validatePlayerRead, validatePlayerAcknowledgement, validateSessionResponse, ProtocolResponseError } from "../backends/ProtocolValidation";
 import { HttpError } from "../errors/HttpError";
 import type { BackendAdapter } from "../backends/BackendAdapter";
 import { resolveExtensionRoute, type ExtensionOperation, type ExtensionRouteParameters } from "../backends/ExtensionRoutes";
-import { preparePlayerUpdate, type PlayerUpdatePayload, type SessionUpdateResponse } from "../backends/ProtocolContracts";
+import { preparePlayerUpdate, type PlayerUpdatePayload, type PlayerUpdateAcknowledgement, type SessionUpdateResponse } from "../backends/ProtocolContracts";
 import { FeatureUnavailableError } from "../errors/FeatureUnavailableError";
 import { makeRequest, makeStreamRequest, normalizeNodeLinkResponse, type NodeLinkResponse, type ResponseWithHeaders, nodeLinkOnlyError } from "../Util";
 import type { IChapter, IFilters, ILyricsData, ILyricsResponse, IMeaningResponse, INodeConnectionStatus } from "../typings/Interfaces";
@@ -115,22 +115,31 @@ export class Rest {
     }
 
     public async getPlayers(): Promise<IRESTGetPlayers[] | null> {
-        const res = await makeRequest<IRESTGetPlayers[]>(`${this.url}/v4/sessions/${this.node.sessionId}/players`, {
+        const res = await makeRequest<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}/players`, {
             method: "GET",
             headers: this.authHeaders
         });
-        return res || null;
+        if (res === undefined || res === null) return null;
+        if (!Array.isArray(res)) throw new ProtocolResponseError('get players', 'player array');
+        const players: IRESTGetPlayers[] = [];
+        for (const row of res) {
+            validatePlayerRead(row);
+            players.push(row);
+        }
+        return players;
     }
 
-    public async getPlayer(guildId: string): Promise<any | null> {
-        const res = await makeRequest<any>(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}`, {
+    public async getPlayer(guildId: string): Promise<IRESTGetPlayers | null> {
+        const res = await makeRequest<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}`, {
             method: "GET",
             headers: this.authHeaders
         });
-        return res || null;
+        if (res === undefined || res === null) return null;
+        validatePlayerRead(res, guildId);
+        return res;
     }
 
-    public async updatePlayer(guildId: string, data: PlayerUpdatePayload, noReplace: boolean = false): Promise<any | null> {
+    public async updatePlayer(guildId: string, data: PlayerUpdatePayload, noReplace: boolean = false): Promise<PlayerUpdateAcknowledgement | null> {
         const payload = this.node.backend ? this.node.backend.preparePlayerUpdate(data) : preparePlayerUpdate(this.node.isNodeLink ? 'nodelink' : 'unknown', data);
         const params = new URLSearchParams();
         if (noReplace) {
@@ -141,13 +150,15 @@ export class Rest {
         const session = this.node.sessionId;
 
         try {
-            const res = await this.node.circuit.run(() => makeRequest<any>(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}?${params.toString()}`, {
+            const res = await this.node.circuit.run(() => makeRequest<unknown>(`${this.url}/v4/sessions/${session}/players/${guildId}?${params.toString()}`, {
                 method: "PATCH",
                 headers: this.jsonHeaders,
                 body: payload,
                 throwOnError: true
             }, undefined, 0));
-            return res || null;
+            if (res === undefined || res === null) return null;
+            validatePlayerAcknowledgement(res, guildId);
+            return res;
         } catch (error) {
             if (error instanceof HttpError && error.statusCode === 404 &&
                 owner && !owner.destroyed && !this.node.destroyed && owner.node === this.node &&
@@ -290,7 +301,7 @@ export class Rest {
     }
 
     public async updateSession(resuming: boolean, timeout: number): Promise<SessionUpdateResponse | null> {
-        const res = await makeRequest<SessionUpdateResponse>(`${this.url}/v4/sessions/${this.node.sessionId}`, {
+        const res = await makeRequest<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}`, {
             method: "PATCH",
             headers: this.jsonHeaders,
             body: {
@@ -298,7 +309,9 @@ export class Rest {
                 timeout
             }
         });
-        return res || null;
+        if (res === undefined || res === null) return null;
+        validateSessionResponse(res);
+        return res;
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */

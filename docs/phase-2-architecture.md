@@ -37,3 +37,7 @@ Search and decoding now validate unknown wire responses at the REST boundary. Th
 ## 2.5 Extension route catalog
 
 Existing NodeLink REST extensions now resolve through an explicit operation catalog and adapter capability policy. Paths, verbs and stream versus buffered transport are defined in one place. Route parameters are encoded rather than interpolated as raw path segments. Unsupported or observed-unavailable operations fail before HTTP. The catalog deliberately introduces no new Lavalink plugin endpoints; those require dedicated capability evidence and contract tests in phase 4.
+
+## 2.6 Player and session responses
+
+Full player reads validate guild identity, minimum playback state and non-null track metadata. Update acknowledgements retain support for partial object responses but reject malformed known fields and cross-guild identity. Session updates validate the resume configuration; Node only reports resume enabled after confirmation. Raw plugin extension response schemas still need feature-specific validation. The checked compatibility matrix is in [backend-compatibility.md](backend-compatibility.md).

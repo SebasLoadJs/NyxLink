@@ -35,6 +35,14 @@ export interface NodeLinkPlayerUpdate extends CommonPlayerUpdate {
 /** The extensible boundary preserves plugin fields and legacy raw payload callers. */
 export type PlayerUpdatePayload = NodeLinkPlayerUpdate & Record<string, unknown>;
 export type SessionUpdateResponse = { resuming: boolean; timeout: number };
+/** Player updates may return a complete player or a partial acknowledgment. */
+export type PlayerUpdateAcknowledgement = Record<string, unknown> & {
+    guildId?: string;
+    volume?: number;
+    paused?: boolean;
+    state?: { position: number } & Record<string, unknown>;
+    track?: { encoded: string | null; userData?: Record<string, unknown> } & Record<string, unknown> | null;
+};
 
 const extensionFields = ['fading', 'nextTrack', 'loudnessNormalizer'] as const;
 
