@@ -1422,8 +1422,9 @@ export class Node {
     
     this.manager.emit("debug", `Moonlink.js > Node#handleTrackException >> Track exception for player ${player.guildId}: "${track?.title}". Severity: ${exception.severity}. Message: ${exception.message}. Payload: ${stringifyWithReplacer(payload)}.`);
     this.manager.emit("trackException", player, track, exception, payload);
-    // Do not auto-skip a newer user request issued by a trackException listener.
-    if (!unchanged()) return;
+    // An error from an idle player, or a replaced playback intent, must not
+    // consume queued tracks or stop a newer playback session.
+    if (!track || !unchanged()) return;
 
     if (this.manager.options.trackHandling?.autoSkipOnError) {
         this.manager.emit("debug", `Moonlink.js > Node#handleTrackException >> 'autoSkipOnError' is true, skipping track for player ${player.guildId}.`);
