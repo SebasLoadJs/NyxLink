@@ -69,3 +69,25 @@ decoded PCM.
 Real results are included under `seekWireProbes` in the pinned NodeLink
 lab report; hypotheses about transport behavior must be updated only
 after observing those results.
+
+
+### Initial HTTP framing result and duration hypothesis
+
+The first differential run showed:
+- WAV with JSON `position:500`: HTTP 200, chunked transfer, 44-byte
+  RIFF header then abort; `complete:false`.
+- Raw PCM with JSON `position:500`: `ECONNRESET` before HTTP headers.
+- Both HTTP `Range` variants: HTTP 200, complete **full-track** output
+  (576044 bytes WAV, 576000 bytes raw), **not** HTTP 206 and **not**
+  the requested trim. No Content-Length was announced in either case.
+- Thus a mismatch between advertised Content-Length and received bytes
+  is **not supported by this evidence**; the server used chunked transfer.
+
+[Inferencia] The pinned NodeLink HTTP source constructs decoded tracks
+with `length:-1`. Its streaming route treats non-positive duration as
+live/unknown-length and ignores HTTP ranges for that condition. A
+separate test-only `seekMetadataProbe` now re-encodes the same HTTP
+track with its duration measured from actual decoded PCM (3 seconds),
+then tries a byte range and nonzero JSON position. This is an isolated
+diagnostic **only**: forged duration metadata must not be applied to
+ordinary music streams without reliable duration evidence.
