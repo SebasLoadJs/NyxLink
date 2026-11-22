@@ -4,12 +4,14 @@ const { Manager } = require('../dist');
 const { event } = require('../tests/helpers/v4-server.cjs');
 const { withBackendLab } = require('../tests/helpers/backend-lab.cjs');
 const { streamAudio } = require('../tests/helpers/pcm-evidence.cjs');
+const { probeLoadStream } = require('../tests/helpers/stream-seek-probe.cjs');
 const checks = [];
 const guild = '923456789012345678';
 const other = '923456789012345679';
 let version;
 let image;
 let seekEvidence = { status: 'not-run' };
+let seekWireProbes = [];
 (async () => {
   let failure;
   try {
@@ -92,8 +94,10 @@ let seekEvidence = { status: 'not-run' };
         // seeking into generated WAVs (both 1 s and 3 s fixtures). Keep an
         // explicit, independently inspectable probe; do not advertise seek as
         // verified, and do not hide regression in the supported PCM checks.
+        let longerEncoded;
         try {
           const longer = await node.rest.loadTracks(lab.seekMediaUrl);
+          longerEncoded = longer?.data?.encoded;
           assert.equal(longer.loadType, 'track');
           const longerFull = await streamAudio(node.rest, longer.data.encoded);
           const durationMs = longerFull.evidence.durationMs;
@@ -117,6 +121,22 @@ let seekEvidence = { status: 'not-run' };
           console.warn('NodeLink seek probe not verified:', JSON.stringify(seekEvidence));
           if (process.env.NYXLINK_REQUIRE_SEEK === '1') throw new Error('Strict seek verification failed');
         }
+
+        // Probe the same media through four independent wire combinations.
+        // These measurements are *diagnostic*: a completed response alone
+        // cannot prove that the decoded audio starts at the right position.
+        if (typeof longerEncoded === 'string') {
+          const variants = [
+            { name: 'wav-position', format: 'wav', position: 500 },
+            { name: 'raw-position', format: 'raw', position: 500 },
+            { name: 'wav-range', format: 'wav', position: 0, range: 'bytes=96044-' },
+            { name: 'raw-range', format: 'raw', position: 0, range: 'bytes=96000-' },
+          ];
+          for (const variant of variants) {
+            seekWireProbes.push(await probeLoadStream(backend, node.sessionId, longerEncoded, variant));
+          }
+          console.log('NodeLink seek wire diagnostics:', JSON.stringify(seekWireProbes));
+        }
         const lyrics = await node.rest.loadLyrics(loaded.data.encoded,{type:'onlyCaptions',source:'youtube',lang:'es'});
         assert.ok(lyrics && ['empty','error','lyrics'].includes(lyrics.loadType));
         checks.push('captions request with disabled providers');
@@ -129,7 +149,7 @@ let seekEvidence = { status: 'not-run' };
       }
     },{streaming:true,mix:true});
   } catch(error) {failure=error instanceof Error?error.message:String(error);}
-  const report={scope:'modern NodeLink isolated API; no Discord audio',version,image,checks,seekEvidence,passed:!failure,...(failure?{error:failure}:{})};
+  const report={scope:'modern NodeLink isolated API; no Discord audio',version,image,checks,seekEvidence,seekWireProbes,passed:!failure,...(failure?{error:failure}:{})};
   await fs.mkdir('.runtime/extensions',{recursive:true});
   await fs.writeFile('.runtime/extensions/modern-report.json',JSON.stringify(report,null,2)+'\n');
   console.log(JSON.stringify(report));
