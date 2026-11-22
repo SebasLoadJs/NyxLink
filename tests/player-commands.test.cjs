@@ -539,3 +539,18 @@ test('stale queueEnd does not clear an already playing track', async t => {
   assert.equal(player.playing, true);
   assert.equal(player.destroyed, false);
 });
+
+test('late queueEnd from a prior generation cannot destroy a pending explicit play', async t => {
+  const { node, player, requests } = createPlayer(t);
+  player.autoLeave = true;
+  const oldTicket = require('../dist/src/players/PlaybackGuard.js').playbackGuard(player).ticket;
+  const next = createTrack('pending-after-old-end');
+  const pending = player.play({ track: next });
+  // The old TrackEnd handler has resumed after an asynchronous autoplay lookup,
+  // while the next explicit play is still queued.
+  await node.handleQueueEnd(player, createTrack('old-finished'), oldTicket);
+  assert.equal(player.destroyed, false);
+  assert.equal(await pending, true);
+  assert.equal(player.current, next);
+  assert.ok(requests.some(request => request.payload.track?.encoded === next.encoded));
+});
