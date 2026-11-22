@@ -1,7 +1,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const {NodeLinkAdapter}=require('../dist');
-const {createPlayer,createTrack}=require('./helpers/player.cjs');
+const {createPlayer,createTrack,deferred}=require('./helpers/player.cjs');
 async function setup(t){
  const ctx=createPlayer(t);ctx.node.isNodeLink=true;ctx.node.backend=new NodeLinkAdapter('3.10.0',new Set(['nextTrack']));
  ctx.player.setAutoPlay(false);
@@ -10,7 +10,7 @@ async function setup(t){
  ctx.player.current.position=160000;
  return ctx;
 }
-async function settle(player){await player.preloadJob;}
+async function settle(player){for(let i=0;i<16&&player.preloadJob;i++)await player.preloadJob;assert.equal(player.preloadJob,undefined,'preload scheduler did not settle');}
 test('scheduler reserves once without removing the queue head until confirmed handoff',async t=>{
  const ctx=await setup(t);const {player,node,requests}=ctx;
  const first=createTrack('next'),duplicate=createTrack('next');
@@ -58,4 +58,45 @@ test('stop cancels automatic preload and late events cannot promote it',async t=
  await player.stop();await settle(player);
  await node.handleTrackStart(player,{track:{...next.toJSON(),userData:wire.userData}});
  assert.equal(player.current,null);assert.deepEqual(player.queue.tracks,[next]);
+});
+
+test('queue reorder during an in-flight preload acknowledgment reconciles without a position tick',async t=>{
+ const {player,node,requests}=await setup(t);
+ const a=createTrack('a'),b=createTrack('b');player.queue.add([a,b]);
+ const entered=deferred(),release=deferred();
+ const original=node.rest.updatePlayer.bind(node.rest);
+ let held=false;
+ node.rest.updatePlayer=async (...args)=>{
+   if(!held&&args[1].nextTrack?.encoded===a.encoded){
+     held=true;entered.resolve();await release.promise;
+   }
+   return original(...args);
+ };
+ player.setQueuePreload({enabled:true});
+ await entered.promise;
+ player.queue.swap(0,1);
+ release.resolve();
+ await settle(player);
+ assert.deepEqual(requests.filter(x=>x.payload.nextTrack!==undefined).map(x=>x.payload.nextTrack?.encoded??null),[a.encoded,null,b.encoded]);
+ assert.deepEqual(player.queue.tracks,[b,a]);
+ assert.equal(player.getNextTrack().encoded,b.encoded);
+});
+
+test('disabling crossfade clears the automatic remote preload without touching the queue',async t=>{
+ const {player,requests}=await setup(t);
+ const next=createTrack('next');player.queue.add(next);
+ player.setQueuePreload({enabled:true});await settle(player);
+ assert.equal(player.getNextTrack().encoded,next.encoded);
+ await player.clearCrossfade();await settle(player);
+ assert.equal(player.getCrossfade().enabled,false);
+ assert.equal(player.getNextTrack(),undefined);
+ assert.equal(requests.at(-1).payload.nextTrack,null);
+ assert.deepEqual(player.queue.tracks,[next]);
+});
+
+test('enabling automatic preload after the crossfade is configured requires no extra position event',async t=>{
+ const {player,requests}=await setup(t);
+ const next=createTrack('next');player.queue.add(next);
+ player.setQueuePreload({enabled:true});await settle(player);
+ assert.equal(requests.filter(x=>x.payload.nextTrack?.encoded===next.encoded).length,1);
 });

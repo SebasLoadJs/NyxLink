@@ -60,6 +60,8 @@ export class Player {
     private preloadOptions?: QueuePreloadOptions;
     private queuePreload?: { track: Track; node: Node; session: string };
     private preloadJob?: Promise<void>;
+    /** Queue changes while a preload request is in flight need one reconciliation pass. */
+    private preloadRefreshRequested = false;
     private preloadRetryAt = 0;
     private audioTrackId?: string;
     private loudnessNormalizer?: boolean;
@@ -675,7 +677,10 @@ export class Player {
             if (this.destroyed) throw new Error("Cannot update a destroyed player");
             this.assertNodeLinkFeature("crossfade");
             await this.sendPlayerUpdate({ crossfade: config });
-            if (!this.destroyed) this.crossfade = config;
+            if (!this.destroyed) {
+                this.crossfade = config;
+                this.requestQueuePreload();
+            }
             return this;
         });
     }
@@ -724,7 +729,11 @@ export class Player {
 
     /** @internal Coalesces queue/position changes into the existing player command queue. */
     public requestQueuePreload(): void {
-        if (this.destroyed || this.manager.destroyed || (!this.preloadOptions?.enabled && !this.queuePreload) || this.preloadJob) return;
+        if (this.destroyed || this.manager.destroyed || (!this.preloadOptions?.enabled && !this.queuePreload)) return;
+        if (this.preloadJob) {
+            this.preloadRefreshRequested = true;
+            return;
+        }
         const ticket = playbackGuard(this).ticket;
         const node = this.node;
         const session = node.sessionId;
@@ -766,7 +775,12 @@ export class Player {
             this.preloadRetryAt = Date.now() + 10000;
             this.manager.emit('debug', 'NyxLink > Queue preload request failed');
         }).finally(() => {
-            if (this.preloadJob === operation) this.preloadJob = undefined;
+            if (this.preloadJob !== operation) return;
+            this.preloadJob = undefined;
+            if (this.preloadRefreshRequested) {
+                this.preloadRefreshRequested = false;
+                this.requestQueuePreload();
+            }
         });
         this.preloadJob = operation;
     }
