@@ -85,3 +85,26 @@ test('migration rollback preserves source when target ownership persistence fail
   const saved = await manager.database.get(`players.${player.guildId}`);
   assert.equal(saved.node, source.identifier);
 });
+
+test('successful migration retains target when source cleanup fails', async t => {
+  const { manager, node: source, player } = createPlayer(t);
+  const target = attachDestination(t, manager);
+  player.restart = async () => true;
+  const errors = [];
+  const statuses = [];
+  manager.on('nodeError', (node, error) => errors.push({ node, error }));
+  manager.on('playerNodeFailover', (_player, status) => statuses.push(status));
+  source.rest.destroyPlayer = async () => { throw new Error('source cleanup unavailable'); };
+  let targetCleanups = 0;
+  target.rest.destroyPlayer = async () => { targetCleanups++; };
+
+  assert.equal(await player.transferNode(target), true);
+  assert.equal(player.node, target);
+  assert.equal(targetCleanups, 0);
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].node, source);
+  assert.equal(statuses.at(-1).status, 'recovered');
+  assert.match(statuses.at(-1).reason, /source cleanup unavailable/);
+  const saved = await manager.database.get(`players.${player.guildId}`);
+  assert.equal(saved.node, target.identifier);
+});
