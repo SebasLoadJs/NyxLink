@@ -237,20 +237,29 @@ test('tracks resolve in both directions using each destination server', async t 
       assert.equal(remote.paused, true);
       assert.equal(remote.track, null);
       assert.equal(filterRequest.timescale.pitch, 1.2);
-      // With no current track, NodeLink may acknowledge filters but return
-      // either an empty filter map or a retained timescale config. Both were
-      // observed on the same immutable modern image across consecutive CI runs.
-      // Validate *each* returned form and record it; never equate an HTTP
-      // acknowledgement with audible filter application.
+      // NodeLink v3 serializes FiltersState as { filters: { timescale } },
+      // whereas Lavalink v4 exposes a flat filters map. The older NodeLink
+      // fixture can acknowledge filters on an empty player without retaining
+      // them. Check the actual wire shape rather than assuming the same
+      // nesting for both backends.
+      const filterEnvelope = remote.filters;
       let remoteEmptyFilters;
-      if (target.backend.kind === 'nodelink' && !remote.filters?.timescale) {
-        assert.deepEqual(remote.filters, {});
-        remoteEmptyFilters = 'empty/no confirmed remote filter';
+      if (target.backend.kind === 'nodelink') {
+        assert.ok(filterEnvelope && typeof filterEnvelope === 'object' && !Array.isArray(filterEnvelope));
+        const entries = filterEnvelope.filters ?? filterEnvelope;
+        if (!entries.timescale) {
+          assert.deepEqual(entries, {});
+          remoteEmptyFilters = 'empty/no confirmed remote filter';
+        } else {
+          assert.equal(entries.timescale.pitch, 1.2);
+          assert.equal(entries.timescale.speed, 1.2);
+          assert.equal(entries.timescale.rate, 1);
+          remoteEmptyFilters = 'retained nested timescale configuration (audio not tested)';
+        }
       } else {
-        assert.equal(remote.filters.timescale.pitch, 1.2);
-        assert.equal(remote.filters.timescale.speed, 1.2);
-        assert.equal(remote.filters.timescale.rate, 1);
-        remoteEmptyFilters = 'retained config on empty player (audio not tested)';
+        assert.equal(filterEnvelope.timescale.pitch, 1.2);
+        assert.equal(filterEnvelope.timescale.speed, 1.2);
+        remoteEmptyFilters = 'lavalink flat timescale configuration';
       }
       assert.ok(player.filters.toJSON().activeFilters.includes('nightcore'));
       assert.equal(await manager.database.get(`players.${guildId}.node`), target.identifier);

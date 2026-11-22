@@ -30,3 +30,7 @@ Pinned NodeLink 97bbce1, image digest sha256:922acc221c5f3239a795ba616e925c01b86
 ### Additional observation (second candidate CI)
 
 The same modern digest later returned an empty filter map for an empty player instead of the previous timescale object. [Run 45038480695](https://github.com/SebasLoadJs/NyxLink/actions/runs/45038480695) demonstrates that this is not a fixed revision-level behavioral change. The integration suite now accepts only an empty map or the exact requested timescale values and reports which state occurred, while maintaining strict request, local filter persistence, ownership and rollback checks. This case does not certify audible filters after track start.
+
+### Wire format detail
+
+NodeLink 97bbce1 serializes its filter state as `player.filters.filters.timescale` when a timescale filter is present. Lavalink uses `player.filters.timescale`. The latest integration assertions inspect the server-native envelope and require exactly the expected timescale values when present, with an empty-state outcome still allowed for an empty NodeLink player. This is a protocol representation difference; live audio quality remains unverified.
