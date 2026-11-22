@@ -49,16 +49,8 @@ export function validateSourceHealth(value: unknown): asserts value is SourceHea
     for (const key of ['total', ...statuses]) if (!count(summary[key])) invalid('summary counters');
     for (const [source, entry] of Object.entries(value.sources)) {
         if (!/^[\w.-]+$/.test(source) || !obj(entry)) throw new ProtocolResponseError('source health', 'source entry');
-        if (!statuses.some(status => status === entry.status) ||
-            !optional(entry.successRate, v => number(v) && v <= 100) ||
-            !optional(entry.circuitBreaker, v => ['CLOSED','OPEN','HALF_OPEN'].some(state => state === v)) ||
-            !optional(entry.latency, v => obj(v) && number(v.p50) && number(v.p95) && number(v.jitter) && optional(v.average, number)) ||
-            !optional(entry.totalRequests, count) || !optional(entry.consecutiveFailures, count) ||
-            !optional(entry.lastActivityAt, timestamp) || !optional(entry.lastSuccessAt, timestamp) ||
-            !optional(entry.lastFailureAt, timestamp) ||
-            !optional(entry.message, v => typeof v === 'string') ||
-            !optional(entry.reason, v => v === null || typeof v === 'string') ||
-            !optional(entry.recommendedAction, v => v === null || typeof v === 'string')) invalid('source telemetry');
+        validateSourceHealthEntry(entry);
+
     }
     const p = value.probe;
     if (typeof p.enabled !== 'boolean' || typeof p.running !== 'boolean' || !number(p.intervalMs) ||
@@ -84,4 +76,49 @@ export function lyricsParameters(encodedTrack: string, options?: string | Lyrics
         params.set('type', request.type);
     }
     return params;
+}
+
+export interface SourceHealthSnapshotEvent {
+    op: 'event';
+    type: 'SourceHealthSnapshotEvent';
+    sources: Record<string, SourceHealthEntry>;
+    timestamp?: number;
+}
+export interface SourceHealthChangeEvent extends SourceHealthEntry {
+    op: 'event';
+    type: 'SourceHealthChangeEvent';
+    source: string;
+    previousStatus: SourceHealthStatus;
+    timestamp: number;
+}
+export type SourceHealthEvent = SourceHealthSnapshotEvent | SourceHealthChangeEvent;
+
+export function validateSourceHealthEntry(entry: unknown): asserts entry is SourceHealthEntry {
+    if (!obj(entry)) throw new ProtocolResponseError('source health', 'source entry');
+    if (!statuses.some(status => status === entry.status) ||
+            !optional(entry.successRate, v => number(v) && v <= 100) ||
+            !optional(entry.circuitBreaker, v => ['CLOSED','OPEN','HALF_OPEN'].some(state => state === v)) ||
+            !optional(entry.latency, v => obj(v) && number(v.p50) && number(v.p95) && number(v.jitter) && optional(v.average, number)) ||
+            !optional(entry.totalRequests, count) || !optional(entry.consecutiveFailures, count) ||
+            !optional(entry.lastActivityAt, timestamp) || !optional(entry.lastSuccessAt, timestamp) ||
+            !optional(entry.lastFailureAt, timestamp) ||
+            !optional(entry.message, v => typeof v === 'string') ||
+            !optional(entry.reason, v => v === null || typeof v === 'string') ||
+            !optional(entry.recommendedAction, v => v === null || typeof v === 'string')) throw new ProtocolResponseError('source health', 'source telemetry');
+}
+export function validateSourceHealthEvent(value: unknown): asserts value is SourceHealthEvent {
+    if (!obj(value) || value.op !== 'event') throw new ProtocolResponseError('source health event', 'envelope');
+    if (value.type === 'SourceHealthSnapshotEvent') {
+        if (!obj(value.sources) || !optional(value.timestamp, number)) throw new ProtocolResponseError('source health event', 'snapshot');
+        for (const [source, entry] of Object.entries(value.sources)) {
+            if (!/^[\w.-]+$/.test(source)) throw new ProtocolResponseError('source health event', 'source name');
+            validateSourceHealthEntry(entry);
+        }
+    } else if (value.type === 'SourceHealthChangeEvent') {
+        if (typeof value.source !== 'string' || !/^[\w.-]+$/.test(value.source) ||
+            !statuses.some(status => status === value.previousStatus) || !number(value.timestamp)) {
+            throw new ProtocolResponseError('source health event', 'change');
+        }
+        validateSourceHealthEntry(value);
+    } else throw new ProtocolResponseError('source health event', 'type');
 }

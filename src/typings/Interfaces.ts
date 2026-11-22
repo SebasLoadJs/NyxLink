@@ -1,3 +1,4 @@
+import type { SourceHealthSnapshotEvent, SourceHealthChangeEvent } from '../backends/NodeLinkContracts';
 import { Node } from "../entities/Node";
 import { Player } from "../entities/Player";
 import { Track } from "../entities/Track";
@@ -26,6 +27,8 @@ export interface IManagerEvents {
     nodeDestroy: (identifier: string) => void;
     nodeRaw: (node: Node, payload: any) => void;
     nodeStateChange: (node: Node, oldState: NodeState, newState: NodeState) => void;
+    sourceHealthSnapshot: (node: Node, event: SourceHealthSnapshotEvent) => void;
+    sourceHealthChange: (node: Node, event: SourceHealthChangeEvent) => void;
 
     // Player Events
     playerCreate: (player: Player) => void;

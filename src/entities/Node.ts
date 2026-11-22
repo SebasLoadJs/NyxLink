@@ -1,4 +1,5 @@
 import type { LyricsRequestOptions, SourceHealthResponse } from '../backends/NodeLinkContracts';
+import { SourceHealthMonitor } from '../nodes/SourceHealthMonitor';
 import { NodeFailover } from "../nodes/NodeFailover";
 import { BackendDetector } from "../backends/BackendDetector";
 import type { BackendAdapter } from "../backends/BackendAdapter";
@@ -232,6 +233,7 @@ export class Node {
   public backend?: BackendAdapter;
   private backendReady: Promise<void> = Promise.resolve();
   private backendGeneration = 0;
+  public readonly sourceHealth = new SourceHealthMonitor();
   private backendRefresh?: Promise<boolean>;
   public backendRefreshedAt?: number;
   private authenticationFailed = false;
@@ -598,6 +600,7 @@ export class Node {
   private invalidateBackendRefresh(): void {
     this.backendGeneration++;
     this.backendRefresh = undefined;
+    this.sourceHealth.clear();
   }
 
   private clearBackendMetadata(): void {
@@ -753,7 +756,24 @@ export class Node {
     }
 
     if (!payload || typeof payload !== 'object' || Array.isArray(payload) || typeof payload.op !== 'string') return;
+    const messageSocket = this.socket;
+    const messageGeneration = this.backendGeneration;
     this.manager.emit("nodeRaw", this, payload);
+
+    if (payload.op === 'event' && (payload.type === 'SourceHealthSnapshotEvent' || payload.type === 'SourceHealthChangeEvent')) {
+      await this.backendReady;
+      if (this.destroyed || this.manager.destroyed || !this.connected || !this.isNodeLink ||
+          this.socket !== messageSocket || this.backendGeneration !== messageGeneration) return;
+      let event;
+      try { event = this.sourceHealth.apply(payload); }
+      catch {
+        this.manager.emit('debug', `NyxLink > Node > Rejected invalid source health event from ${this.identifier}.`);
+        return;
+      }
+      if (event?.type === 'SourceHealthSnapshotEvent') this.manager.emit('sourceHealthSnapshot', this, event);
+      else if (event?.type === 'SourceHealthChangeEvent') this.manager.emit('sourceHealthChange', this, event);
+      return;
+    }
 
     const player = this.manager.players.get(payload.guildId);
     if (player && (player.destroyed || player.node !== this)) return;
