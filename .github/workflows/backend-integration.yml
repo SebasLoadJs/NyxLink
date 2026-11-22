@@ -11,6 +11,7 @@ on:
       - 'tests/**'
       - 'scripts/test-backends.cjs'
       - 'scripts/test-extensions.cjs'
+      - 'scripts/test-lavalink-plugins.cjs'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/backend-integration.yml'
@@ -73,5 +74,30 @@ jobs:
           path: |
             .runtime/integration/latest-report.json
             .runtime/extensions/modern-report.json
+          include-hidden-files: true
+          if-no-files-found: warn
+
+  lavalink-plugins:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    permissions:
+      contents: read
+    env:
+      NYXLINK_CONTAINER_ENGINE: docker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Real Lavalink LavaLyrics and SponsorBlock integration
+        run: pnpm run test:lavalink-plugins
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lavalink-real-plugin-evidence
+          path: .runtime/lavalink-plugins/latest-report.json
           include-hidden-files: true
           if-no-files-found: warn
