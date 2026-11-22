@@ -116,3 +116,8 @@ manager.nodes.nodes.set('invalid', { invalid: true });
 // @ts-expect-error No arbitrary properties exist on a selected Node.
 selectedNode?.nonexistentAudioProperty;
 void [selectedNode, onlineNodes, readyNodes];
+
+const typedSearch: Promise<SearchResult> = manager.search({query: 'typed search'});
+// @ts-expect-error Search results do not expose arbitrary properties.
+search.then(result => result.nonexistentSearchProperty);
+void typedSearch;

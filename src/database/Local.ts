@@ -7,8 +7,15 @@ type Operation = { op: 'set' | 'delete' | 'clear'; key?: string; value?: unknown
 
 /** Serialized, single-process snapshot/WAL storage. Awaited writes are not fsync guarantees. */
 export class Local extends Memory {
-  private snapshotPath: string;
-  private logPath: string;
+  private paths?: { snapshot: string; log: string };
+  private get snapshotPath(): string {
+    if (!this.paths) throw new Error('Local database is not initialized');
+    return this.paths.snapshot;
+  }
+  private get logPath(): string {
+    if (!this.paths) throw new Error('Local database is not initialized');
+    return this.paths.log;
+  }
   private tail: Promise<unknown> = Promise.resolve();
   private closing = false;
   private shutdownPromise?: Promise<void>;
@@ -18,23 +25,24 @@ export class Local extends Memory {
     if (!/^[\w-]+$/.test(manager.clientId)) throw new TypeError('Invalid local database client ID');
     const directory = options?.path ?? manager.options.database?.options?.path
       ?? process.env.MOONLINK_DB_PATH ?? path.join(process.cwd(), '.moonlink', 'data');
-    this.snapshotPath = path.join(directory, `data.${manager.clientId}.json`);
-    this.logPath = path.join(directory, `data.${manager.clientId}.wal`);
+    this.paths = { snapshot: path.join(directory, `data.${manager.clientId}.json`), log: path.join(directory, `data.${manager.clientId}.wal`) };
     await fs.mkdir(directory, { recursive: true });
     try {
       const snapshot = JSON.parse(await fs.readFile(this.snapshotPath, 'utf8'));
       if (!snapshot.data || typeof snapshot.data !== 'object' || Array.isArray(snapshot.data)) throw new TypeError('Invalid snapshot');
       this.store = snapshot.data;
     } catch (error) {
-      if (error.code !== 'ENOENT') {
+      if (error instanceof SyntaxError || error instanceof TypeError) {
         await fs.rename(this.snapshotPath, `${this.snapshotPath}.corrupted.${Date.now()}`);
         manager.emit('debug', `NyxLink > Local > Invalid snapshot preserved; replaying WAL: ${error.message}`);
+      } else if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) {
+        throw error;
       }
       this.store = Object.create(null);
     }
     let wal = '';
     try { wal = await fs.readFile(this.logPath, 'utf8'); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    catch (error) { if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error; }
     for (const line of wal.split('\n')) {
       if (!line) continue;
       let entry: Operation;
@@ -129,7 +137,7 @@ export class Local extends Memory {
     if (!this.shutdownPromise) {
       this.closing = true;
       if (this.compactionTimer) clearInterval(this.compactionTimer);
-      this.shutdownPromise = this.tail.then(() => this.compact());
+      this.shutdownPromise = this.tail.then(() => this.paths ? this.compact() : undefined);
     }
     return this.shutdownPromise;
   }

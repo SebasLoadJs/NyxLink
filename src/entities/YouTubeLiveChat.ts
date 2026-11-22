@@ -79,7 +79,7 @@ export class YouTubeLiveChat extends EventEmitter<YouTubeLiveChatEvents> {
             headers: {
                 "Authorization": this.node.password,
                 "User-Id": this.node.manager.clientId,
-                "Client-Name": this.node.manager.options.clientName,
+                "Client-Name": this.node.manager.options.clientName ?? "NyxLink",
             },
         });
         this.attachSocket(this.ws);

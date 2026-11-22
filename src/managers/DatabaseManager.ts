@@ -16,7 +16,7 @@ function copyPlayerValue<T>(value: T, ancestors = new Set<object>()): T {
   // Queue persistence is frequent: copy plain metadata once, preserving legacy undefined fields.
   const copy: any = Array.isArray(value) ? new Array(value.length) : {};
   for (const key of Object.keys(value)) {
-    const item = copyPlayerValue(value[key], ancestors);
+    const item = copyPlayerValue((value as Record<string, unknown>)[key], ancestors);
     if (key === '__proto__') Object.defineProperty(copy, key, { value: item, enumerable: true, writable: true, configurable: true });
     else copy[key] = item;
   }
@@ -90,8 +90,8 @@ export class DatabaseManager {
       const candidate = parts.length ? { ...previous } : deleting ? undefined : value;
       if (candidate !== undefined && (!candidate || typeof candidate !== 'object' || Array.isArray(candidate))) throw new TypeError('Stored player must be an object');
       const next = candidate as Record<string, any> | undefined;
-      if (parts.length) {
-        let parent = next;
+      if (parts.length && next !== undefined) {
+        let parent: Record<string, any> = next;
         for (const part of parts.slice(0, -1)) {
           if (!Object.hasOwn(parent, part) || !parent[part] || typeof parent[part] !== 'object') {
             if (deleting) return false;

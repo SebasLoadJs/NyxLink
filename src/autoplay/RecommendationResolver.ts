@@ -117,7 +117,7 @@ export class RecommendationResolver {
 
       if (guard.isCurrent(ticket) && !player.destroyed && requests.get(player) === request) player.recommendations = candidates;
     } catch (error) {
-      node.manager.emit("debug", `Moonlink.js > Node#updateRecommendations >> Error fetching recommendations: ${error.message}`);
+      node.manager.emit("debug", `Moonlink.js > Node#updateRecommendations >> Error fetching recommendations: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

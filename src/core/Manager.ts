@@ -1,4 +1,5 @@
 import { SearchService } from '../search/SearchService';
+import type { SearchResult } from '../structures/SearchResult';
 import { VoicePacketHandler } from '../entities/VoicePacketHandler';
 import {
     IManagerEvents,
@@ -194,7 +195,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
                 this.nodes.nodes.clear();
                 cleanup.push(await this.database.shutdown().then(() => ({ status: 'fulfilled' as const, value: undefined }), reason => ({ status: 'rejected' as const, reason })));
                 const errors = cleanup.filter(result => result.status === 'rejected').map(result => (result as PromiseRejectedResult).reason);
-                if (errors.length) throw new AggregateError([error, ...errors], `Initialization failed: ${error.message}`);
+                if (errors.length) throw new AggregateError([error, ...errors], `Initialization failed: ${error instanceof Error ? error.message : String(error)}`);
                 throw error;
             }
         });
@@ -242,7 +243,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
                 if ((!player.playing || player.paused) && now - player.lastActivityTime >= idleTimeout) {
                     this.emit("debug", `Moonlink.js > Manager >> Player ${player.guildId} has been idle for ${idleTimeout}ms. Auto-destroying...`);
                     try { await player.destroy('Idle timeout'); }
-                    catch (error) { this.emit('debug', `NyxLink > Manager > Idle cleanup failed: ${error.message}`); }
+                    catch (error) { this.emit('debug', `NyxLink > Manager > Idle cleanup failed: ${error instanceof Error ? error.message : String(error)}`); }
                 }
             }
         }, 60000);
@@ -305,7 +306,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
         return null;
     }
 
-    public async search(options: ISearchQuery): Promise<any> {
+    public async search(options: ISearchQuery): Promise<SearchResult> {
         return this.searches.search(options);
     }
 

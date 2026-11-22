@@ -63,7 +63,7 @@ export abstract class Structure {
 }
 
 export function validate<T>(
-  prop: T | undefined,
+  prop: T,
   validator: (value: T) => boolean,
   errorMessage: string
 ) {
@@ -302,21 +302,19 @@ export async function makeRequest<T = any>(
             const urlObject = requestUrl(currentUrl, options.allowedOrigins);
             const transport = urlObject.protocol === "https:" ? https : http;
 
+            const outgoingHeaders: http.OutgoingHttpHeaders = { ...headers, "Accept-Encoding": acceptEncoding };
+            for (const name of Object.keys(outgoingHeaders)) if (name.toLowerCase() === 'host') delete outgoingHeaders[name];
             const requestOptions: http.RequestOptions = {
               ...options,
               auth,
               hostname: urlObject.hostname,
               port: urlObject.port || (urlObject.protocol === "https:" ? 443 : 80),
               path: urlObject.pathname + urlObject.search,
-              headers: {
-                ...headers,
-                "Accept-Encoding": acceptEncoding,
-              },
+              headers: outgoingHeaders,
             };
             delete (requestOptions as { returnHeaders?: boolean }).returnHeaders;
             delete (requestOptions as { throwOnError?: boolean }).throwOnError;
             delete (requestOptions as { allowedOrigins?: readonly string[] }).allowedOrigins;
-            for (const name of Object.keys(requestOptions.headers)) if (name.toLowerCase() === 'host') delete requestOptions.headers[name];
 
             const req = transport.request(requestOptions, (res) => {
               const { statusCode, headers } = res;
@@ -739,7 +737,7 @@ export class EventEmitter<E extends { [K in keyof E]: (...args: any[]) => void }
                 try {
                     entry.listener(...args);
                 } catch (err) {
-                    if (event !== 'error' && this.listenerMap['error']) {
+                    if (event !== 'error' && this.listenerMap['error' as keyof E]) {
                         (this as any).emit('error', err);
                     } else {
                         throw err;

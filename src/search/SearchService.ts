@@ -1,5 +1,6 @@
 import type { Manager } from '../core/Manager';
 import type { Node } from '../entities/Node';
+import type { SearchResult } from '../structures/SearchResult';
 import type { IRESTLoadTracks, ISearchQuery } from '../typings/Interfaces';
 import { Structure, sources, nodeLinkSources } from '../Util';
 
@@ -35,9 +36,9 @@ export class SearchService {
         }
     }
 
-    private present(response: IRESTLoadTracks, query: ISearchQuery, node?: Node): any {
+    private present(response: IRESTLoadTracks, query: ISearchQuery, node?: Node): SearchResult {
         this.validate(response);
-        const result = new (Structure.get('SearchResult'))(response, query.requester, this.manager.options.search?.playlistLoadLimit, this.manager.options.trackPartial ?? []);
+        const result: SearchResult = new (Structure.get('SearchResult'))(response, query.requester, this.manager.options.search?.playlistLoadLimit, this.manager.options.trackPartial ?? []);
         if (result.loadType === 'search') result.tracks = result.tracks.slice(0, this.manager.options.search?.resultLimit ?? 10);
         const disabled = this.manager.options.sources?.disabledSources ?? [];
         result.tracks = result.tracks.filter(track => !disabled.includes(track.sourceName));
@@ -45,7 +46,7 @@ export class SearchService {
         return result;
     }
 
-    public async search(query: ISearchQuery): Promise<any> {
+    public async search(query: ISearchQuery): Promise<SearchResult> {
         if (this.manager.destroyed) throw new Error('Manager is shut down');
         if (!query || typeof query !== 'object' || Array.isArray(query)) throw new TypeError('Search options must be an object');
         if (typeof query.query !== 'string' || !query.query.trim()) throw new TypeError('Search query must be a non-empty string');
@@ -89,7 +90,8 @@ export class SearchService {
             else for (const platform of platforms) {
                 signal.throwIfAborted();
                 if (nodeLinkSources.has(platform)) node.assertFeature(`search:${platform}`);
-                const identifier = isUrl ? query.query : `${sources[platform] ?? platform}:${query.query}`;
+                const prefix = Object.hasOwn(sources, platform) ? sources[platform as keyof typeof sources] : platform;
+                const identifier = isUrl ? query.query : `${prefix}:${query.query}`;
                 response = await this.wait(node.rest.loadTracks(identifier, { timeoutMs, signal }), signal);
                 this.validate(response);
                 if (!['empty', 'error'].includes(response.loadType) && !(response.loadType === 'search' && response.data.length === 0)) break;
@@ -102,7 +104,11 @@ export class SearchService {
                     const tracks = value.loadType === 'track' ? [value.data] : value.loadType === 'search' ? value.data : value.data.tracks;
                     for (const track of tracks ?? []) if (track.userData) delete track.userData.requester;
                     for (const [entry, cached] of this.cache) if (cached.expires <= Date.now()) this.cache.delete(entry);
-                    while (this.cache.size >= capacity) this.cache.delete(this.cache.keys().next().value);
+                    while (this.cache.size >= capacity) {
+                        const oldest = this.cache.keys().next();
+                        if (oldest.done) break;
+                        this.cache.delete(oldest.value);
+                    }
                     this.cache.set(key, { expires: Date.now() + ttl, value });
                 } catch { /* Non-JSON custom plugin metadata is returned without caching. */ }
             }

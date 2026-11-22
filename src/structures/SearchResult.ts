@@ -1,4 +1,4 @@
-import { IRESTLoadTracks } from "../typings/Interfaces";
+import type { IRESTLoadTracks, ITrack } from "../typings/Interfaces";
 import { LoadType, type TPartialTrackProperties } from "../typings/types";
 import { Track } from "../entities/Track";
 
@@ -22,10 +22,10 @@ export class SearchResult {
                 this.loadType = LoadType.PLAYLIST;
                 this.tracks = response.data.tracks
                     .slice(0, playlistLoadLimit)
-                    .map(track => new Track(track, requester, undefined, partialTrackOptions));
+                    .map((track: ITrack) => new Track(track, requester, undefined, partialTrackOptions));
                 this.playlistInfo = {
                     duration: response.data.tracks.reduce(
-                        (acc: number, cur: any) => acc + (cur.info.length || 0),
+                        (acc: number, cur: ITrack) => acc + (cur.info.length || 0),
                         0
                     ),
                     name: response.data.info.name,
@@ -35,7 +35,7 @@ export class SearchResult {
 
             case "search":
                 this.loadType = LoadType.SEARCH;
-                this.tracks = response.data.map(track => new Track(track, requester, undefined, partialTrackOptions));
+                this.tracks = response.data.map((track: ITrack) => new Track(track, requester, undefined, partialTrackOptions));
                 break;
 
             case "empty":

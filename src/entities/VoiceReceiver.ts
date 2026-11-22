@@ -103,7 +103,7 @@ export class VoiceReceiver extends EventEmitter<VoiceReceiverEvents> {
             headers: {
                 "Authorization": this.node.password,
                 "User-Id": this.node.manager.clientId,
-                "Client-Name": this.node.manager.options.clientName,
+                "Client-Name": this.node.manager.options.clientName ?? "NyxLink",
             },
         });
         this.ws = socket;

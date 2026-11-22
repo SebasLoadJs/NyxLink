@@ -441,11 +441,11 @@ export class Filters implements IFilters {
             pluginFilters: this.pluginFilters,
         };
 
-        for (const key in directFilters) {
-            if (directFilters[key] !== undefined) {
-                payload[key] = directFilters[key];
-            }
-        }
+        const assign = <K extends keyof IFilters>(key: K): void => {
+            const value = directFilters[key];
+            if (value !== undefined) payload[key] = value;
+        };
+        for (const key of Object.keys(directFilters) as (keyof IFilters)[]) assign(key);
 
         // Validate the effective payload, including fields originating from presets.
         if (!this.player.node.isNodeLink && (payload.echo || payload.chorus || payload.compressor || payload.highpass || payload.phaser || payload.spatial)) {
@@ -488,16 +488,17 @@ export class Filters implements IFilters {
     private mergeFilters(base: IFilters, addon: IFilters): IFilters {
         const merged = { ...base };
         
-        for (const key of Object.keys(addon)) {
-            if (["__proto__", "constructor", "prototype"].includes(key)) continue;
-            if (addon[key] !== undefined) {
-                if (key === "equalizer" && base.equalizer) {
-                    merged.equalizer = this.normalizeBands([...base.equalizer, ...addon.equalizer]);
-                } else {
-                    merged[key] = addon[key];
-                }
+        const assign = <K extends keyof IFilters>(key: K): void => {
+            if (["__proto__", "constructor", "prototype"].includes(key)) return;
+            const value = addon[key];
+            if (value === undefined) return;
+            if (key === "equalizer" && base.equalizer && addon.equalizer) {
+                merged.equalizer = this.normalizeBands([...base.equalizer, ...addon.equalizer]);
+            } else {
+                merged[key] = value;
             }
-        }
+        };
+        for (const key of Object.keys(addon) as (keyof IFilters)[]) assign(key);
         
         return merged;
     }

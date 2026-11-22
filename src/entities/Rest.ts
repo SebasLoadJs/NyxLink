@@ -31,14 +31,14 @@ export class Rest {
         this.node = node;
         this.authHeaders = {
             "Authorization": this.node.password,
-            "User-Agent": this.node.manager.options?.userAgent
+            "User-Agent": this.node.manager.options?.userAgent ?? "NyxLink"
         };
         this.jsonHeaders = {
             ...this.authHeaders,
             "Content-Type": "application/json"
         };
         this.userAgentHeaders = {
-            "User-Agent": this.node.manager.options?.userAgent
+            "User-Agent": this.node.manager.options?.userAgent ?? "NyxLink"
         };
     }
 
@@ -79,6 +79,7 @@ export class Rest {
             try { return await makeRequest<T>(url, { ...options, throwOnError: true }, 10000, 0); }
             catch (error) { this.featureError(feature, error); }
         });
+        if (result === undefined) throw new Error('Backend did not acknowledge feature request');
         this.node.backend?.recordFeature(feature, 'available');
         return result;
     }
