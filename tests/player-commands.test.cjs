@@ -306,3 +306,13 @@ test('trackException handler cannot stop a new track requested by its event list
   assert.equal(player.current, replacement);
   assert.equal(requests.filter(r => r.payload.track?.encoded === null).length, 0);
 });
+
+test('synchronous volume setter rejects non-finite values without changing state', async t => {
+  const { player, requests } = createPlayer(t);
+  const original = player.volume;
+  assert.throws(() => player.setVolume(Infinity), /Volume must/);
+  assert.throws(() => player.setVolume(-Infinity), /Volume must/);
+  assert.throws(() => player.setVolume(NaN), /Volume must/);
+  assert.equal(player.volume, original);
+  assert.deepEqual(requests, []);
+});
