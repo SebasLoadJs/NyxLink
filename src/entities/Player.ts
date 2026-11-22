@@ -444,7 +444,7 @@ export class Player {
         if (finalOptions.encoded) {
             try {
                 const decoded = decodeTrack(finalOptions.encoded);
-                track = new Track(decoded, finalOptions.requester);
+                track = new Track(decoded, finalOptions.requester, undefined, this.manager.options.trackPartial ?? []);
             } catch (e) {
                 this.manager.emit("debug", `Moonlink.js > Player#play >> Error decoding track for guild ${this.guildId}. Error: ${e}`);
                 return false;
@@ -453,7 +453,7 @@ export class Player {
 
         if (track && !(track instanceof Track)) {
             try {
-                track = new Track(track as any, finalOptions.requester);
+                track = new Track(track as any, finalOptions.requester, undefined, this.manager.options.trackPartial ?? []);
             } catch (e) {
                 this.manager.emit("debug", `Moonlink.js > Player#play >> Invalid track object for guild ${this.guildId}. Error: ${e}`);
                 return false;
@@ -488,7 +488,7 @@ export class Player {
         this.queue.shift();
 
         const oldTrackTitle = this.current?.title ?? "null";
-        this.current = nextTrack instanceof Track ? nextTrack : new Track(nextTrack);
+        this.current = nextTrack instanceof Track ? nextTrack : new Track(nextTrack, undefined, undefined, this.manager.options.trackPartial ?? []);
         this.current.position = finalOptions.position || 0;
         this.updateData("current", TrackCodec.serialize(this.current));
         this.manager.emit("debug", `Moonlink.js > Player#play >> Player state changed: current track: ${oldTrackTitle} -> ${this.current.title}`);
@@ -874,7 +874,7 @@ export class Player {
                     this.manager.emit("playerTriggeredSkip", this, this.current, track, position);
                     if (this.destroyed || !guard.isCurrent(ticket) || this.queue.get(position) !== track) return false;
                     this.queue.remove(position);
-                    return await this.playNext({ track: track instanceof Track ? track : new Track(track) }, ticket);
+                    return await this.playNext({ track: track instanceof Track ? track : new Track(track, undefined, undefined, this.manager.options.trackPartial ?? []) }, ticket);
                 } finally {
                     playbackAttempt(this).retain(ticket);
                 }

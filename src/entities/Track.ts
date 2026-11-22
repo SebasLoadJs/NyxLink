@@ -24,10 +24,12 @@ export class Track {
     public userData: Record<string, any>;
     public retries: number = 0;
     private isPartial: boolean = false;
+    #partialTrackOptions: readonly TPartialTrackProperties[];
 
-    constructor(data: ITrack | Record<string, any>, requester?: any, origin?: string) {
-        const manager = Structure.getManager();
-        const partialTrackOptions = manager?.options?.trackPartial;
+    constructor(data: ITrack | Record<string, any>, requester?: any, origin?: string, partialTrackOptions: readonly TPartialTrackProperties[] = Structure.getManager()?.options?.trackPartial ?? []) {
+        // Internal callers pass their owning manager's preferences explicitly. The
+        // default retains compatibility with legacy standalone Track construction.
+        this.#partialTrackOptions = Array.isArray(partialTrackOptions) ? [...partialTrackOptions] : [];
         const normalized = this.normalizeTrackData(data);
 
         this.encoded = normalized.encoded;
@@ -39,12 +41,12 @@ export class Track {
 
         const trackProps = this.createPropertySetters(normalized.info);
 
-        if (partialTrackOptions && Array.isArray(partialTrackOptions) && partialTrackOptions.length > 0) {
+        if (this.#partialTrackOptions.length > 0) {
             this.isPartial = true;
             trackProps.title();
             trackProps.author();
             
-            partialTrackOptions.forEach(prop => {
+            this.#partialTrackOptions.forEach(prop => {
                 if (prop in trackProps) {
                     trackProps[prop as keyof typeof trackProps]();
                 }
@@ -141,7 +143,7 @@ export class Track {
     }
 
     public clone(): Track {
-        const newTrack = new (Structure.get("Track"))(this.toJSON(), this.requester, this.origin);
+        const newTrack = new (Structure.get("Track"))(this.toJSON(), this.requester, this.origin, this.#partialTrackOptions);
         newTrack.userData = JSON.parse(JSON.stringify(this.userData));
         return newTrack;
     }

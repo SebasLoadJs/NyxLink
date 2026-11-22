@@ -30,7 +30,7 @@ export class TrackResolver {
         if (![info.title, info.author, info.identifier, info.sourceName].every(value => typeof value === 'string') || !validDuration) {
             throw new TrackResolutionError('Destination returned invalid track metadata');
         }
-        const resolved = new Track(loaded.data, track.requester, track.origin);
+        const resolved = new Track(loaded.data, track.requester, track.origin, []);
         resolved.userData = { ...track.userData };
         resolved.position = track.position;
         resolved.backend = destination;

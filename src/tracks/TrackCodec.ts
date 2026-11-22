@@ -15,7 +15,7 @@ export class TrackCodec {
     public static restore(data: Partial<TrackSnapshot> & { encoded: string; position?: number }): Track {
         if (!data || typeof data.encoded !== 'string' || !data.encoded) throw new TypeError('Stored track requires an encoding');
         const record = data.info ? data as ITrack : decodeTrack(data.encoded);
-        const track = new Track(record, data.requester, data.origin);
+        const track = new Track(record, data.requester, data.origin, []);
         if (data.position !== undefined) track.position = data.position;
         if (data.backend === 'lavalink' || data.backend === 'nodelink') track.backend = data.backend;
         return track;

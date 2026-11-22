@@ -1029,7 +1029,7 @@ export class Node {
     if (!started) return;
     const trackData = attempts.clean(incoming);
     if (started === 'preloaded') {
-      player.current = new (Structure.get("Track"))(trackData, trackData.userData?.requester ?? player.current?.requester);
+      player.current = new (Structure.get("Track"))(trackData, trackData.userData?.requester ?? player.current?.requester, undefined, this.manager.options.trackPartial ?? []);
       player.updateData('current', TrackCodec.serialize(player.current));
     }
     const trackTitle = trackData?.info?.title ?? player.current?.title ?? "Unknown";
@@ -1065,7 +1065,7 @@ export class Node {
         trackData.userData = player.current.userData;
     }
 
-    const trackForEvent = new (Structure.get("Track"))(trackData, player.current?.requester);
+    const trackForEvent = new (Structure.get("Track"))(trackData, player.current?.requester, undefined, this.manager.options.trackPartial ?? []);
     this.manager.emit("trackStart", player, trackForEvent);
   }
 
@@ -1084,7 +1084,7 @@ export class Node {
         trackData.userData = player.current.userData;
     }
     const trackForEvent = trackData
-        ? new (Structure.get("Track"))(trackData, player.current?.requester)
+        ? new (Structure.get("Track"))(trackData, player.current?.requester, undefined, this.manager.options.trackPartial ?? [])
         : player.current;
     const intent = playbackGuard(player).ticket;
     if (!isCrossfadeTransition) {
@@ -1290,7 +1290,7 @@ export class Node {
 
   private handleMixStarted(player: any, payload: MixStartedEvent): void {
     const trackData = payload.track;
-    const mixTrack = new (Structure.get("Track"))(trackData, trackData?.userData?.requester);
+    const mixTrack = new (Structure.get("Track"))(trackData, trackData?.userData?.requester, undefined, this.manager.options.trackPartial ?? []);
     this.manager.emit("mixStart", player, payload.mixId, mixTrack, payload.volume, payload);
   }
 

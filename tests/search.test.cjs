@@ -105,3 +105,44 @@ test('real search HTTP timeouts abort the socket and HTTP 429 preserves status w
   const controller = new AbortController(); const search = manager.search({ query: 'cancel', signal: controller.signal });
   const rejected = assert.rejects(search, /abort/i); setTimeout(() => controller.abort(), 10); await rejected;
 });
+
+
+test('overlapping searches use their own manager track options and clones preserve them', async t => {
+  const first = fixture(t);
+  first.manager.options.trackPartial = ['identifier', 'sourceName'];
+  const entered = deferred();
+  const pending = deferred();
+  first.node.rest.loadTracks = async () => { entered.resolve(); return pending.promise; };
+  const searching = first.manager.search({ query: 'first' });
+  await entered.promise;
+  const second = fixture(t);
+  second.node.rest.loadTracks = async () => ({ loadType: 'track', data: record() });
+  const full = (await second.manager.search({ query: 'second' })).tracks[0];
+  pending.resolve({ loadType: 'track', data: record() });
+  const partial = (await searching).tracks[0];
+  assert.equal(full.isPartialTrack(), false);
+  assert.equal(full.duration, 1000);
+  assert.equal(partial.isPartialTrack(), true);
+  assert.equal(partial.identifier, 'id');
+  assert.equal(partial.duration, undefined);
+  assert.equal(partial.clone().isPartialTrack(), true);
+  assert.equal(partial.clone().duration, undefined);
+  await second.manager.shutdown();
+  assert.equal(full.clone().duration, 1000);
+  assert.equal(partial.clone().isPartialTrack(), true);
+});
+
+test('full results and snapshot decoding are independent of the last manager partial options', async t => {
+  const full = fixture(t);
+  full.node.rest.loadTracks = async () => ({ loadType: 'track', data: record() });
+  const partial = fixture(t);
+  partial.manager.options.trackPartial = ['identifier'];
+  const result = (await full.manager.search({ query: 'full' })).tracks[0];
+  assert.equal(result.isPartialTrack(), false);
+  assert.equal(result.duration, 1000);
+  const { TrackCodec } = require('../dist');
+  const restored = TrackCodec.restore(record());
+  assert.equal(restored.isPartialTrack(), false);
+  assert.equal(restored.sourceName, 'http');
+  assert.equal(restored.duration, 1000);
+});

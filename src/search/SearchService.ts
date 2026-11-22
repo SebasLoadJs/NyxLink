@@ -37,7 +37,7 @@ export class SearchService {
 
     private present(response: IRESTLoadTracks, query: ISearchQuery, node?: Node): any {
         this.validate(response);
-        const result = new (Structure.get('SearchResult'))(response, query.requester, this.manager.options.search?.playlistLoadLimit);
+        const result = new (Structure.get('SearchResult'))(response, query.requester, this.manager.options.search?.playlistLoadLimit, this.manager.options.trackPartial ?? []);
         if (result.loadType === 'search') result.tracks = result.tracks.slice(0, this.manager.options.search?.resultLimit ?? 10);
         const disabled = this.manager.options.sources?.disabledSources ?? [];
         result.tracks = result.tracks.filter(track => !disabled.includes(track.sourceName));
