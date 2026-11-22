@@ -148,7 +148,7 @@ export class Player {
             const positionDelta = Math.abs(currentPosition - this.lastPosition);
             const timeDelta = now - this.lastPositionTime;
 
-            if (positionDelta < 1000 && timeDelta > 30000 && !this.current.isStream) {
+            if (positionDelta < 1000 && timeDelta > 30000 && !this.current.getInfo().isStream) {
                 this.stuckDetectionCount++;
                 this.manager.emit("debug", `Moonlink.js > Player#healthCheck >> Player ${this.guildId} appears stuck. Position: ${currentPosition}, Delta: ${positionDelta}, Stuck count: ${this.stuckDetectionCount}/${maxStuckCount}`);
 
@@ -195,7 +195,7 @@ export class Player {
         this.manager.emit("playerRecoveryStarted", this);
 
         try {
-            if (this.current && this.current.isSeekable) {
+            if (this.current && this.current.getInfo().isSeekable) {
                 const seekPos = Math.max(0, (this.current.position ?? 0) + 2000);
                 this.manager.emit("debug", `Moonlink.js > Player#recoverFromStuck >> Seeking forward 2s for player ${this.guildId}.`);
                 await this.seek(seekPos);
@@ -794,13 +794,13 @@ export class Player {
 
     public async forward(ms: number): Promise<this> {
         if (!this.current) return this;
-        const newPosition = Math.min(this.current.duration, this.current.position + ms);
+        const newPosition = Math.min(this.current.getInfo().length, this.current.getInfo().position + ms);
         return this.seek(newPosition);
     }
 
     public async rewind(ms: number): Promise<this> {
         if (!this.current) return this;
-        const newPosition = Math.max(0, this.current.position - ms);
+        const newPosition = Math.max(0, this.current.getInfo().position - ms);
         return this.seek(newPosition);
     }
 
@@ -1123,7 +1123,7 @@ export class Player {
                 filters: this.filters.toPayload()
             };
 
-            if (resumePosition > 0 && this.current.isSeekable && !isAlreadySync) {
+            if (resumePosition > 0 && this.current.getInfo().isSeekable && !isAlreadySync) {
                 payload.position = resumePosition;
             }
 

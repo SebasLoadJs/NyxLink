@@ -653,8 +653,8 @@ export const sources = {
 };
 
 export class Plugin {
-  public name: string;
-  public version: string;
+  public name?: string;
+  public version?: string;
   public description?: string;
   public author?: string | Record<string, any>
   public minVersion?: string;

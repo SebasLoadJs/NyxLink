@@ -121,3 +121,9 @@ const typedSearch: Promise<SearchResult> = manager.search({query: 'typed search'
 // @ts-expect-error Search results do not expose arbitrary properties.
 search.then(result => result.nonexistentSearchProperty);
 void typedSearch;
+
+const partialDuration: number | undefined = track.duration;
+const fullDuration: number = track.getInfo().length;
+// @ts-expect-error Partial fields must be narrowed before assuming they are present.
+const unsafeDuration: number = track.duration;
+void [partialDuration, fullDuration, unsafeDuration];

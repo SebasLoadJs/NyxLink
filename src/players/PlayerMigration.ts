@@ -47,7 +47,7 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
         const resolved = original ? await TrackResolver.resolve(original, target, source) : null;
         if (!active() || player.current !== original) { report('cancelled'); return false; }
         const snapshot = {
-            position: original?.position, playing: player.playing, paused: player.paused,
+            position: original?.getInfo().position, playing: player.playing, paused: player.paused,
             lastState: player.get('lastState'), lastKnownPosition: player.get('lastKnownPosition'),
         };
         const restoreAttempt = attempts.checkpoint();

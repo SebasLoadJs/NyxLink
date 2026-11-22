@@ -41,7 +41,7 @@ export class SearchService {
         const result: SearchResult = new (Structure.get('SearchResult'))(response, query.requester, this.manager.options.search?.playlistLoadLimit, this.manager.options.trackPartial ?? []);
         if (result.loadType === 'search') result.tracks = result.tracks.slice(0, this.manager.options.search?.resultLimit ?? 10);
         const disabled = this.manager.options.sources?.disabledSources ?? [];
-        result.tracks = result.tracks.filter(track => !disabled.includes(track.sourceName));
+        result.tracks = result.tracks.filter(track => !disabled.includes(track.getInfo().sourceName));
         for (const track of result.tracks) track.backend = node?.backend?.kind;
         return result;
     }

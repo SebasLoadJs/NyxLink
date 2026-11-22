@@ -146,3 +146,21 @@ test('full results and snapshot decoding are independent of the last manager par
   assert.equal(restored.sourceName, 'http');
   assert.equal(restored.duration, 1000);
 });
+
+
+test('partial search results retain complete wire metadata for persistence and source policy', async t => {
+  const {manager,node}=fixture(t);
+  manager.options.trackPartial=['identifier'];
+  node.rest.loadTracks=async()=>({loadType:'track',data:record()});
+  const partial=(await manager.search({query:'partial'})).tracks[0];
+  assert.equal(partial.duration,undefined);
+  assert.equal(partial.sourceName,undefined);
+  assert.equal(partial.getInfo().length,1000);
+  assert.equal(partial.getInfo().sourceName,'http');
+  const {TrackCodec}=require('../dist');
+  const restored=TrackCodec.restore(JSON.parse(JSON.stringify(TrackCodec.serialize(partial))));
+  assert.equal(restored.duration,1000);
+  assert.equal(restored.sourceName,'http');
+  manager.options.sources.disabledSources=['http'];
+  assert.deepEqual((await manager.search({query:'blocked'})).tracks,[]);
+});

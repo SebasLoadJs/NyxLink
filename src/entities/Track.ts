@@ -7,16 +7,16 @@ export class Track {
     public readonly encoded: string;
     public title: string;
     public author: string;
-    public duration: number;
-    public identifier: string;
-    public isSeekable: boolean;
-    public isStream: boolean;
-    public uri: string | null;
-    public artworkUrl: string | null;
-    public isrc: string | null;
-    public sourceName: string;
-    public position: number;
-    public time: number;
+    public duration?: number;
+    public identifier?: string;
+    public isSeekable?: boolean;
+    public isStream?: boolean;
+    public uri?: string | null;
+    public artworkUrl?: string | null;
+    public isrc?: string | null;
+    public sourceName?: string;
+    public position?: number;
+    public time?: number;
     public requester: any;
     public origin?: string;
     public backend?: BackendKind;
@@ -25,6 +25,8 @@ export class Track {
     public retries: number = 0;
     private isPartial: boolean = false;
     #partialTrackOptions: readonly TPartialTrackProperties[];
+    // Keep wire metadata intact even when the public projection omits fields.
+    #originalInfo: ITrackInfo;
 
     constructor(data: ITrack | Record<string, any>, requester?: any, origin?: string, partialTrackOptions: readonly TPartialTrackProperties[] = Structure.getManager()?.options?.trackPartial ?? []) {
         // Internal callers pass their owning manager's preferences explicitly. The
@@ -33,6 +35,9 @@ export class Track {
         const normalized = this.normalizeTrackData(data);
 
         this.encoded = normalized.encoded;
+        this.#originalInfo = { ...normalized.info };
+        this.title = normalized.info.title;
+        this.author = normalized.info.author;
         this.requester = requester || normalized.userData?.requester;
         this.origin = origin;
         if (data.backend === 'lavalink' || data.backend === 'nodelink') this.backend = data.backend;
@@ -122,8 +127,10 @@ export class Track {
 
     public get thumbnail(): string | null {
         if (this.artworkUrl) return this.artworkUrl;
-        if (this.sourceName === "youtube") {
-            return `https://img.youtube.com/vi/${this.identifier}/mqdefault.jpg`;
+        const info = this.getInfo();
+        if (info.artworkUrl) return info.artworkUrl;
+        if (info.sourceName === "youtube" && info.identifier) {
+            return `https://img.youtube.com/vi/${info.identifier}/mqdefault.jpg`;
         }
         return null;
     }
@@ -148,22 +155,28 @@ export class Track {
         return newTrack;
     }
 
+    /** Complete wire metadata, independent of trackPartial projection. */
+    public getInfo(): ITrackInfo {
+        const original = this.#originalInfo;
+        return {
+            title: this.title,
+            author: this.author,
+            length: this.duration ?? original.length,
+            identifier: this.identifier ?? original.identifier,
+            isSeekable: this.isSeekable ?? original.isSeekable,
+            isStream: this.isStream ?? original.isStream,
+            uri: this.uri === undefined ? original.uri : this.uri,
+            artworkUrl: this.artworkUrl === undefined ? original.artworkUrl ?? null : this.artworkUrl,
+            isrc: this.isrc === undefined ? original.isrc ?? null : this.isrc,
+            sourceName: this.sourceName ?? original.sourceName,
+            position: this.position ?? original.position ?? 0,
+        };
+    }
+
     public toJSON(): ITrack {
         return {
             encoded: this.encoded,
-            info: {
-                title: this.title,
-                author: this.author,
-                length: this.duration,
-                identifier: this.identifier,
-                isSeekable: this.isSeekable,
-                isStream: this.isStream,
-                uri: this.uri,
-                artworkUrl: this.artworkUrl,
-                isrc: this.isrc,
-                sourceName: this.sourceName,
-                position: this.position,
-            },
+            info: this.getInfo(),
             pluginInfo: this.pluginInfo,
             userData: this.userData,
             backend: this.backend,

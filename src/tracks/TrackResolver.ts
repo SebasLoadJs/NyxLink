@@ -14,12 +14,13 @@ export class TrackResolver {
         if (!internal && (origin === destination || !origin && !source)) return track;
         if (!internal && source && !origin && !destination) return track;
         if (!destination) throw new TrackResolutionError('Destination backend identity is unknown');
-        if (!track.uri || !/^https?:\/\//i.test(track.uri)) {
+        const uri = track.getInfo().uri;
+        if (!uri || !/^https?:\/\//i.test(uri)) {
             throw new TrackResolutionError('A track URI is required to resolve it on another backend');
         }
         // Resolve against the destination itself, never through Manager.search/native-source shortcuts.
         // v4 loading contract: https://lavalink.dev/api/rest#track-loading
-        const loaded = await target.rest.loadTracks(track.uri, { timeoutMs: 10000 });
+        const loaded = await target.rest.loadTracks(uri, { timeoutMs: 10000 });
         if (loaded.loadType !== 'track' || !loaded.data || typeof loaded.data.encoded !== 'string' || !loaded.data.encoded || !loaded.data.info) {
             throw new TrackResolutionError('Destination could not load the requested track URI');
         }
@@ -32,7 +33,7 @@ export class TrackResolver {
         }
         const resolved = new Track(loaded.data, track.requester, track.origin, []);
         resolved.userData = { ...track.userData };
-        resolved.position = track.position;
+        resolved.position = track.getInfo().position;
         resolved.backend = destination;
         return resolved;
     }

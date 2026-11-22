@@ -34,13 +34,13 @@ export class Queue {
     }
 
     public get duration(): number {
-        return this.tracks.reduce((acc, cur) => acc + cur.duration, 0);
+        return this.tracks.reduce((acc, cur) => acc + Math.max(0, cur.getInfo().length), 0);
     }
 
     public get remainingDuration(): number {
         const queueDuration = this.duration;
         const currentTrackRemaining = this.player.current 
-            ? Math.max(0, this.player.current.duration - this.player.current.position) 
+            ? Math.max(0, this.player.current.getInfo().length - this.player.current.getInfo().position) 
             : 0;
         return queueDuration + currentTrackRemaining;
     }
@@ -214,14 +214,14 @@ export class Queue {
 
     public sortByDuration(): void {
         if (this.tracks.length < 2) return;
-        this.tracks.sort((a, b) => a.duration - b.duration);
+        this.tracks.sort((a, b) => a.getInfo().length - b.getInfo().length);
         this._updateQueue();
     }
 
     public find(query: string): Track | undefined {
         const searchTerm = query.toLowerCase();
         return this.tracks.find(t => 
-            t.identifier === query || 
+            t.getInfo().identifier === query || 
             t.title.toLowerCase().includes(searchTerm)
         );
     }
