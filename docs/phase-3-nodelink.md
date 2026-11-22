@@ -174,3 +174,34 @@ formats/passthrough client behavior is separately verified by local HTTP
 protocol fixtures. Do **not** claim new NodeLink binary features were
 integration-tested against the latest upstream build until a newer immutable
 container revision is published, pinned, and exercised.
+
+
+## 3.15 Streaming wire-format integrity
+
+The NodeLink HTTP streaming client now checks its expected **representation**
+before returning a supposedly successful `loadStream` readable. A successful
+`200` or `206` status is **not** enough to establish that the response is audio.
+
+- `format:'raw'` and legacy `'pcm'` require the documented
+  `audio/l16;rate=48000;channels=2` media type (the media type is
+  case-insensitive).
+- `format:'wav'` requires an audio WAV media type, rather than mistaking
+  raw PCM or JSON for a playable RIFF stream.
+- `format:'passthrough'` requires NodeLink's
+  `X-NodeLink-Passthrough: true` marker. The content is still a source
+  container, **never** assumed PCM. A server predating this feature, or
+  one ignoring the requested format, is rejected rather than returning
+  misidentified audio.
+- `text/*`, `application/json`, and `*+json`/`*+xml` responses are rejected
+  even if a reverse proxy incorrectly responds HTTP `200`.
+- The incoming HTTP response is destroyed promptly on a contract error.
+  The `loadstream` capability is not marked available for such failures.
+  Existing network/abort failures and the bounded `pcm-trim` fallback
+  retain their error semantics.
+
+These checks do **not** inspect raw audio samples or guarantee that a
+stream completes; malformed audio bytes or midstream disconnection must
+still be handled by the downstream reader. The preexisting pinned
+NodeLink container suite continues checking real PCM audio and signal
+levels, while isolated protocol fixtures test wrong media types and
+legacy passthrough behavior.

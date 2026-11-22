@@ -15,6 +15,7 @@ import { Node } from "./Node";
 import type { Player } from "./Player";
 import { IRESTLoadTracks, IRESTGetLyrics, IRESTGetPlayers, ITrack, INodeStats, IRoutePlannerStatus } from "../typings/Interfaces";
 import { playbackGuard } from '../players/PlaybackGuard';
+import { validateNodeLinkStreamResponse } from '../backends/NodeLinkStreamResponse';
 import { assertClientPcmSeekPosition, createClientPcmSeekStream } from '../backends/ClientPCMSeek';
 
 export class RestError extends Error {
@@ -742,6 +743,16 @@ export class Rest {
                 headers: options.range ? { ...this.jsonHeaders, Range: options.range } : this.jsonHeaders,
                 body: requestPayload, signal: options.signal,
             }, options.timeoutMs ?? 100000);
+            // A 200/206 alone does not guarantee audio. In particular, legacy
+            // NodeLink may ignore the new passthrough request and emit PCM.
+            // Destroy invalid responses before they can leak into a decoder.
+            try {
+                validateNodeLinkStreamResponse(res.headers, passthrough ? 'passthrough' :
+                    requestPayload.format === 'wav' ? 'wav' : 'raw');
+            } catch (error) {
+                res.stream.destroy();
+                throw error;
+            }
             if (current()) backend?.recordFeature('loadstream', 'available');
             if (!clientTrim) return { stream: res.stream, headers: res.headers, statusCode: res.statusCode };
             const headers = { ...res.headers };

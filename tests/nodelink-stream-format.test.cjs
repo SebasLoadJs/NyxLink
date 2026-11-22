@@ -15,7 +15,8 @@ async function setup(t) {
     let body='';
     for await (const part of req) body += part;
     calls.push({method:req.method,url:req.url,body:JSON.parse(body)});
-    res.writeHead(200, {'content-type':'audio/l16;rate=48000;channels=2'});
+    res.writeHead(200, {'content-type':calls.at(-1).body.format === 'wav'
+      ? 'audio/wav' : 'audio/l16;rate=48000;channels=2'});
     res.end(Buffer.from([1,2,3,4,5,6]));
   });
   server.listen(0,'127.0.0.1');
@@ -30,7 +31,7 @@ test('NodeLink LoadStream sends raw/wav rather than the obsolete pcm wire value'
   const inputs=['pcm','raw','wav'];
   for (const format of inputs) {
     const result=await node.rest.loadStream({encodedTrack:'local-test-audio',format,volume:100,position:0});
-    assert.match(String(result.headers['content-type']),/audio\/l16/);
+    assert.match(String(result.headers['content-type']),format === 'wav' ? /audio\/wav/ : /audio\/l16/);
     let received=Buffer.alloc(0);
     for await (const chunk of result.stream) received=Buffer.concat([received,chunk]);
     assert.deepEqual(received,Buffer.from([1,2,3,4,5,6]));
