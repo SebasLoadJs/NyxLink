@@ -1088,7 +1088,9 @@ export class Node {
             this.handleLyricsNotFound(player, payload);
             break;
         case "WebSocketClosedEvent":
-            this.handleWebSocketClosed(player, payload);
+            void this.handleWebSocketClosed(player, payload).catch(() => {
+              if (!this.destroyed) this.manager.emit("debug", `NyxLink > Voice close recovery rejected on ${this.identifier}.`);
+            });
             break;
     }
   }
@@ -1549,6 +1551,58 @@ export class Node {
     this.voiceReconnectTimers.clear();
   }
 
+
+  /**
+   * Voice close 4022/5001 recovery can outlive its reporting node, player,
+   * session or user playback intent. Fence each awaited operation to prevent
+   * a stale callback from reconnecting or destroying newer playback.
+   */
+  private async recoverSpecialVoiceClose(player: Player, code: 4022 | 5001): Promise<void> {
+    const guard = playbackGuard(player);
+    const ticket = guard.ticket;
+    const session = this.sessionId;
+    const socket = this.socket;
+    const generation = this.backendGeneration;
+    const active = () => !this.destroyed && this.connected && !this.manager.destroyed &&
+      player.node === this && !player.destroyed &&
+      this.manager.players.get(player.guildId) === player &&
+      this.sessionId === session && this.socket === socket && this.backendGeneration === generation &&
+      guard.isCurrent(ticket);
+    if (!active() || player.get("voiceCloseRecoveryInProgress")) return;
+
+    player.set("voiceCloseRecoveryInProgress", true);
+    try {
+      if (!active()) return;
+      await player.disconnect();
+      if (!active()) return;
+      try {
+        await this.rest.destroyPlayer(player.guildId);
+      } catch {
+        // The old remote voice player may already be gone.
+      }
+      if (!active()) return;
+      await new Promise(resolve => setTimeout(resolve, 750));
+      if (!active()) return;
+      await player.connect();
+      if (!active()) return;
+      // Never let an unsuccessful old restart destroy the current player:
+      // the guarded recovery owns the error policy, not restart().
+      const restarted = await player.restart({ destroyOnFailure: false });
+      if (!active()) return;
+      if (!restarted) {
+        this.manager.emit("debug", `NyxLink > Voice close ${code} recovery was not acknowledged for ${player.guildId}.`);
+      }
+      player.set("wsReconnectAttempts", 0);
+    } catch {
+      if (active()) {
+        this.manager.emit("debug", `NyxLink > Voice close ${code} recovery failed for ${player.guildId}.`);
+        await player.destroy(code === 4022 ? "Voice close 4022 recovery failed" : "Worker failed (5001) recovery failed");
+      }
+    } finally {
+      player.set("voiceCloseRecoveryInProgress", false);
+    }
+  }
+
   private async handleWebSocketClosed(player: any, payload: WebSocketClosedEvent): Promise<void> {
     const { code, reason, byRemote } = payload;
 
@@ -1566,59 +1620,11 @@ export class Node {
         return;
     }
 
-    if (code === 4022) {
-        player.set("voiceCloseRecoveryInProgress", true);
-        try {
-            this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Handling 4022 for player ${player.guildId} with full bot-side voice recovery.`);
-            await player.disconnect();
-            try {
-                await this.rest.destroyPlayer(player.guildId);
-            } catch (e) {
-                this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Failed to destroy remote player during 4022 recovery for ${player.guildId}: ${(e as Error).message}`);
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 750));
-            await player.connect();
-            const restarted = await player.restart();
-            if (!restarted) {
-                this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> 4022 recovery restart returned false for player ${player.guildId}.`);
-            }
-
-            player.set("wsReconnectAttempts", 0);
-            this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> 4022 recovery finished for player ${player.guildId}.`);
-        } catch (error) {
-            this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> 4022 recovery failed for player ${player.guildId}. Error: ${(error as Error).message}`);
-            await player.destroy("Voice close 4022 recovery failed");
-        } finally {
-            player.set("voiceCloseRecoveryInProgress", false);
-        }
-        return;
+    if (code === 4022 || (code === 5001 && this.isNodeLink)) {
+      await this.recoverSpecialVoiceClose(player, code);
+      return;
     }
 
-    if (code === 5001 && this.isNodeLink) {
-        player.set("voiceCloseRecoveryInProgress", true);
-        try {
-            this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Handling 5001 (worker_failed) for player ${player.guildId} with bot-side recovery.`);
-            await player.disconnect();
-            try {
-                await this.rest.destroyPlayer(player.guildId);
-            } catch {}
-            await new Promise(resolve => setTimeout(resolve, 750));
-            await player.connect();
-            const restarted = await player.restart();
-            if (!restarted) {
-                this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> 5001 recovery restart returned false for player ${player.guildId}.`);
-            }
-            player.set("wsReconnectAttempts", 0);
-        } catch (error) {
-            this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> 5001 recovery failed for player ${player.guildId}. Error: ${(error as Error).message}`);
-            await player.destroy("Worker failed (5001) recovery failed");
-        } finally {
-            player.set("voiceCloseRecoveryInProgress", false);
-        }
-        return;
-    }
-    
     if (player.isResuming) {
         this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Player ${player.guildId} is resuming, ignoring WebSocket close event.`);
         return;
