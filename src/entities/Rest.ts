@@ -427,10 +427,9 @@ export class Rest {
                 this.featureError('lavalyrics', error, backend, current);
             }
         });
-        // The common HTTP transport represents empty 204 responses as an empty
-        // string (or object if a server sends a JSON content-type).
-        if (result === '' || (result !== null && typeof result === 'object' &&
-            !Array.isArray(result) && Object.keys(result).length === 0)) {
+        // The shared HTTP transport represents a bodyless 204 as an empty
+        // string. Never accept an empty JSON object as a valid 200 response.
+        if (result === '') {
             if (current()) backend.recordFeature('lavalyrics', 'available');
             return null;
         }
