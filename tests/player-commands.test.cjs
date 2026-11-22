@@ -278,3 +278,31 @@ test('seek rejects non-finite positions without sending a backend request', asyn
   await assert.rejects(player.seek(NaN), /valid number/);
   assert.deepEqual(requests, []);
 });
+
+test('trackStuck handler cannot seek or skip a track replaced by its event listener', async t => {
+  const { manager, node, player, requests } = createPlayer(t);
+  const original = createTrack('stuck-original');
+  const replacement = createTrack('stuck-replacement');
+  player.current = original;
+  let nextPlay;
+  manager.once('trackStuck', () => { nextPlay = player.play({ track: replacement }); });
+  await node.handleTrackStuck(player, { thresholdMs: 10000 });
+  await nextPlay;
+  assert.equal(player.current, replacement);
+  assert.equal(requests.filter(r => r.payload.position !== undefined).length, 0);
+  assert.equal(requests.filter(r => r.payload.track?.encoded === null).length, 0);
+});
+
+test('trackException handler cannot stop a new track requested by its event listener', async t => {
+  const { manager, node, player, requests } = createPlayer(t);
+  player.current = createTrack('exception-original');
+  let nextPlay;
+  const replacement = createTrack('exception-replacement');
+  manager.once('trackException', () => { nextPlay = player.play({ track: replacement }); });
+  await node.handleTrackException(player, {
+    exception: { severity: 'fault', message: 'obsolete track failed' },
+  });
+  await nextPlay;
+  assert.equal(player.current, replacement);
+  assert.equal(requests.filter(r => r.payload.track?.encoded === null).length, 0);
+});
