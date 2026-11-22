@@ -218,3 +218,24 @@ test('shutdown requested from nodeCreate prevents further startup without a spur
   await closing;
   assert.equal(result[0].status, 'fulfilled'); assert.equal(connected, 0); assert.equal(manager.nodes.nodes.size, 0);
 });
+
+
+test('uninitialized Manager reports unavailable storage and shuts down safely', async () => {
+  const manager=new Manager({nodes:[{host:'127.0.0.1',port:2333,password:'test',secure:false}]});
+  assert.throws(()=>manager.database,/not initialized/);
+  assert.throws(()=>manager.send('123456789012345678',{}),/No Discord gateway sender/);
+  await manager.shutdown();
+});
+
+test('first connector supplies a missing sender without overriding an explicit sender', async () => {
+  const config={nodes:[{host:'127.0.0.1',port:2333,password:'test',secure:false}]};
+  const connector={setManager(){},listen(){},send(){return 42;}};
+  const manager=new Manager(config);
+  manager.use(connector,{});
+  assert.equal(manager.send('123456789012345678',{}),42);
+  const explicit=()=>43;
+  const configured=new Manager({...config,send:explicit});
+  configured.use(connector,{});
+  assert.equal(configured.send,explicit);
+  await Promise.all([manager.shutdown(),configured.shutdown()]);
+});

@@ -1,7 +1,12 @@
 import { Manager } from "../core/Manager";
 
 export abstract class Connector {
-    public manager: Manager;
+    private attachedManager?: Manager;
+    public get manager(): Manager {
+        if (!this.attachedManager) throw new Error('Connector has no manager');
+        return this.attachedManager;
+    }
+    public set manager(manager: Manager) { this.attachedManager = manager; }
 
     public setManager(manager: Manager): void {
         this.manager = manager;

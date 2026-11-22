@@ -24,11 +24,17 @@ import { Logger } from "../logging/Logger";
 export class Manager extends EventEmitter<IManagerEvents> {
     public initialized: boolean = false;
     public readonly options: IManagerOptionsConfig;
+    private readonly missingSend = (): never => { throw new Error('No Discord gateway sender configured'); };
     public send: (guildId: string, payload: any) => void;
-    public clientId: string;
+    public clientId: string = "";
     public readonly nodes: NodeManager;
     public readonly players: PlayerManager;
-    public database: DatabaseManager;
+    private databaseInstance?: DatabaseManager;
+    public get database(): DatabaseManager {
+        if (!this.databaseInstance) throw new Error('Manager database is not initialized');
+        return this.databaseInstance;
+    }
+    public set database(database: DatabaseManager) { this.databaseInstance = database; }
     public readonly logger?: Logger;
     private detachLogging?: () => void;
     private idleCheckInterval?: NodeJS.Timeout;
@@ -56,7 +62,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
         validate(config.nodes, (value) => Array.isArray(value) && value.length > 0, "Manager config requires a non-empty nodes array.");
         validate(config.options, (value) => value == null || (typeof value === "object" && !Array.isArray(value)), "Manager config 'options' must be a plain object if provided.");
 
-        this.send = config.send || null;
+        this.send = config.send ?? this.missingSend;
         
         this.options = { 
             clientName: `NyxLink/${version} (https://github.com/SebasLoadJs/NyxLink)`,
@@ -164,7 +170,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
     public use(connector: Connector, client: any): this {
         if (this.destroyed) throw new Error('Manager is shut down');
         connector.setManager(this);
-        if (!this.send) this.send = connector.send.bind(connector);
+        if (!this.send || this.send === this.missingSend) this.send = connector.send.bind(connector);
         this.connectors.add(connector);
         connector.listen(client);
         return this;
@@ -225,7 +231,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
             for (const connector of this.connectors) await attempt(() => connector.dispose?.());
             this.connectors.clear();
             await attempt(() => this.detachLogger());
-            if (this.database) await attempt(() => this.database.shutdown());
+            if (this.databaseInstance) await attempt(() => this.databaseInstance?.shutdown());
             if (Structure.getManager() === this) Structure.setManager(undefined);
             if (errors.length) throw new AggregateError(errors, 'Manager shutdown encountered cleanup failures');
         });
