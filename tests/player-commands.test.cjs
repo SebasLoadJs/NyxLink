@@ -316,3 +316,10 @@ test('synchronous volume setter rejects non-finite values without changing state
   assert.equal(player.volume, original);
   assert.deepEqual(requests, []);
 });
+
+test('stuck event without an active track does not seek an idle player', async t => {
+  const { node, player, requests } = createPlayer(t);
+  assert.equal(player.current, null);
+  await node.handleTrackStuck(player, { thresholdMs: 10000 });
+  assert.deepEqual(requests, []);
+});
