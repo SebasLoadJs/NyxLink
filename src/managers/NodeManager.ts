@@ -11,6 +11,7 @@ export class NodeManager {
     public readonly nodes: Map<string, any> = new Map();
     private readonly nodeConfigs: IManagerNodeConfig[];
     private readonly drains = new WeakMap<object, Promise<boolean>>();
+    private readonly ejections = new WeakMap<object, Promise<boolean>>();
 
     constructor(manager: Manager, nodeConfigs: IManagerNodeConfig[]) {
         this.manager = manager;
@@ -86,7 +87,7 @@ export class NodeManager {
     public setDraining(identifier: string, draining = true): boolean {
         const node = this.nodes.get(identifier);
         if (typeof draining !== 'boolean') throw new TypeError('draining must be a boolean');
-        if (this.manager.destroyed || !node || node.destroyed || !draining && this.drains.has(node)) return false;
+        if (this.manager.destroyed || !node || node.destroyed || !draining && (this.drains.has(node) || this.ejections.has(node))) return false;
         node.draining = draining;
         return true;
     }
@@ -95,6 +96,7 @@ export class NodeManager {
     public drain(identifier: string): Promise<boolean> {
         const node = this.nodes.get(identifier);
         if (this.manager.destroyed || !node || node.destroyed) return Promise.resolve(false);
+        if (this.ejections.has(node)) return Promise.resolve(false);
         const existing = this.drains.get(node);
         if (existing) return existing;
         this.setDraining(identifier);
@@ -119,30 +121,42 @@ export class NodeManager {
         return drained && !node.destroyed && !this.manager.destroyed;
     }
 
-    public async eject(identifier: string): Promise<boolean> {
+    public eject(identifier: string): Promise<boolean> {
         const node = this.nodes.get(identifier);
-        if (!node) {
-            this.manager.emit("debug", `Moonlink.js > NodeManager#eject: Node ${identifier} not found.`);
-            return false;
-        }
+        if (!node || node.destroyed || this.manager.destroyed) return Promise.resolve(false);
+        const existing = this.ejections.get(node);
+        if (existing) return existing;
+        if (this.drains.has(node)) return Promise.resolve(false);
+        this.setDraining(identifier);
+        const operation = Promise.resolve().then(() => this.ejectNode(identifier, node))
+            .finally(() => this.ejections.delete(node));
+        this.ejections.set(node, operation);
+        return operation;
+    }
 
-        const playersToMove = this.manager.players.filter(player => player.node.identifier === identifier);
-        
-        if (playersToMove.length > 0) {
-            this.manager.emit("debug", `Moonlink.js > NodeManager#eject: Moving ${playersToMove.length} players from ${identifier}...`);
-            const results = await Promise.all(playersToMove.map(player => NodeFailover.move(player, node)));
-            const failed = playersToMove.filter((_, index) => results[index].status === 'failed');
-            if (failed.length) {
-                this.manager.emit('playersOrphaned', failed, node);
-                if (!this.manager.options.node?.failover?.preserveOnFailure) {
-                    await Promise.all(failed.map(player => player.destroy('Node ejected: failover failed')));
-                }
+    private async ejectNode(identifier: string, node: any): Promise<boolean> {
+        const active = () => !this.manager.destroyed && !node.destroyed && this.nodes.get(identifier) === node;
+        if (!active()) return false;
+        const players = this.manager.players.filter(player => player.node === node);
+        const results = await Promise.all(players.map(player => NodeFailover.move(player, node)));
+        if (!active()) return false;
+        const attached = (player: any) => !player.destroyed && player.node === node &&
+            this.manager.players.get(player.guildId) === player;
+        // A cancellation represents a newer intent, not permission to orphan or destroy it.
+        if (players.some((player, index) => results[index].status === 'cancelled' && attached(player))) return false;
+        const failed = players.filter((player, index) => results[index].status === 'failed' && attached(player));
+        if (failed.length) {
+            this.manager.emit('playersOrphaned', failed, node);
+            if (!active()) return false;
+            if (!this.manager.options.node?.failover?.preserveOnFailure) {
+                await Promise.all(failed.filter(attached).map(player => player.destroy('Node ejected: failover failed')));
             }
         }
-
-        this.remove(identifier);
-        this.manager.emit("debug", `Moonlink.js > NodeManager#eject: Node ${identifier} ejected successfully.`);
-        return true;
+        if (!active()) return false;
+        // Do not remove a node that gained a new owner during asynchronous evacuation.
+        const preserved = new Set(failed);
+        if (this.manager.players.filter(player => attached(player) && !preserved.has(player)).length) return false;
+        return this.remove(identifier);
     }
 
     private _validateConfig(config: IManagerNodeConfig): void {

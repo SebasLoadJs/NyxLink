@@ -107,3 +107,62 @@ for (const preserveOnFailure of [true, false]) {
     if (preserveOnFailure) assert.deepEqual(player.queue.tracks, [queued]);
   });
 }
+
+
+test('eject blocks new assignments and coalesces concurrent requests', async t => {
+  const {manager,node:source,player} = createPlayer(t);
+  const [target] = candidates(manager);
+  const entered = deferred(), release = deferred();
+  let transfers = 0;
+  player.transferNode = async destination => { transfers++; entered.resolve(); await release.promise; player.node = destination; return true; };
+  const first = manager.nodes.eject(source.identifier);
+  assert.equal(source.draining,true);
+  assert.equal(manager.nodes.findNode(),target);
+  await entered.promise;
+  const second = manager.nodes.eject(source.identifier);
+  assert.equal(manager.nodes.setDraining(source.identifier,false),false);
+  release.resolve();
+  assert.deepEqual(await Promise.all([first,second]),[true,true]);
+  assert.equal(transfers,1);
+});
+
+test('cancelled evacuation leaves the source available for explicit recovery rather than orphaning newer playback', async t => {
+  const {manager,node:source,player} = createPlayer(t);
+  candidates(manager);
+  const {playbackGuard} = require('../dist/src/players/PlaybackGuard');
+  const entered = deferred(), release = deferred();
+  player.transferNode = async () => { playbackGuard(player).invalidate(); entered.resolve(); await release.promise; return false; };
+  const ejecting = manager.nodes.eject(source.identifier);
+  await entered.promise;
+  playbackGuard(player).invalidate();
+  release.resolve();
+  assert.equal(await ejecting,false);
+  assert.equal(source.destroyed,false);
+  assert.equal(player.destroyed,false);
+  assert.equal(manager.nodes.nodes.get(source.identifier),source);
+});
+
+test('cancellation during the last failover backoff is not reported as failure', async t => {
+  const {NodeFailover} = require('../dist/src/nodes/NodeFailover');
+  const {playbackGuard} = require('../dist/src/players/PlaybackGuard');
+  const {manager,node:source,player} = createPlayer(t);
+  const [target, second] = candidates(manager);
+  manager.nodes.nodes.delete(second.identifier);
+  t.mock.timers.enable({apis:['setTimeout']});
+  player.transferNode = async () => false;
+  let failures=0; manager.on('playerRecoveryFailed',()=>failures++);
+  const moving=NodeFailover.move(player,source,{maxAttempts:2,retryDelayMs:100});
+  await new Promise(resolve=>setImmediate(resolve));
+  playbackGuard(player).invalidate();
+  t.mock.timers.tick(100);
+  assert.equal((await moving).status,'cancelled');
+  assert.equal(failures,0);
+});
+
+test('players cannot migrate to a node belonging to another manager', async t => {
+  const {player,node} = createPlayer(t);
+  const foreign = createPlayer(t);
+  foreign.node.identifier = 'foreign';
+  assert.equal(await player.transferNode(foreign.node),false);
+  assert.equal(player.node,node);
+});

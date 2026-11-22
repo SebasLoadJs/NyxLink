@@ -54,9 +54,10 @@ export class NodeFailover {
         }
         const guard = playbackGuard(player);
         let ticket = guard.ticket;
+        const cancelled = () => player.destroyed || source.destroyed || player.manager.destroyed || !guard.isCurrent(ticket);
         let attempts = 0;
         while (attempts < maxAttempts) {
-            if (player.destroyed || source.destroyed || player.manager.destroyed || !guard.isCurrent(ticket)) return { status: 'cancelled', attempts };
+            if (cancelled() || player.node !== source) return { status: 'cancelled', attempts };
             const target = player.manager.nodes.findNode({ ...player.nodeSelection, exclude: [...excluded], allowUnhealthyFallback: false });
             if (!target) break;
             excluded.add(target.identifier);
@@ -73,6 +74,7 @@ export class NodeFailover {
             }
             if (baseDelay && attempts < maxAttempts) await delay(retryDelay(baseDelay, 0, jitter, 60000));
         }
+        if (cancelled() || player.node !== source) return { status: 'cancelled', attempts };
         player.manager.emit('playerRecoveryFailed', player);
         return { status: 'failed', attempts };
     }

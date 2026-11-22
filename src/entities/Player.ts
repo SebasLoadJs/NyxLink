@@ -1170,7 +1170,7 @@ export class Player {
 
     public async transferNode(node: Node | string): Promise<boolean> {
         const targetNode = typeof node === "string" ? this.manager.nodes.nodes.get(node) : node;
-        if (this.destroyed || !targetNode || !NodeSelector.matches(targetNode, this.nodeSelection) || targetNode.identifier === this.node.identifier) return false;
+        if (this.destroyed || !targetNode || targetNode.manager !== this.manager || !NodeSelector.matches(targetNode, this.nodeSelection) || targetNode.identifier === this.node.identifier) return false;
 
         this.node.cancelVoiceReconnect?.(this);
         const ticket = playbackGuard(this).invalidate();
