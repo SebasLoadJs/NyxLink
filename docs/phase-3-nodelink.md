@@ -72,3 +72,7 @@ Verified modern endpoint scenarios: Source Health JSON contract, session groups 
 ## 3.10 In-flight queue reconciliation
 
 Changes to queue order, removal or preload options while an HTTP PATCH is pending now set a coalesced reconciliation flag. When the current queued task completes it schedules one subsequent serialized pass without relying on another position update. Turning Crossfade off also requests a pass, cancelling only automatically reserved next tracks while leaving queued tracks untouched. This addresses a client race at the REST/event boundary; real audible transition verification is still required.
+
+## 3.11 Opt-in voice acceptance harness
+
+Added `scripts/test-live-voice.cjs` and [operator checklist](live-voice-verification.md) to exercise real Discord gateway + NodeLink audio only with explicit local credentials and the `--armed` flag. The harness records ordered TrackStart and TrackEnd events and protects token secrecy, but cannot itself claim audible Crossfade. It is not run in CI because the project has no authorized test bot or voice-server credentials connected. The script's defensive configuration and no-network default are regression-tested; actual Discord playback remains pending manual execution and listener verification.

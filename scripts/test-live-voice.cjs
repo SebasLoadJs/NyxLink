@@ -1,0 +1,179 @@
+const { setTimeout: delay } = require('node:timers/promises');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+
+const snowflake = value => typeof value === 'string' && /^\d{17,20}$/.test(value);
+const address = value => {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try {
+    const parsed = new URL(value);
+    return (parsed.protocol === 'https:' || parsed.protocol === 'http:') &&
+      !parsed.username && !parsed.password && !!parsed.hostname;
+  } catch { return false; }
+};
+
+/** This module never logs in simply because it is imported or run without --armed. */
+function validateConfiguration(env, argv) {
+  if (!argv.includes('--armed')) throw new Error('Explicit --armed flag required; no network actions performed');
+  const fields = [
+    'NYXLINK_DISCORD_BOT_TOKEN', 'NYXLINK_DISCORD_GUILD_ID',
+    'NYXLINK_DISCORD_VOICE_CHANNEL_ID', 'NYXLINK_NODE_HOST',
+    'NYXLINK_NODE_PORT', 'NYXLINK_NODE_PASSWORD',
+    'NYXLINK_LIVE_TRACK_A', 'NYXLINK_LIVE_TRACK_B'
+  ];
+  const missing = fields.filter(key => typeof env[key] !== 'string' || !env[key].trim());
+  if (missing.length) throw new Error('Missing environment variables: ' + missing.join(', '));
+  if (!snowflake(env.NYXLINK_DISCORD_GUILD_ID) || !snowflake(env.NYXLINK_DISCORD_VOICE_CHANNEL_ID)) {
+    throw new Error('Guild/channel must be valid Discord snowflake IDs');
+  }
+  const port = Number(env.NYXLINK_NODE_PORT);
+  if (!Number.isSafeInteger(port) || port < 1 || port > 65535) throw new Error('Invalid NodeLink port');
+  if (!/^[a-zA-Z0-9.-]+$/.test(env.NYXLINK_NODE_HOST)) throw new Error('Invalid NodeLink host');
+  if (!address(env.NYXLINK_LIVE_TRACK_A) || !address(env.NYXLINK_LIVE_TRACK_B) ||
+      env.NYXLINK_LIVE_TRACK_A === env.NYXLINK_LIVE_TRACK_B) throw new Error('Provide two different accessible HTTP(S) audio URLs');
+  const crossfadeMs = env.NYXLINK_LIVE_CROSSFADE_MS === undefined ? 5000 : Number(env.NYXLINK_LIVE_CROSSFADE_MS);
+  if (!Number.isSafeInteger(crossfadeMs) || crossfadeMs < 1000 || crossfadeMs > 15000) throw new Error('Crossfade duration must be 1000–15000 milliseconds');
+  return {
+    token: env.NYXLINK_DISCORD_BOT_TOKEN,
+    guildId: env.NYXLINK_DISCORD_GUILD_ID,
+    channelId: env.NYXLINK_DISCORD_VOICE_CHANNEL_ID,
+    node: {
+      identifier: 'live-voice-verification',
+      host: env.NYXLINK_NODE_HOST,
+      port,
+      password: env.NYXLINK_NODE_PASSWORD,
+      secure: env.NYXLINK_NODE_SECURE === 'true'
+    },
+    urls: [env.NYXLINK_LIVE_TRACK_A, env.NYXLINK_LIVE_TRACK_B],
+    crossfadeMs
+  };
+}
+
+function event(manager, name, matches, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      manager.removeListener(name, handler);
+      reject(new Error('Timed out waiting for ' + name));
+    }, timeoutMs);
+    const handler = (...args) => {
+      if (!matches(...args)) return;
+      clearTimeout(timer);
+      manager.removeListener(name, handler);
+      resolve(args);
+    };
+    manager.on(name, handler);
+  });
+}
+
+async function run(config) {
+  const { Client, GatewayIntentBits } = require('discord.js');
+  const { Manager, Connectors } = require('../dist');
+  const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
+  const manager = new Manager({
+    nodes: [config.node],
+    options: { database: { type: 'memory' }, resume: false, voiceConnection: { timeout: 30000 } }
+  });
+  const events = [];
+  const record = (type, extra = {}) => events.push({ type, at: new Date().toISOString(), ...extra });
+  const report = {
+    scope: 'opt-in real Discord gateway and voice integration',
+    audioMeasured: false,
+    operatorListeningRequired: true,
+    observed: false,
+    events
+  };
+  let player;
+  const redact = error => {
+    let message = error instanceof Error ? error.message : String(error);
+    for (const secret of [config.token, config.node.password]) {
+      if (secret.length >= 4) message = message.replaceAll(secret, '[REDACTED]');
+    }
+    return message;
+  };
+  manager.on('trackStart', (p, track) => {
+    if (p.guildId === config.guildId) record('trackStart', { track: track.encoded === report.firstEncoded ? 'A' :
+      track.encoded === report.secondEncoded ? 'B' : 'unexpected' });
+  });
+  manager.on('trackEnd', (p, track, reason) => {
+    if (p.guildId === config.guildId) record('trackEnd', { reason, track: track.encoded === report.firstEncoded ? 'A' :
+      track.encoded === report.secondEncoded ? 'B' : 'unexpected' });
+  });
+  manager.on('nodeError', (_node, error) => record('nodeError', { error: redact(error) }));
+  manager.use(new Connectors.DiscordJs(), client);
+  try {
+    const ready = event(manager, 'nodeReady', n => n.identifier === config.node.identifier, 45000);
+    await client.login(config.token);
+    const [node] = await ready;
+    if (node.backend?.kind !== 'nodelink') throw new Error('Expected NodeLink backend');
+    record('nodeReady', { version: node.backend.version });
+    const tracks = [];
+    for (const url of config.urls) {
+      const result = await manager.search({ query: url, node: node.identifier });
+      const track = result.tracks?.[0];
+      if (!track || track.getInfo().isStream || track.getInfo().length < config.crossfadeMs + 10000 ||
+        track.getInfo().length > 120000) throw new Error('Both test tracks must be finite, 15–120s long and decodable');
+      tracks.push(track);
+    }
+    if (tracks[0].encoded === tracks[1].encoded) throw new Error('Test tracks must be distinct');
+    // Encoded strings are retained only for local event identity matching and omitted from the report.
+    report.firstEncoded = tracks[0].encoded; report.secondEncoded = tracks[1].encoded;
+    player = manager.players.create({
+      guildId: config.guildId, voiceChannelId: config.channelId, autoPlay: false
+    });
+    await player.connect();
+    record('gatewayVoiceReady');
+    await player.setCrossfade({ enabled: true, mode: 'smart', duration: config.crossfadeMs, curve: 'sinusoidal' });
+    player.setQueuePreload({ enabled: true, leadMs: Math.min(35000, tracks[0].getInfo().length) });
+    player.queue.add(tracks);
+    const played = await player.play();
+    if (!played) throw new Error('Backend did not accept initial playback');
+    // Do not trust REST acknowledgement as evidence of voice audio.
+    const expires = Date.now() + Math.min(240000, tracks[0].getInfo().length + 45000);
+    while (Date.now() < expires) {
+      const starts = events.filter(e => e.type === 'trackStart').map(e => e.track);
+      if (starts.length >= 2) break;
+      await delay(200);
+    }
+    await delay(2000);
+    const starts = events.filter(e => e.type === 'trackStart').map(e => e.track);
+    report.observed = starts.length === 2 && starts[0] === 'A' && starts[1] === 'B';
+    report.transitionReasons = events.filter(e => e.type === 'trackEnd').map(e => e.reason);
+    report.crossfadeEventObserved = report.transitionReasons.includes('crossfading');
+    report.remainingQueue = player.queue.size;
+    report.success = report.observed && report.remainingQueue === 0;
+    if (!report.success) throw new Error('Two ordered TrackStart events and an empty queue were not observed');
+    record('protocolSequencePassed');
+  } catch (error) {
+    report.success = false;
+    report.error = redact(error);
+  } finally {
+    // Never persist bearer tokens, server URLs or encoded tracks to disk.
+    delete report.firstEncoded;
+    delete report.secondEncoded;
+    try { if (player) await player.stop().catch(() => {}); } catch {}
+    try { await manager.shutdown(); } catch {}
+    client.destroy();
+    const target = path.resolve('.runtime/live-voice/report.json');
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.writeFile(target, JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
+    console.log(JSON.stringify({ report: target, protocolPassed: report.success,
+      crossfadeEventObserved: report.crossfadeEventObserved ?? false,
+      audioMeasured: false, error: report.error }));
+  }
+  if (!report.success) process.exitCode = 1;
+}
+
+if (require.main === module) {
+  try {
+    const config = validateConfiguration(process.env, process.argv.slice(2));
+    void run(config).catch(error => {
+      console.error('Live voice test failed: ' + (error instanceof Error ? error.message : String(error)));
+      process.exitCode = 1;
+    });
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 1;
+  }
+}
+
+module.exports = { validateConfiguration };
