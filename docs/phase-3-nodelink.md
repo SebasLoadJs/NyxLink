@@ -78,7 +78,7 @@ Changes to queue order, removal or preload options while an HTTP PATCH is pendin
 Added `scripts/test-live-voice.cjs` and [operator checklist](live-voice-verification.md) to exercise real Discord gateway + NodeLink audio only with explicit local credentials and the `--armed` flag. The harness records ordered TrackStart and TrackEnd events and protects token secrecy, but cannot itself claim audible Crossfade. It is not run in CI because the project has no authorized test bot or voice-server credentials connected. The script's defensive configuration and no-network default are regression-tested; actual Discord playback remains pending manual execution and listener verification.
 
 
-## 3.9 Real NodeLink PCM stream acceptance
+## 3.12 Real NodeLink PCM stream acceptance
 
 The modern NodeLink revision at `97bbce1` defines `POST /v4/loadstream`
 with output format `raw` (48 kHz stereo signed 16-bit PCM) or `wav`
@@ -97,3 +97,21 @@ is used. A successful result demonstrates real source decoding and
 binary streaming, **not** a Discord UDP/Opus audio session, audible
 crossfade, AutoMix, sample-accurate gapless playback or failover.
 The test is a CI release gate, so its status must be verified per run.
+
+
+## 3.13 Real PCM volume and seek acceptance
+
+The modern NodeLink container lab now decodes the same generated one-second,
+440 Hz WAV using five client requests: full WAV (100% volume), raw PCM,
+muted WAV (0%), quarter-volume WAV (25%) and WAV starting at position
+500 milliseconds. Every request uses the actual container's HTTP decoder.
+A bounded reader limits each response to 1 MiB and cancels stalled requests
+after 30 seconds. The test checks real 48 kHz stereo S16LE samples, verifies
+the silent and quiet output using RMS amplitude, and verifies that seeking
+removes approximately half a second of audio while preserving nonzero samples.
+
+All acceptance claims depend on a **successful modern-nodelink CI job**;
+source code alone is not an observed test result. PCM volume processing and
+position decoding do not prove Opus encoding, UDP/Discord audio transport,
+sample-accurate two-track crossfade, AutoMix, or survival of real voice
+disconnections. Those remain separate verifications.
