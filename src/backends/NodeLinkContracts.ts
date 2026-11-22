@@ -189,11 +189,14 @@ export function validateNodeLinkStreamFormats(value: unknown): asserts value is 
     const nullableString = (v: unknown): boolean => v === null || typeof v === 'string';
     const nullableCount = (v: unknown): boolean => v === null || number(v);
     const nullableItag = (v: unknown): boolean => v === null || (count(v) && (v as number) > 0);
-    if (!obj(value) || typeof value.source !== 'string' || typeof value.protocol !== 'string' ||
-        !nullableString(value.format) || typeof value.mimeType !== 'string' || !nullableItag(value.itag) ||
-        typeof value.seekable !== 'boolean' || typeof value.byteRangeSupported !== 'boolean' ||
-        !Array.isArray(value.formats) || value.formats.length > 256) invalid('envelope');
-    for (const format of value.formats) {
+    if (!obj(value)) invalid('envelope');
+    const catalogue = value as Record<string, unknown>;
+    if (typeof catalogue.source !== 'string' || typeof catalogue.protocol !== 'string' ||
+        !nullableString(catalogue.format) || typeof catalogue.mimeType !== 'string' || !nullableItag(catalogue.itag) ||
+        typeof catalogue.seekable !== 'boolean' || typeof catalogue.byteRangeSupported !== 'boolean' ||
+        !Array.isArray(catalogue.formats) || catalogue.formats.length > 256) invalid('envelope');
+    const formats = catalogue.formats as unknown[];
+    for (const format of formats) {
         if (!obj(format) || !nullableItag(format.itag) ||
             ![null, 'audio', 'video', 'muxed'].includes(format.type as any) ||
             !nullableString(format.format) || !nullableString(format.codec) ||
