@@ -554,3 +554,14 @@ test('late queueEnd from a prior generation cannot destroy a pending explicit pl
   assert.equal(player.current, next);
   assert.ok(requests.some(request => request.payload.track?.encoded === next.encoded));
 });
+
+test('autoLeave preserves an idle player when queueEnd handler enqueues without playing', async t => {
+  const { manager, node, player } = createPlayer(t);
+  player.autoLeave = true;
+  const next = createTrack('queued-by-end-handler');
+  manager.once('queueEnd', () => player.queue.add(next));
+  await node.handleQueueEnd(player, createTrack('completed'));
+  assert.equal(player.destroyed, false);
+  assert.equal(player.queue.first, next);
+  assert.equal(player.current, null);
+});
