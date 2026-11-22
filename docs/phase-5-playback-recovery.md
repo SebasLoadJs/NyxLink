@@ -44,3 +44,27 @@ the Lavalink exclusion from NodeLink-only 5001 handling.
 suite. Discord transport, audible stream continuity and actual voice-worker
 resilience are not established by these tests. Real voice acceptance is
 separate and opt-in.
+
+
+## 5.3 Gapless transition state
+
+Lavalink/NodeLink terminal track-end reasons such as `finished` and
+`cleanup` are not equivalent to nonterminal `gapless` and `crossfading`
+transitions. Prior code suppressed queue/autoplay for both transition
+reasons but preserved `player.playing` only for `crossfading`. A `gapless`
+end incorrectly set the player idle and reset pause/position telemetry,
+potentially causing UI state to flicker between server-managed tracks.
+
+The gapless branch now preserves the previously confirmed `playing`,
+`paused` and `lastKnownPosition` state, exactly as crossfade does.
+The next accepted track start or player update becomes the authority
+for newer state. These transition events still emit `trackEnd` but do
+not consume the queue or launch autoplay. Terminal cleanup continues
+to clear player activity and avoid queue advancement.
+
+`tests/gapless-continuity.test.cjs` covers both transition modes,
+paused transitions, a real terminal cleanup and stale track ends.
+
+This fixes the **client state machine**, not the audio server's mixing
+or sample-accurate gapless playback. Audible gapless quality remains
+unverified.
