@@ -12,6 +12,7 @@ let version;
 let image;
 let seekEvidence = { status: 'not-run' };
 let seekWireProbes = [];
+let seekMetadataProbe = { status: 'not-run' };
 (async () => {
   let failure;
   try {
@@ -95,12 +96,16 @@ let seekWireProbes = [];
         // explicit, independently inspectable probe; do not advertise seek as
         // verified, and do not hide regression in the supported PCM checks.
         let longerEncoded;
+        let longerTrackInfo;
+        let longerDurationMs;
         try {
           const longer = await node.rest.loadTracks(lab.seekMediaUrl);
           longerEncoded = longer?.data?.encoded;
+          longerTrackInfo = longer?.data?.info;
           assert.equal(longer.loadType, 'track');
           const longerFull = await streamAudio(node.rest, longer.data.encoded);
           const durationMs = longerFull.evidence.durationMs;
+          longerDurationMs = durationMs;
           assert.ok(durationMs > 2500 && durationMs < 3500,
             'Expected three-second decoded seek fixture, got ' + durationMs.toFixed(1) + ' ms');
           const resumed = await streamAudio(node.rest, longer.data.encoded, { position: 500 });
@@ -136,6 +141,49 @@ let seekWireProbes = [];
             seekWireProbes.push(await probeLoadStream(backend, node.sessionId, longerEncoded, variant));
           }
           console.log('NodeLink seek wire diagnostics:', JSON.stringify(seekWireProbes));
+
+          // The built-in HTTP source advertises length=-1 even for a finite
+          // WAV. Probe a *test-only* re-encoded track with the observed full
+          // PCM duration to distinguish unknown-length handling from actual
+          // decoder seeking failures. Do not change public track metadata.
+          if (Number.isFinite(longerDurationMs) && longerDurationMs > 2500 &&
+              longerTrackInfo && typeof longerTrackInfo === 'object') {
+            try {
+              const encodedKnown = await node.rest.encodeTracksRemote([{
+                encoded: longerEncoded,
+                info: {
+                  ...longerTrackInfo,
+                  length: Math.round(longerDurationMs),
+                  isStream: false,
+                  isSeekable: true,
+                  position: 0,
+                  details: [],
+                },
+              }]);
+              assert.ok(Array.isArray(encodedKnown) && typeof encodedKnown[0] === 'string');
+              const knownRange = await probeLoadStream(backend, node.sessionId, encodedKnown[0],
+                { name:'raw-range-known-duration', format:'raw', position:0, range:'bytes=96000-' });
+              const knownPosition = await probeLoadStream(backend, node.sessionId, encodedKnown[0],
+                { name:'wav-position-known-duration', format:'wav', position:500 });
+              seekMetadataProbe = {
+                status: 'observed',
+                advertisedOriginalDurationMs: longerTrackInfo.length,
+                originalIsStream: longerTrackInfo.isStream,
+                assertedDurationMs: Math.round(longerDurationMs),
+                knownRange, knownPosition,
+              };
+              console.log('NodeLink known-duration seek diagnostics:', JSON.stringify(seekMetadataProbe));
+            } catch (error) {
+              seekMetadataProbe = {
+                status:'failed',
+                code: typeof error?.code === 'string' ? error.code : 'unknown',
+                message: String(error?.message ?? error).slice(0,240),
+                advertisedOriginalDurationMs: longerTrackInfo.length,
+              };
+              console.warn('NodeLink known-duration probe unavailable:', JSON.stringify(seekMetadataProbe));
+            }
+          }
+
         }
         const lyrics = await node.rest.loadLyrics(loaded.data.encoded,{type:'onlyCaptions',source:'youtube',lang:'es'});
         assert.ok(lyrics && ['empty','error','lyrics'].includes(lyrics.loadType));
@@ -149,7 +197,7 @@ let seekWireProbes = [];
       }
     },{streaming:true,mix:true});
   } catch(error) {failure=error instanceof Error?error.message:String(error);}
-  const report={scope:'modern NodeLink isolated API; no Discord audio',version,image,checks,seekEvidence,seekWireProbes,passed:!failure,...(failure?{error:failure}:{})};
+  const report={scope:'modern NodeLink isolated API; no Discord audio',version,image,checks,seekEvidence,seekWireProbes,seekMetadataProbe,passed:!failure,...(failure?{error:failure}:{})};
   await fs.mkdir('.runtime/extensions',{recursive:true});
   await fs.writeFile('.runtime/extensions/modern-report.json',JSON.stringify(report,null,2)+'\n');
   console.log(JSON.stringify(report));
