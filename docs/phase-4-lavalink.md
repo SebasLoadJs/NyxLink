@@ -40,3 +40,22 @@ The `tests/lavalyrics-plugin.test.cjs` suite includes isolated local HTTP fixtur
 ## Security and compatibility
 
 No plugin artifacts or Java dependencies are vendored. The OSL-3.0 license stays unchanged. No changes to NodeLink client route mappings, stable `v5.2`, npm publication or transport credentials are needed for this contract increment.
+
+## 4.2 SponsorBlock categories (separate Lavalink contract)
+
+Official upstream specification: https://github.com/topi314/SponsorBlock-Plugin#usage
+
+Lavalink's optional SponsorBlock plugin exposes `GET`, `PUT`, and `DELETE /v4/sessions/{sessionId}/players/{guildId}/sponsorblock/categories`, where PUT accepts an array of the documented categories. In contrast, **NodeLink exposes `GET/PATCH/POST/DELETE .../sponsorblock` with its own state object and segment overrides**. These are not wire-compatible and no automatic mapping of the two is attempted.
+
+```ts
+// Only on a Lavalink v4 node advertising the SponsorBlock plugin:
+const categories = await node.getLavalinkSponsorBlockCategories(guildId);
+await node.setLavalinkSponsorBlockCategories(guildId, ['sponsor', 'selfpromo']);
+await node.clearLavalinkSponsorBlockCategories(guildId);
+```
+
+The public category union covers `sponsor`, `selfpromo`, `interaction`, `intro`, `outro`, `preview`, `music_offtopic`, and `filler`. Requests reject unknown/duplicate categories and malformed session/guild identifiers before transport. A missing plugin or explicitly unavailable endpoint fails closed with `FeatureUnavailableError`. GET responses are validated before support is marked observed; PUT and DELETE are explicit user actions, not automatic skips. Backend and session fencing prevent stale observations from a prior connection.
+
+The `tests/lavalink-sponsorblock.test.cjs` fixture covers the actual GET/PUT/DELETE HTTP methods, JSON array payloads, plugin gating, category validation, invalid paths, missing players, feature unavailability, and backend replacement during an in-flight request. A separate real plugin server, live segments and WebSocket `SegmentsLoaded`/`SegmentSkipped` events are **not** yet certified.
+
+Future work: pin an optional SponsorBlock-enabled Lavalink server; verify live audio segments and chapter events with controlled tracks. Do not equate an HTTP 204 with successful audible skipping.

@@ -1,6 +1,7 @@
 import { requireGroupId, requireGuildId, groupCreateBody, groupPatchBody, validateGroup, validateGroups, validateGroupPatch, sponsorOptionsBody, sponsorSegmentsBody, validateSponsorState, type PlayerGroup, type GroupCreate, type GroupPatch, type GroupPatchResult, type SponsorBlockOptions, type SponsorBlockSegment, type SponsorBlockState } from '../backends/NodeLinkOrchestration';
 import { lyricsParameters, validateSourceHealth, type LyricsRequestOptions, type SourceHealthResponse } from '../backends/NodeLinkContracts';
 import { hasLavaLyricsPlugin, lavaLyricsParameters, validateLavaLyrics, type LavaLyricsData, type LavaLyricsOptions } from '../backends/LavaLyricsContracts';
+import { hasLavalinkSponsorBlockPlugin, lavalinkSponsorBlockPath, sponsorBlockCategoryBody, validateSponsorBlockCategories, type LavalinkSponsorBlockCategory } from '../backends/LavalinkSponsorBlockContracts';
 import type http from "node:http";
 import { validateLoadResponse, validateTrackResponse, validatePlayerRead, validatePlayerAcknowledgement, validateSessionResponse, ProtocolResponseError } from "../backends/ProtocolValidation";
 import { HttpError } from "../errors/HttpError";
@@ -139,6 +140,52 @@ export class Rest {
         requireGroupId(groupId);
         await this.featureRequest('groups:delete', { groupId }, { headers: this.authHeaders });
     }
+    /**
+     * Lavalink SponsorBlock plugin: GET/PUT/DELETE .../sponsorblock/categories.
+     * Separate from NodeLink's per-player SponsorBlock state/segment API.
+     */
+    private async lavalinkSponsorBlockRequest(
+        method: 'GET' | 'PUT' | 'DELETE',
+        guildId: string,
+        categories?: LavalinkSponsorBlockCategory[]
+    ): Promise<LavalinkSponsorBlockCategory[] | void> {
+        const path = lavalinkSponsorBlockPath(this.node.sessionId, guildId);
+        const body = method === 'PUT' ? sponsorBlockCategoryBody(categories!) : undefined;
+        const backend = this.node.backend;
+        if (backend?.kind !== 'lavalink' || !hasLavalinkSponsorBlockPlugin(backend.plugins) ||
+            backend.featureStatus('lavalink:sponsorblock') === 'unavailable') {
+            throw new FeatureUnavailableError('lavalink:sponsorblock', backend?.kind ?? 'unknown');
+        }
+        const socket = this.node.socket;
+        const session = this.node.sessionId;
+        const current = () => !this.node.destroyed && this.node.backend === backend &&
+            this.node.socket === socket && this.node.sessionId === session;
+        const result = await this.node.circuit.run(async () => {
+            try {
+                return await makeRequest<unknown>(this.url + path, {
+                    method, headers: method === 'PUT' ? this.jsonHeaders : this.authHeaders,
+                    ...(method === 'PUT' ? { body } : {}), throwOnError: true
+                }, 10000, 0);
+            } catch (error) {
+                this.featureError('lavalink:sponsorblock', error, backend, current);
+            }
+        });
+        if (method === 'GET') validateSponsorBlockCategories(result);
+        if (result === undefined) throw new ProtocolResponseError('Lavalink SponsorBlock', 'response');
+        if (current()) backend.recordFeature('lavalink:sponsorblock', 'available');
+        return method === 'GET' ? [...(result as LavalinkSponsorBlockCategory[])] : undefined;
+    }
+
+    public getLavalinkSponsorBlockCategories(guildId: string): Promise<LavalinkSponsorBlockCategory[]> {
+        return this.lavalinkSponsorBlockRequest('GET', guildId) as Promise<LavalinkSponsorBlockCategory[]>;
+    }
+    public async setLavalinkSponsorBlockCategories(guildId: string, categories: LavalinkSponsorBlockCategory[]): Promise<void> {
+        await this.lavalinkSponsorBlockRequest('PUT', guildId, categories);
+    }
+    public async clearLavalinkSponsorBlockCategories(guildId: string): Promise<void> {
+        await this.lavalinkSponsorBlockRequest('DELETE', guildId);
+    }
+
     public async getSponsorBlock(guildId: string): Promise<SponsorBlockState> {
         requireGuildId(guildId);
         return this.featureRequest<SponsorBlockState>('sponsorblock:get', { guildId }, { headers: this.authHeaders }, validateSponsorState);

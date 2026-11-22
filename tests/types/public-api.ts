@@ -167,3 +167,12 @@ node.getLavaLyrics(track, 'es');
 // @ts-expect-error Only boolean skipTrackSource is legal.
 node.getLavaLyrics(track, { skipTrackSource: 'yes' });
 void [lavaLyricsResult, lavaLyricsViaRest];
+
+const sponsorCategories: import('../../dist').LavalinkSponsorBlockCategory[] = ['sponsor', 'intro'];
+const sponsorRead: Promise<import('../../dist').LavalinkSponsorBlockCategory[]> =
+    node.getLavalinkSponsorBlockCategories('123456789012345678');
+const sponsorWrite: Promise<void> = node.setLavalinkSponsorBlockCategories('123456789012345678', sponsorCategories);
+const sponsorClear: Promise<void> = node.rest.clearLavalinkSponsorBlockCategories('123456789012345678');
+// @ts-expect-error Server-side categories are a closed official list.
+node.setLavalinkSponsorBlockCategories('123456789012345678', ['made_up']);
+void [sponsorRead, sponsorWrite, sponsorClear];
