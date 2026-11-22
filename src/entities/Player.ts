@@ -1,3 +1,4 @@
+import { normalizeCrossfade, type CrossfadeOptions } from '../backends/NodeLinkContracts';
 import { preparePlayerUpdate, type PlayerUpdatePayload, type PlayerVoiceUpdate } from '../backends/ProtocolContracts';
 import { migratePlayer, migrationRestart, type RestartOptions } from "../players/PlayerMigration";
 import { PlayerCommandQueue } from "../players/PlayerCommandQueue";
@@ -54,6 +55,7 @@ export class Player {
     private volumeRevision = 0;
     private optimisticVolumeRevision = 0;
     private fading?: IFadingOptions;
+    private crossfade?: CrossfadeOptions;
     private nextTrack?: { encoded: string; userData?: Record<string, any> };
     private audioTrackId?: string;
     private loudnessNormalizer?: boolean;
@@ -496,6 +498,7 @@ export class Player {
         }
 
         if (this.fading) payload.fading = this.fading;
+        if (this.crossfade && this.node.isNodeLink) payload.crossfade = this.crossfade;
         if (this.nextTrack) payload.nextTrack = this.nextTrack;
         if (this.loudnessNormalizer !== undefined) {
             payload.loudnessNormalizer = this.loudnessNormalizer;
@@ -629,18 +632,39 @@ export class Player {
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
     public async setFading(fading: IFadingOptions): Promise<this> {
-        this.assertNodeLinkFeature("fading");
-        this.fading = fading;
-        await this.sendPlayerUpdate({ fading });
-        return this;
+        const config = structuredClone(fading);
+        return this.commands.enqueue(async () => {
+            if (this.destroyed) throw new Error("Cannot update a destroyed player");
+            this.assertNodeLinkFeature("fading");
+            await this.sendPlayerUpdate({ fading: config });
+            if (!this.destroyed) this.fading = config;
+            return this;
+        });
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
     public async clearFading(): Promise<this> {
-        this.assertNodeLinkFeature("fading");
-        this.fading = undefined;
-        await this.sendPlayerUpdate({ fading: { enabled: false } });
-        return this;
+        return this.setFading({ enabled: false });
+    }
+
+    /** Last acknowledged crossfade request, not an assertion of active audio mixing. */
+    public getCrossfade(): CrossfadeOptions | undefined {
+        return this.crossfade ? { ...this.crossfade } : undefined;
+    }
+
+    public async setCrossfade(options: CrossfadeOptions): Promise<this> {
+        const config = normalizeCrossfade(options);
+        return this.commands.enqueue(async () => {
+            if (this.destroyed) throw new Error("Cannot update a destroyed player");
+            this.assertNodeLinkFeature("crossfade");
+            await this.sendPlayerUpdate({ crossfade: config });
+            if (!this.destroyed) this.crossfade = config;
+            return this;
+        });
+    }
+
+    public async clearCrossfade(): Promise<this> {
+        return this.setCrossfade({ enabled: false });
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
@@ -676,10 +700,14 @@ export class Player {
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
     public async setLoudnessNormalizer(enabled: boolean): Promise<this> {
-        this.assertNodeLinkFeature("loudnessNormalizer");
-        this.loudnessNormalizer = enabled;
-        await this.sendPlayerUpdate({ loudnessNormalizer: enabled });
-        return this;
+        if (typeof enabled !== 'boolean') throw new TypeError('Invalid loudness normalizer state');
+        return this.commands.enqueue(async () => {
+            if (this.destroyed) throw new Error("Cannot update a destroyed player");
+            this.assertNodeLinkFeature("loudnessNormalizer");
+            await this.sendPlayerUpdate({ loudnessNormalizer: enabled });
+            if (!this.destroyed) this.loudnessNormalizer = enabled;
+            return this;
+        });
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
@@ -1111,6 +1139,7 @@ export class Player {
             }
 
             if (this.fading) payload.fading = this.fading;
+            if (this.crossfade && this.node.isNodeLink) payload.crossfade = this.crossfade;
             if (this.nextTrack) payload.nextTrack = this.nextTrack;
             if (this.loudnessNormalizer !== undefined) {
                 payload.loudnessNormalizer = this.loudnessNormalizer;

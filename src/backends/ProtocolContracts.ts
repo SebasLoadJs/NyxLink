@@ -1,6 +1,7 @@
 import type { IFilters, IFadingOptions } from '../typings/Interfaces';
 import { FeatureUnavailableError } from '../errors/FeatureUnavailableError';
 import type { BackendKind } from './BackendAdapter';
+import { normalizeCrossfade, type CrossfadeOptions } from './NodeLinkContracts';
 
 export interface PlayerTrackUpdate {
     encoded?: string | null;
@@ -30,6 +31,7 @@ export interface NodeLinkPlayerUpdate extends CommonPlayerUpdate {
     track?: PlayerTrackUpdate & { audioTrackId?: string };
     nextTrack?: { encoded: string; userData?: Record<string, unknown> } | null;
     fading?: IFadingOptions;
+    crossfade?: CrossfadeOptions;
     loudnessNormalizer?: boolean;
 }
 /** The extensible boundary preserves plugin fields and legacy raw payload callers. */
@@ -44,7 +46,7 @@ export type PlayerUpdateAcknowledgement = Record<string, unknown> & {
     track?: { encoded: string | null; userData?: Record<string, unknown> } & Record<string, unknown> | null;
 };
 
-const extensionFields = ['fading', 'nextTrack', 'loudnessNormalizer'] as const;
+const extensionFields = ['fading', 'nextTrack', 'loudnessNormalizer', 'crossfade'] as const;
 
 /** Both adapters use the same wire protocol, with explicit backend-only fields. */
 export function preparePlayerUpdate(
@@ -59,6 +61,7 @@ export function preparePlayerUpdate(
         if (backend !== 'nodelink' || unavailable?.(feature)) throw new FeatureUnavailableError(feature, backend);
     }
     const result = { ...payload };
+    if (payload.crossfade !== undefined) result.crossfade = normalizeCrossfade(payload.crossfade);
     if (payload.voice) {
         const voice = { ...payload.voice };
         if (backend === 'nodelink' && (!voice.sessionId || !voice.token || !voice.endpoint)) {

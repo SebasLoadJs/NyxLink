@@ -149,3 +149,10 @@ node.loadLyrics(track, 'es');
 // @ts-expect-error Unsupported lyrics mode.
 node.loadLyrics(track, { type: 'audio' });
 void healthResponse;
+
+const crossfade: import('../../dist').CrossfadeOptions = { enabled:true, duration:5000, mode:'smart', curve:'sinusoidal' };
+void player.setCrossfade(crossfade);
+const requestedCrossfade: import('../../dist').CrossfadeOptions | undefined = player.getCrossfade();
+// @ts-expect-error Only supported transition modes are accepted.
+void player.setCrossfade({enabled:true,mode:'random'});
+void requestedCrossfade;

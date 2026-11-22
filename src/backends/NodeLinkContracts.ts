@@ -122,3 +122,34 @@ export function validateSourceHealthEvent(value: unknown): asserts value is Sour
         validateSourceHealthEntry(value);
     } else throw new ProtocolResponseError('source health event', 'type');
 }
+
+/** NodeLink per-player transition options. Durations are milliseconds. */
+export interface CrossfadeOptions {
+    enabled: boolean;
+    duration?: number;
+    curve?: 'linear' | 'sine' | 'sinusoidal';
+    mode?: 'stream' | 'smart' | 'preload';
+    minBufferMs?: number;
+    bufferMs?: number;
+}
+
+/** Reject invalid controls rather than silently relying on server coercion. */
+export function normalizeCrossfade(value: unknown): CrossfadeOptions {
+    if (!obj(value) || typeof value.enabled !== 'boolean') throw new TypeError('Crossfade requires an enabled boolean');
+    const result: CrossfadeOptions = { enabled: value.enabled };
+    for (const key of ['duration','minBufferMs','bufferMs'] as const) {
+        const v = value[key];
+        if (v === undefined) continue;
+        if (!number(v) || !Number.isSafeInteger(v) || v > 30000 || key === 'minBufferMs' && v < 20) throw new TypeError('Invalid crossfade ' + key);
+        result[key] = v;
+    }
+    if (value.curve !== undefined) {
+        if (value.curve !== 'linear' && value.curve !== 'sine' && value.curve !== 'sinusoidal') throw new TypeError('Invalid crossfade curve');
+        result.curve = value.curve;
+    }
+    if (value.mode !== undefined) {
+        if (value.mode !== 'stream' && value.mode !== 'smart' && value.mode !== 'preload') throw new TypeError('Invalid crossfade mode');
+        result.mode = value.mode;
+    }
+    return result;
+}
