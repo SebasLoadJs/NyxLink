@@ -92,8 +92,12 @@ let image;
         // independently of EOF buffering and short-media behavior.
         const longer = await node.rest.loadTracks(lab.seekMediaUrl);
         assert.equal(longer.loadType, 'track');
-        const durationMs = longer.data.info.length;
-        assert.ok(durationMs > 2500 && durationMs < 3500, 'Expected three-second seek fixture');
+        // NodeLink may expose unknown or imprecise duration for local HTTP
+        // media. Compare decoded PCM durations, not search metadata.
+        const longerFull = await streamAudio(node.rest, longer.data.encoded);
+        const durationMs = longerFull.evidence.durationMs;
+        assert.ok(durationMs > 2500 && durationMs < 3500,
+          'Expected three-second decoded seek fixture, got ' + durationMs.toFixed(1) + ' ms');
         let resumed;
         try {
           resumed = await streamAudio(node.rest, longer.data.encoded, { position: 500 });
