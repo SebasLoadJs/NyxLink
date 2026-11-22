@@ -210,4 +210,4 @@ async function withLavalinkPluginLab(run) {
   }
 }
 
-module.exports = { validateProfile, renderConfig, startupErrorCode, withLavalinkPluginLab };
+module.exports = { validateProfile, renderConfig, startupErrorCode, PluginLabFailure, withLavalinkPluginLab };
