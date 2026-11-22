@@ -22,3 +22,7 @@ Upstream protocol review: [NodeLink dev 97bbce1](https://github.com/PerformanC/N
 ## 3.2 Real-time source health
 
 SourceHealthSnapshotEvent and SourceHealthChangeEvent are handled before guild/player lookup and wait for backend detection. Generation/socket guards prevent earlier connections from updating the cache. Node.sourceHealth.get(source) and .list() return detached observations with local receipt time; snapshots/changes are validated, older timestamps are ignored, and disconnect/close clears state. Typed manager events sourceHealthSnapshot and sourceHealthChange expose accepted events. This is monitoring only: no implicit source blocking, retries or routing changes. Real upstream integration and opt-in source-aware routing remain follow-up work.
+
+## 3.3 Optional source-aware node selection
+
+`manager.nodes.findNode({ preferSource: 'youtube', sourceHealthMaxAgeMs: 120000 })` ranks fresh healthy source telemetry above unknown, degraded and unavailable/open-circuit observations, after existing hard requirements, readiness and region preference. Missing and expired observations remain neutral; unhealthy source observations are soft preferences, not automatic provider bans. `options.search.sourceHealth: true` enables initial node preference for recognized text-search aliases; explicit nodes, URLs and custom source identifiers retain existing behavior. Platform fallback stays on the selected node. No extra network calls or timers are introduced.

@@ -11,7 +11,13 @@ export type NodeRequirements = {
     readonly region?: string;
     readonly regionPolicy?: 'prefer' | 'require';
 };
-export type NodeSelectionOptions = NodeRequirements & { exclude?: readonly string[]; allowUnhealthyFallback?: boolean };
+export type NodeSelectionOptions = NodeRequirements & {
+    exclude?: readonly string[];
+    allowUnhealthyFallback?: boolean;
+    /** Soft preference only; unknown or stale provider telemetry is not a failure. */
+    preferSource?: string;
+    sourceHealthMaxAgeMs?: number;
+};
 export type NodeRejectionReason = 'unavailable' | 'excluded' | 'not-ready' | 'not-found' | 'backend' | 'capability' | 'region' | 'unhealthy' | 'draining' | 'circuit-open';
 export type NodeRejection = { identifier: string; reasons: NodeRejectionReason[]; missingCapabilities?: string[] };
 
@@ -29,7 +35,9 @@ export class NodeSelector {
             selection.allowUnhealthyFallback !== undefined && typeof selection.allowUnhealthyFallback !== 'boolean' ||
             selection.region !== undefined && (typeof selection.region !== 'string' || !selection.region.trim()) ||
             selection.regionPolicy !== undefined && !['prefer', 'require'].includes(selection.regionPolicy) ||
-            selection.regionPolicy === 'require' && selection.region === undefined) {
+            selection.regionPolicy === 'require' && selection.region === undefined ||
+            selection.preferSource !== undefined && (typeof selection.preferSource !== 'string' || !/^[\w.-]+$/.test(selection.preferSource)) ||
+            selection.sourceHealthMaxAgeMs !== undefined && (!Number.isSafeInteger(selection.sourceHealthMaxAgeMs) || selection.sourceHealthMaxAgeMs < 1 || selection.sourceHealthMaxAgeMs > 3600000)) {
             throw new TypeError('Invalid node selection requirements');
         }
     }
@@ -91,6 +99,25 @@ export class NodeSelector {
             if (preferred.length) candidates = preferred;
         }
         if (!candidates.length) return undefined;
+        if (selection.preferSource) {
+            const source = selection.preferSource;
+            const now = Date.now();
+            const maxAge = selection.sourceHealthMaxAgeMs ?? 120000;
+            const rank = (node: Node): number => {
+                const entry = node.sourceHealth?.get(source);
+                if (!entry || entry.receivedAt > now || now - entry.receivedAt > maxAge) return 1;
+                if (entry.health.circuitBreaker === 'OPEN') return 3;
+                switch (entry.health.status) {
+                    case 'healthy': return 0;
+                    case 'degraded': return 2;
+                    case 'unavailable': case 'rate_limited': case 'restricted': case 'misconfigured': return 3;
+                    default: return 1;
+                }
+            };
+            const ranks = candidates.map(node => rank(node));
+            const best = ranks.reduce((a,b) => Math.min(a,b), Infinity);
+            candidates = candidates.filter((_node,index) => ranks[index] === best);
+        }
         const strategy = options.selectionStrategy ?? 'leastLoad';
         if (strategy === 'random') return candidates[Math.floor(Math.random() * candidates.length)];
         const score = (node: Node): number => {

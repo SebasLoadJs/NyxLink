@@ -56,13 +56,22 @@ export class SearchService {
                 this.manager.emit('debug', `Moonlink.js > Manager <- Native source result for query "${query.query}". LoadType: ${native.loadType}`);
                 return result;
             }
-            const node = query.node ? this.manager.nodes.nodes.get(query.node) : this.manager.nodes.findNode();
-            if (!node || node.destroyed || !node.connected) throw new Error('No available nodes for searching');
             const options = this.manager.options.search ?? {};
-            const fallback = options.fallbackPlatforms ?? [];
-            if (!Array.isArray(fallback) || fallback.length > 3 || fallback.some(source => typeof source !== 'string' || !source)) throw new TypeError('Search fallbackPlatforms requires at most three source names');
+            const sourceHealth = options.sourceHealth;
+            if (sourceHealth !== undefined && (typeof sourceHealth !== 'boolean')) throw new TypeError('Invalid search sourceHealth option');
+            const source = query.source ?? options.defaultPlatform ?? 'youtube';
             let isUrl = false;
             try { const url = new URL(query.query); isUrl = url.protocol === 'http:' || url.protocol === 'https:'; } catch {}
+            const sourceAliases: Readonly<Record<string, string>> = {
+                youtube:'youtube', youtubemusic:'youtube', ytsearch:'youtube', ytmsearch:'youtube',
+                soundcloud:'soundcloud', scsearch:'soundcloud', dzsearch:'deezer', spsearch:'spotify',
+                amsearch:'applemusic', local:'local'
+            };
+            const preferSource = sourceHealth && !isUrl && Object.hasOwn(sourceAliases, source) ? sourceAliases[source] : undefined;
+            const node = query.node ? this.manager.nodes.nodes.get(query.node) : this.manager.nodes.findNode({ preferSource });
+            if (!node || node.destroyed || !node.connected) throw new Error('No available nodes for searching');
+            const fallback = options.fallbackPlatforms ?? [];
+            if (!Array.isArray(fallback) || fallback.length > 3 || fallback.some(source => typeof source !== 'string' || !source)) throw new TypeError('Search fallbackPlatforms requires at most three source names');
             const platforms = isUrl ? [''] : [...new Set([query.source ?? options.defaultPlatform ?? 'youtube', ...fallback])];
             const settings = options.cache;
             const ttl = settings?.ttlMs ?? 0;

@@ -194,6 +194,8 @@ export interface INodeOptions {
 }
 
 export interface ISearchOptions {
+    /** Prefer nodes with fresh, healthy telemetry for recognized text-search sources. */
+    sourceHealth?: boolean;
     timeoutMs?: number;
     fallbackPlatforms?: string[];
     cache?: { ttlMs: number; maxEntries?: number };
