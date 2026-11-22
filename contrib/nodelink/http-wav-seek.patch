@@ -1,0 +1,107 @@
+diff --git a/src/api/loadStream.ts b/src/api/loadStream.ts
+--- a/src/api/loadStream.ts
++++ b/src/api/loadStream.ts
+@@ -843,12 +843,54 @@
+       objectMode: false,
+       highWaterMark: 19200
+     }
+   )
+-}
+-
+-/**
+- * Extracts request data from the query string used by `GET /loadStream`.
++}
++
++/**
++ * WAV-over-HTTP must retain its RIFF header before decoding. The general
++ * seekable-stream byte-offset heuristic starts in the middle of that headerless
++ * container, causing the decoder to abort. Decode from zero, then discard
++ * exact 48-kHz stereo S16LE PCM bytes in a bounded-memory generator.
++ *
++ * This is a correctness fallback for the built-in HTTP WAV source. It costs
++ * bandwidth/CPU proportional to seek position, but does not affect MP3,
++ * MP4, WebM, local sources or passthrough modes.
++ */
++function createPcmSkipStream(source: DestroyableReadable, bytesToSkip: number): Readable {
++  return Readable.from(
++    (async function* () {
++      let remaining = bytesToSkip
++      for await (const value of source) {
++        const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value)
++        const skipped = Math.min(remaining, chunk.length)
++        remaining -= skipped
++        if (skipped < chunk.length) yield chunk.subarray(skipped)
++      }
++      if (remaining > 0) {
++        throw new Error('HTTP WAV seek exceeded available decoded PCM data.')
++      }
++    })(),
++    { objectMode: false, highWaterMark: 19200 }
++  )
++}
++
++/** Scope the fallback to explicit WAV HTTP sources; never guess audio codecs. */
++function isHttpWavSource(sourceName: string, urlResult: TrackUrlResult): boolean {
++  if (sourceName !== 'http' || typeof urlResult.url !== 'string') return false
++  const hint = typeof urlResult.format === 'string' ? urlResult.format.toLowerCase() : ''
++  if (/^(?:wav|wave|audio\\/(?:x-)?wav|audio\\/wave)$/.test(hint)) return true
++  try {
++    const pathname = new URL(urlResult.url).pathname.toLowerCase()
++    return pathname.endsWith('.wav') || pathname.endsWith('.wave')
++  } catch {
++    return false
++  }
++}
++
++
++/**
++ * Extracts request data from the query string used by `GET /loadStream`.
+  *
+  * @param parsedUrl - Parsed request URL.
+  * @returns Normalized request data, or `null` when validation fails.
+  */
+@@ -1989,13 +2031,22 @@
+     const isHls = urlResult.protocol === 'hls'
+     const isSabr = urlResult.protocol === 'sabr'
+     const isLocal = sourceName === 'local'
+ 
+-    if (urlResult.url && !isHls && !isLocal && !isSabr) {
+-      const resource = (await createSeekeableAudioResource(
+-        input.guildId || 'api-stream',
+-        urlResult.url,
+-        streamStartPositionMs,
++    if (urlResult.url && !isHls && !isLocal && !isSabr) {
++      // Repeatedly observed on HTTP WAV: nonzero native byte seeking drops
++      // the RIFF header and aborts the decoder. Seek in decoded PCM instead.
++      const wavSeekFromStart = streamStartPositionMs > 0 && isHttpWavSource(sourceName, urlResult)
++      const wavSkipBytes = wavSeekFromStart
++        ? Math.floor(streamStartPositionMs * PCM_BYTES_PER_MS)
++        : 0
++      if (!Number.isSafeInteger(wavSkipBytes)) {
++        throw new RangeError('HTTP WAV seek offset is too large.')
++      }
++      const resource = (await createSeekeableAudioResource(
++        input.guildId || 'api-stream',
++        urlResult.url,
++        wavSeekFromStart ? 0 : streamStartPositionMs,
+         undefined,
+         streamProcessorRuntime,
+         input.filters,
+         {
+@@ -2025,11 +2076,13 @@
+         )
+         return
+       }
+ 
+-      pcmStream = resource.stream
+-
+-      const sourceDurationMs = (
++      pcmStream = wavSeekFromStart
++        ? createPcmSkipStream(resource.stream, wavSkipBytes)
++        : resource.stream
++
++      const sourceDurationMs = (
+         resource as StreamingAudioResource & {
+           sourceDurationMs?: number | null
+         }
+       ).sourceDurationMs
