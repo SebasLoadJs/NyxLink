@@ -54,6 +54,45 @@ let image;
         checks.push('crossfade PATCH accepted (not audible mixing evidence)');
         const loaded = await node.rest.loadTracks(lab.mediaUrl);
         assert.equal(loaded.loadType,'track');
+        // Unlike an accepted PATCH, the loadstream endpoint returns actual
+        // decoded PCM. This is a real source/decoder test without Discord voice.
+        const controller = new AbortController();
+        const streamTimeout = setTimeout(() => controller.abort(), 30000);
+        streamTimeout.unref?.();
+        let audio;
+        try {
+          const wav = await node.rest.loadStream({
+            encodedTrack: loaded.data.encoded, format: 'wav', volume: 100, position: 0
+          }, { signal: controller.signal, timeoutMs: 30000 });
+          const chunks = [];
+          let size = 0;
+          try {
+            for await (const chunk of wav.stream) {
+              size += chunk.length;
+              if (size > 1024 * 1024) throw new Error('Decoded WAV exceeded the local fixture budget');
+              chunks.push(chunk);
+            }
+          } finally {
+            wav.stream.destroy?.();
+          }
+          audio = Buffer.concat(chunks);
+          assert.ok(audio.length >= 48044 && audio.length <= 1024 * 1024, 'Expected decoded WAV audio');
+          assert.equal(audio.toString('ascii',0,4),'RIFF');
+          assert.equal(audio.toString('ascii',8,12),'WAVE');
+          assert.equal(audio.toString('ascii',12,16),'fmt ');
+          assert.equal(audio.readUInt16LE(20),1,'16-bit linear PCM format');
+          assert.equal(audio.readUInt16LE(22),2,'Stereo output');
+          assert.equal(audio.readUInt32LE(24),48000,'48 kHz output');
+          assert.equal(audio.readUInt16LE(34),16,'16-bit output');
+          assert.equal(audio.toString('ascii',36,40),'data');
+          // Prove this is decoded sound, not a silent, empty or metadata-only stream.
+          let nonZero = 0;
+          for (let i=44; i + 1 < audio.length; i+=2) if (audio.readInt16LE(i)!==0) nonZero++;
+          assert.ok(nonZero > 4000, 'Decoded PCM must contain non-silent audio samples');
+          checks.push('real local WAV decode: streamed 48 kHz stereo PCM (not Discord voice)');
+        } finally {
+          clearTimeout(streamTimeout);
+        }
         const lyrics = await node.rest.loadLyrics(loaded.data.encoded,{type:'onlyCaptions',source:'youtube',lang:'es'});
         assert.ok(lyrics && ['empty','error','lyrics'].includes(lyrics.loadType));
         checks.push('captions request with disabled providers');

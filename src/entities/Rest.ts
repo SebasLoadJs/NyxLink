@@ -660,8 +660,22 @@ export class Rest {
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
-    public async loadStream(payload: { encodedTrack: string; volume?: number; position?: number; format?: 'pcm' | 'wav'; filters?: IFilters | Record<string, any> }, options: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<{ stream: NodeJS.ReadableStream; headers: Record<string, any> }> {
+    public async loadStream(payload: { encodedTrack: string; volume?: number; position?: number; format?: 'raw' | 'pcm' | 'wav'; filters?: IFilters | Record<string, any> }, options: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<{ stream: NodeJS.ReadableStream; headers: Record<string, any> }> {
         this.node.assertFeature('loadstream');
+        // NodeLink's wire format is 'raw' (16-bit stereo PCM) or 'wav'.
+        // Keep the older NyxLink 'pcm' name as a client-side alias only.
+        if (!payload || typeof payload !== 'object' || typeof payload.encodedTrack !== 'string' || !payload.encodedTrack.trim()) {
+            throw new TypeError('LoadStream requires an encoded track');
+        }
+        if (payload.format !== undefined && !['raw', 'pcm', 'wav'].includes(payload.format)) {
+            throw new TypeError('LoadStream format must be raw or wav');
+        }
+        if (payload.volume !== undefined && (!Number.isFinite(payload.volume) || payload.volume < 0 || payload.volume > 1000) ||
+            payload.position !== undefined && (!Number.isFinite(payload.position) || payload.position < 0) ||
+            payload.filters !== undefined && (!payload.filters || typeof payload.filters !== 'object' || Array.isArray(payload.filters))) {
+            throw new TypeError('Invalid LoadStream playback options');
+        }
+        const requestPayload = payload.format === 'pcm' ? { ...payload, format: 'raw' as const } : payload;
         const route = this.extensionRoute('loadstream');
         const backend = this.node.backend;
         const socket = this.node.socket;
@@ -670,7 +684,7 @@ export class Rest {
             this.node.socket === socket && this.node.sessionId === session;
         try {
             const res = await makeStreamRequest(this.url + route.path, {
-                method: route.method, headers: this.jsonHeaders, body: payload, signal: options.signal,
+                method: route.method, headers: this.jsonHeaders, body: requestPayload, signal: options.signal,
             }, options.timeoutMs ?? 100000);
             if (current()) backend?.recordFeature('loadstream', 'available');
             return { stream: res.stream, headers: res.headers };
