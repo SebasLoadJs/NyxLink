@@ -441,3 +441,18 @@ test('seek queued after a failed explicit play does not move the former track', 
   assert.equal(original.position, 0);
   assert.equal(requests.some(request => request.payload.position === 42000), false);
 });
+
+test('acknowledged stop clears paused state locally and in storage', async t => {
+  const { manager, player } = createPlayer(t);
+  player.current = createTrack('paused-before-stop');
+  player.playing = false;
+  player.paused = true;
+  await player.stop();
+  assert.equal(player.current, null);
+  assert.equal(player.playing, false);
+  assert.equal(player.paused, false);
+  const saved = await manager.database.get(`players.${player.guildId}`);
+  assert.equal(saved.playing, false);
+  assert.equal(saved.paused, false);
+  assert.equal(saved.current, null);
+});
