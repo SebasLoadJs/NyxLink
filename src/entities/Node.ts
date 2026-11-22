@@ -1755,18 +1755,26 @@ export class Node {
   }
 
   private async handleQueueEnd(player: any, lastTrack: any): Promise<void> {
-    this.manager.emit("debug", `Moonlink.js > Node#handleQueueEnd >> Queue ended for player ${player.guildId}. LastTrack: ${lastTrack?.title || "None"}.`);
-    
+    const ticket = playbackGuard(player).ticket;
+    if (player.destroyed || player.node !== this || player.queue.size > 0 || player.playing ||
+        !playbackGuard(player).isCurrent(ticket)) return;
+    this.manager.emit("debug", `NyxLink > Node#handleQueueEnd >> Queue ended for player ${player.guildId}. LastTrack: ${lastTrack?.title || "None"}.`);
+
     player.current = null;
     player.playing = false;
     player.paused = false;
-    this.manager.emit("debug", `Moonlink.js > Node#handleQueueEnd >> Player state updated: current=${player.current}, playing=${player.playing}, paused=${player.paused} for player ${player.guildId}.`);
-    
-    this.manager.emit("queueEnd", player, lastTrack);
+    this.manager.emit("debug", `NyxLink > Node#handleQueueEnd >> Player state updated for guild ${player.guildId}.`);
 
-    if (player.autoLeave) {
-        this.manager.emit("debug", `Moonlink.js > Node#handleQueueEnd -> AutoLeave enabled, destroying player ${player.guildId}.`);
+    this.manager.emit("queueEnd", player, lastTrack);
+    // A queueEnd listener can synchronously start a new play or queue more tracks.
+    // Never auto-leave a player that is no longer idle.
+    const stillIdle = () => !player.destroyed && player.node === this &&
+        playbackGuard(player).isCurrent(ticket) && !player.playing &&
+        player.current === null && player.queue.size === 0;
+    if (player.autoLeave && stillIdle()) {
         this.manager.emit("autoLeaved", player, lastTrack);
+        if (!stillIdle()) return;
+        this.manager.emit("debug", `NyxLink > Node#handleQueueEnd -> AutoLeave enabled, destroying player ${player.guildId}.`);
         await player.destroy("AutoLeave enabled");
     }
   }
