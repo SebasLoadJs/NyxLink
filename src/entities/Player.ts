@@ -54,6 +54,7 @@ export class Player {
     private destructionPromise?: Promise<void>;
     /** Explicit play queued but not yet settled; seeks after it target that new play. */
     private pendingPlayTicket?: number;
+    private lastSuccessfulExplicitPlayTicket?: number;
     private volumeRevision = 0;
     private optimisticVolumeRevision = 0;
     private fading?: IFadingOptions;
@@ -398,7 +399,11 @@ export class Player {
     public async play(options: { track?: Track; encoded?: string, requester?: any, position?: number, noReplace?: boolean, audioTrackId?: string } | Track = {}): Promise<boolean> {
         const ticket = playbackGuard(this).invalidate();
         this.pendingPlayTicket = ticket;
-        return this.commands.enqueue(() => this.playNext(options, ticket)).finally(() => {
+        return this.commands.enqueue(async () => {
+            const played = await this.playNext(options, ticket);
+            if (played) this.lastSuccessfulExplicitPlayTicket = ticket;
+            return played;
+        }).finally(() => {
             if (this.pendingPlayTicket === ticket) this.pendingPlayTicket = undefined;
         });
     }
@@ -1046,7 +1051,9 @@ export class Player {
         // Reject seeks for stale playback intents, unless this seek was issued
         // immediately after the explicit play which replaces the captured track.
         const guard = playbackGuard(this);
-        if (!guard.isCurrent(ticket) || (!afterPendingPlay && track !== null && this.current !== track)) return this;
+        if (!guard.isCurrent(ticket) ||
+            (afterPendingPlay && this.lastSuccessfulExplicitPlayTicket !== ticket) ||
+            (!afterPendingPlay && track !== null && this.current !== track)) return this;
 
         const activeTrack = this.current;
         this.manager.emit("debug", `NyxLink > Player#seek -> Seeking to position ${position}ms for guild ${this.guildId}`);
