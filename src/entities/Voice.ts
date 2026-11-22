@@ -156,7 +156,7 @@ export class Voice extends EventEmitter<VoiceEvents> {
             this.player.set('userInitiatedConnect', false);
             return;
         }
-        if (!this.acceptingPackets || this.disconnectPromise) return;
+        if (!this.acceptingPackets || this.disconnectPromise || typeof data.session_id !== 'string' || !data.session_id) return;
         const moved = this.player.voiceChannelId !== data.channel_id;
         const changed = moved || this.sessionId !== data.session_id;
         if (changed) {
@@ -262,8 +262,8 @@ export class Voice extends EventEmitter<VoiceEvents> {
             this.manager.emit("debug", `Player ${this.player.guildId} recovery: Attempting soft reconnect.`);
             const store = {
                 voiceChannelId: this.player.voiceChannelId,
-                selfDeaf: this.player.get<boolean>("selfDeaf"),
-                selfMute: this.player.get<boolean>("selfMute"),
+                selfDeaf: this.player.get<boolean>("selfDeaf") ?? true,
+                selfMute: this.player.get<boolean>("selfMute") ?? false,
             }
 
             await this.disconnect();
@@ -290,7 +290,9 @@ export class Voice extends EventEmitter<VoiceEvents> {
     private checkCompletion(): void {
         if (this.inFlight || this.isDestroyed() || this.disconnectPromise || this.awaitingServer || !this.sessionId || !this.token || !this.endpoint) return;
         const payload = { sessionId: this.sessionId, token: this.token, endpoint: this.endpoint, channelId: this.player.voiceChannelId };
-        const same = this.lastVoiceUpdate && Object.keys(payload).every(key => payload[key] === this.lastVoiceUpdate[key]);
+        const last = this.lastVoiceUpdate;
+        const same = last !== null && payload.sessionId === last.sessionId && payload.token === last.token &&
+            payload.endpoint === last.endpoint && payload.channelId === last.channelId;
         if (same && this.state === VoiceConnectionState.CONNECTED) return;
         const generation = this.generation;
         const node = this.player.node;
@@ -310,7 +312,7 @@ export class Voice extends EventEmitter<VoiceEvents> {
                 if (!active()) return;
                 this.emit('connect');
                 const nonce = this.pendingPlaybackRestoreNonce;
-                if (active() && this.isMoving && nonce !== null && nonce === this.moveNonce && !this.moveRestartInFlight && playbackGuard(this.player).isCurrent(this.movePlaybackTicket)) {
+                if (active() && this.isMoving && nonce !== null && nonce === this.moveNonce && !this.moveRestartInFlight && this.movePlaybackTicket !== undefined && playbackGuard(this.player).isCurrent(this.movePlaybackTicket)) {
                     this.moveRestartInFlight = true;
                     try { await this.player.restart({ startQueued: false }); }
                     finally { this.moveRestartInFlight = false; }
@@ -323,7 +325,7 @@ export class Voice extends EventEmitter<VoiceEvents> {
                 if (!active()) return;
                 this.invalidateCredentials();
                 this.setState(VoiceConnectionState.DISCONNECTED);
-                this.manager.emit('debug', `NyxLink > Voice > Update failed: ${error.message}`);
+                this.manager.emit('debug', `NyxLink > Voice > Update failed: ${error instanceof Error ? error.message : String(error)}`);
                 this.emit('disconnect', error as Error);
             } finally {
                 if (this.inFlight === operation) {

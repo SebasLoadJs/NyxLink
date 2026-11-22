@@ -145,3 +145,19 @@ test('automatic disaster recovery never starts a queue already stopped by the us
   assert.equal(player.queue.size, 1);
   assert.equal(requests.filter(request => request.payload.track?.encoded).length, 0);
 });
+
+
+test('ping rejects cleanly when a connected node has no transport', async t => {
+  const {node}=createPlayer(t);
+  assert.equal(node.connected,true);
+  await assert.rejects(node.ping(), /not connected/);
+});
+
+test('malformed WebSocket frames are not echoed into diagnostic events', async t => {
+  const {node,manager}=createPlayer(t);
+  const messages=[];
+  manager.on('debug',message=>messages.push(message));
+  await node.message({data:'malformed-private-token-sentinel'});
+  assert.ok(messages.some(message=>message.includes('Rejected malformed payload')));
+  assert.ok(messages.every(message=>!message.includes('malformed-private-token-sentinel')));
+});

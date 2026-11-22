@@ -476,14 +476,14 @@ export class Player {
         const queuedTrack = this.queue.first;
         let nextTrack = queuedTrack;
 
-        if (!nextTrack || !nextTrack.encoded) {
+        if (!queuedTrack || !nextTrack || !nextTrack.encoded) {
             this.manager.emit("debug", `NyxLink > Player#play >> Invalid track data for guild ${this.guildId}.`);
             return false;
         }
 
         try { nextTrack = await TrackResolver.resolve(nextTrack, this.node); }
         catch (error) {
-            this.manager.emit('debug', `NyxLink > TrackResolver > ${error.message}`);
+            this.manager.emit('debug', `NyxLink > TrackResolver > ${error instanceof Error ? error.message : String(error)}`);
             return false;
         }
         if (this.destroyed || !guard.isCurrent(ticket) || !allowed() || this.queue.first !== queuedTrack) return false;
@@ -896,6 +896,7 @@ export class Player {
             return true;
         }
         const nextTrack = this.queue.first;
+        if (!nextTrack) return false;
         this.manager.emit("playerTriggeredSkip", this, oldTrack, nextTrack, 0);
         this.manager.emit("debug", `Moonlink.js > Player#skip -> Skipping to next track in queue for guild ${this.guildId}`);
         return await this.play();

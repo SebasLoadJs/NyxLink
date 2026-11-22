@@ -375,3 +375,16 @@ test('gateway debug events omit credentials while forwarding original voice pack
   assert.match(log, /VOICE_SERVER_UPDATE/);
   for (const secret of [state.session_id, server.token, server.endpoint]) assert.ok(!log.includes(secret));
 });
+
+
+test('direct malformed voice state cannot replace a valid voice session', async t => {
+  const {player,voice}=fixture(t);
+  await credentials(voice,player);
+  await flush();
+  const session=voice.sessionId;
+  const channel=player.voiceChannelId;
+  await voice.handleStateUpdate({guild_id:player.guildId,channel_id:'423456789012345678'});
+  assert.equal(voice.sessionId,session);
+  assert.equal(player.voiceChannelId,channel);
+  assert.equal(voice.state,VoiceConnectionState.CONNECTED);
+});

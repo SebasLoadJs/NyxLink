@@ -71,7 +71,7 @@ export interface IManagerEvents {
     playerTriggeredPause: (player: Player) => void;
     playerTriggeredResume: (player: Player) => void;
     playerTriggeredStop: (player: Player) => void;
-    playerTriggeredSkip: (player: Player, oldTrack: Record<string, any>, currentTrack: Track, position: number) => void;
+    playerTriggeredSkip: (player: Player, oldTrack: Track | null, currentTrack: Track, position: number) => void;
     playerTriggeredSeek: (player: Player, position: number) => void;
     playerTriggeredShuffle: (player: Player, oldQueue: Record<string, any>, currentQueue: Track[]) => void;
     playerTriggeredBack: (player: Player, track: Track) => void;

@@ -219,9 +219,10 @@ export class Node {
   private recoveryInProgress: boolean = false;
   public regions: string[];
   public secure: boolean;
-  public sessionId: string;
+  // Empty until the backend provides its ready payload.
+  public sessionId: string = "";
   public priority?: number;
-  public socket: WebSocket;
+  public socket?: WebSocket | null;
   public stats?: INodeStats;
   public statsReceivedAt?: number;
   public info?: any;
@@ -251,7 +252,7 @@ export class Node {
     this.port = config.port;
     this.identifier = config.identifier ?? this.uuid;
     this.password = config.password || "youshallnotpass";
-    this.regions = config.regions;
+    this.regions = [...(config.regions ?? [])];
     this.pathVersion = config.pathVersion || "v4";
     this.retryDelay = config.retryDelay ?? this.manager.options.node?.retryDelay ?? 30000;
     this.retryAmount = config.retryAmount ?? this.manager.options.node?.retryAmount ?? 5;
@@ -294,7 +295,7 @@ export class Node {
   }
 
   public ping(): Promise<number> {
-    if (!this.connected) {
+    if (!this.connected || !this.socket) {
       return Promise.reject(new Error("Node is not connected."));
     }
     return this.socket.ping();
@@ -407,7 +408,7 @@ export class Node {
       `NyxLink > Node >> WebSocket handshake prepared for ${this.identifier}. Resume: ${Boolean(headers["Session-Id"])}.`
     );
 
-    this.socket = new (Structure.get("WebSocket"))(
+    const socket: WebSocket = new (Structure.get("WebSocket"))(
       `ws${this.secure ? "s" : ""}://${
         this.address
       }/${this.pathVersion}/websocket`,
@@ -415,7 +416,7 @@ export class Node {
         headers,
       }
     );
-    const socket = this.socket;
+    this.socket = socket;
     socket.on('open', () => { if (this.socket === socket && !this.destroyed) void this.open(); });
     socket.on('close', event => { if (this.socket === socket && !this.destroyed) void this.close(event); });
     socket.on('message', event => { if (this.socket === socket && !this.destroyed) void this.message(event); });
@@ -547,7 +548,7 @@ export class Node {
         "debug",
         `Moonlink.js > Node > Failed to enable resume for ${this.identifier} (attempt ${attempt}/${this.resumeUpdateMaxAttempts}). Retrying in ${Math.round(
           delay / 1000
-        )}s. Error: ${error.message}`
+        )}s. Error: ${error instanceof Error ? error.message : String(error)}`
       );
       if (attempt < this.resumeUpdateMaxAttempts) {
         this.scheduleResumeUpdateRetry(delay);
@@ -615,14 +616,14 @@ export class Node {
           this.version = this.backend?.version;
         }
       } catch (error) {
-        this.manager.emit('debug', `NyxLink > Node >> Info unavailable for ${this.identifier}: ${error.message}`);
+        this.manager.emit('debug', `NyxLink > Node >> Info unavailable for ${this.identifier}: ${error instanceof Error ? error.message : String(error)}`);
       }
       if (this.connected && !this.destroyed && this.socket === socket) this.manager.emit('nodeConnected', this);
     })();
     await this.backendReady;
   }
 
-  protected async close(event: { code; reason: string }): Promise<void> {
+  protected async close(event: { code: number; reason: string }): Promise<void> {
     if (this.destroyed) return;
     this.clearVoiceReconnects();
     if (this.readyTimeout) clearTimeout(this.readyTimeout);
@@ -648,10 +649,10 @@ export class Node {
 
     if (orphanedPlayers.length > 0 && this.manager.options.node?.autoMovePlayers) {
         const transfers = await Promise.all(orphanedPlayers.map(player => NodeFailover.move(player, this)));
-        const destinations = new Map<Node, any[]>();
+        const destinations = new Map<Node, Player[]>();
         orphanedPlayers.forEach((player, index) => {
           const result = transfers[index];
-          if (result.status === 'recovered') {
+          if (result.status === 'recovered' && result.node) {
             const group = destinations.get(result.node) ?? [];
             group.push(player);
             destinations.set(result.node, group);
@@ -688,15 +689,15 @@ export class Node {
     }
   }
 
-  protected async message({ data }): Promise<void> {
+  protected async message({ data }: { data: string | Buffer }): Promise<void> {
     if (this.destroyed) return;
     let payload;
     try {
-      payload = JSON.parse(data);
+      payload = JSON.parse(typeof data === 'string' ? data : data.toString('utf8'));
     } catch (e) {
       this.manager.emit(
         "debug",
-        `Moonlink.js > Node <- Received malformed payload from ${this.identifier}. Data: ${data}, Error: ${e}.`
+        `NyxLink > Node > Rejected malformed payload from ${this.identifier}.`
       );
       return;
     }
@@ -816,7 +817,7 @@ export class Node {
             player.current.time = currentState.time;
             player.updateData("current.position", currentState.position);
           }
-          if (shouldPreservePosition) {
+          if (shouldPreservePosition && lastState) {
             player.set("lastKnownPosition", lastState.position);
           }
         }
@@ -1242,7 +1243,7 @@ export class Node {
             await player.seek(currentPosition + 1000);
             this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck >> Seeked forward 1s for player ${player.guildId}.`);
         } catch (error) {
-            this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck >> Failed to seek, attempting full restart for player ${player.guildId}. Error: ${error.message}.`);
+            this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck >> Failed to seek, attempting full restart for player ${player.guildId}. Error: ${error instanceof Error ? error.message : String(error)}.`);
             await player.restart();
         }
     }
@@ -1591,10 +1592,11 @@ export class Node {
     }
   }
 
-  protected error({ error }): void {
-    if (error?.statusCode === 401 || error?.statusCode === 403) this.authenticationFailed = true;
-    this.manager.emit("debug", `Moonlink.js > Node !> Error on node ${this.identifier}. Error: ${error.message}.`);
-    this.manager.emit("nodeError", this, error);
+  protected error({ error }: { error: unknown }): void {
+    if (error && typeof error === 'object' && 'statusCode' in error && (error.statusCode === 401 || error.statusCode === 403)) this.authenticationFailed = true;
+    const failure = error instanceof Error ? error : new Error(String(error));
+    this.manager.emit("debug", `NyxLink > Node > Error on node ${this.identifier}: ${failure.message}`);
+    this.manager.emit("nodeError", this, failure);
   }
 
   public async destroy(): Promise<void> {
