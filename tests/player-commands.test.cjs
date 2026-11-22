@@ -335,3 +335,26 @@ test('orphan trackException does not stop an idle player or consume queued track
   assert.equal(player.queue.first, queued);
   assert.deepEqual(requests, []);
 });
+
+test('stale trackStuck event for a previous encoded track does not seek current track', async t => {
+  const { node, player, requests } = createPlayer(t);
+  const previous = createTrack('obsolete-stuck');
+  const current = createTrack('active-stuck');
+  player.current = current;
+  await node.handleTrackStuck(player, { track: previous.toJSON(), thresholdMs: 10000 });
+  assert.equal(player.current, current);
+  assert.deepEqual(requests, []);
+});
+
+test('stale trackException event for a previous encoded track does not stop current track', async t => {
+  const { node, player, requests } = createPlayer(t);
+  const previous = createTrack('obsolete-exception');
+  const current = createTrack('active-exception');
+  player.current = current;
+  await node.handleTrackException(player, {
+    track: previous.toJSON(),
+    exception: { severity: 'fault', message: 'late decode failure' },
+  });
+  assert.equal(player.current, current);
+  assert.deepEqual(requests, []);
+});
