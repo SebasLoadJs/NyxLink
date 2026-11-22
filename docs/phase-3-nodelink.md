@@ -114,8 +114,20 @@ after 30 seconds. The test checks real 48 kHz stereo S16LE samples, verifies
 the silent and quiet output using RMS amplitude, and verifies that seeking
 removes approximately half a second of audio while preserving nonzero samples.
 
-All acceptance claims depend on a **successful modern-nodelink CI job**;
-source code alone is not an observed test result. PCM volume processing and
-position decoding do not prove Opus encoding, UDP/Discord audio transport,
-sample-accurate two-track crossfade, AutoMix, or survival of real voice
-disconnections. Those remain separate verifications.
+The initial seek test (one-second WAV) failed, returning `aborted`.
+A second run using a three-second WAV revealed untrustworthy duration
+metadata; the third run measured the duration directly from decoded PCM but
+still failed with `ECONNRESET: aborted` on `position: 500`. These results
+prove an unresolved real-server compatibility issue, **not** a successful
+seek. They do not, by themselves, establish whether the defect belongs
+to NodeLink's seekable HTTP source, stream finalization, or the client
+transport. The pinned modern CI job records `seekEvidence` as
+`verified` or `failed` separately from the mandatory, independently
+passing WAV/raw/volume checks. Set `NYXLINK_REQUIRE_SEEK=1` to turn
+a failed seek probe into a required CI failure when diagnosing it.
+
+All acceptance claims depend on the relevant **successful
+modern-nodelink CI job**. PCM volume processing alone does not prove
+position decoding, Opus encoding, UDP/Discord voice transport,
+sample-accurate two-track crossfade, AutoMix or survival of real voice
+disconnections. Those remain separate acceptance gates.
