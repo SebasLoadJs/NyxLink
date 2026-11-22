@@ -43,3 +43,29 @@ Those passing observations do **not** certify seek, source-independent playback,
 The normal modern backend acceptance job records `seekEvidence.status: 'failed'` as a diagnostic instead of falsely listing seek as a passing feature. To make seeking a required gate for a targeted investigation, set `NYXLINK_REQUIRE_SEEK=1`. Do not treat a green baseline job as a successful seek test.
 
 *GitHub Issues are disabled in SebasLoadJs/NyxLink (the API returned HTTP 410), so this repository document is the persistent tracker.*
+
+
+## HTTP-framing differential probe
+
+The isolated modern-NodeLink test lab additionally sends four independent,
+bounded requests against the same three-second synthetic encoded track:
+
+| Probe | Output format | JSON position | HTTP Range |
+| --- | --- | ---: | --- |
+| wav-position | WAV | 500 ms | none |
+| raw-position | raw PCM | 500 ms | none |
+| wav-range | WAV | 0 ms | bytes=96044- |
+| raw-range | raw PCM | 0 ms | bytes=96000- |
+
+All offsets use the advertised 48 kHz, 16-bit, two-channel PCM layout:
+192 bytes per millisecond and 44 bytes of RIFF header. The probe records
+HTTP status, Content-Length, Content-Range, transfer encoding, bytes
+received, whether Node.js marked the response complete and any error code.
+It does **not** store the encoded track, Authorization header, audio bytes
+or local credentials. HTTP completion of a range response alone is not
+proof of correct audio seek contents, which requires separately examining
+decoded PCM.
+
+Real results are included under `seekWireProbes` in the pinned NodeLink
+lab report; hypotheses about transport behavior must be updated only
+after observing those results.
