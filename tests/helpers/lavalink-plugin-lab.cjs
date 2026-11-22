@@ -79,6 +79,19 @@ async function nextPort() {
   return port;
 }
 
+
+function startupErrorCode(logs) {
+  if (/accessdeniedexception|permission denied|eacces/i.test(logs)) return 'PLUGIN_DIRECTORY_PERMISSION';
+  if (/could not resolve|failed to download|could not find artifact|unresolved dependency|failed to transfer|unable to resolve/i.test(logs)) return 'PLUGIN_ARTIFACT_RESOLUTION';
+  if (/UnsupportedClassVersionError|unsupported class file major/i.test(logs)) return 'JAVA_RUNTIME_INCOMPATIBLE';
+  if (/failed to load plugin|plugin .* failed to load|plugin initialization failure/i.test(logs)) return 'PLUGIN_LOAD_FAILURE';
+  if (/address already in use|failed to bind/i.test(logs)) return 'SERVER_PORT_CONFLICT';
+  return 'LAVALINK_START_FAILURE';
+}
+class PluginLabFailure extends Error {
+  constructor(code) { super(code); this.name = 'PluginLabFailure'; this.code = code; }
+}
+
 async function withLavalinkPluginLab(run) {
   validateProfile();
   if (process.platform !== 'linux' || typeof process.getuid !== 'function') {
@@ -118,10 +131,12 @@ async function withLavalinkPluginLab(run) {
   });
   let containerStarted = false;
   let serverStarted = false;
+  let phase = 'SETUP';
   try {
     const mediaPort = await openPort(server);
     serverStarted = true;
     await fs.writeFile(config, renderConfig(port, password), { mode: 0o600, flag: 'wx' });
+    phase = 'CONTAINER_CREATE';
     await command(['run', '-d', '--name', name, '--user',
       String(process.getuid()) + ':' + String(process.getgid()),
       '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
@@ -130,6 +145,7 @@ async function withLavalinkPluginLab(run) {
       '-v', pluginsDir + ':/opt/Lavalink/plugins:rw',
       '-e', 'JAVA_TOOL_OPTIONS=-Xms64m -Xmx512m', profile.image]);
     containerStarted = true;
+    phase = 'BACKEND_START';
 
     let info;
     const deadline = Date.now() + 150000;
@@ -144,7 +160,11 @@ async function withLavalinkPluginLab(run) {
       if (result.stdout.trim() !== 'running') break;
       await delay(400);
     }
-    if (!info) throw new Error('Pinned Lavalink with configured plugins failed to start');
+    if (!info) {
+      const logs = await command(['logs', '--tail', '100', name]).catch(() => ({ stdout: '' }));
+      throw new PluginLabFailure(startupErrorCode(logs.stdout));
+    }
+    phase = 'PLUGIN_INVENTORY';
     const actual = (info.plugins || []).map(p => String(p.name || '').toLowerCase());
     for (const plugin of profile.plugins) {
       const short = plugin.name.replace(/-plugin$/, '');
@@ -158,6 +178,7 @@ async function withLavalinkPluginLab(run) {
       const bytes = await fs.readFile(path.join(pluginsDir, filename));
       jars.push({ file: filename, sha256: createHash('sha256').update(bytes).digest('hex') });
     }
+    phase = 'ACCEPTANCE';
     return await run({
       node: { identifier: 'lavalink-plugins', host: '127.0.0.1', port,
         password, secure: false, version: info.version.semver },
@@ -166,6 +187,16 @@ async function withLavalinkPluginLab(run) {
       versions: profile.plugins.map(p => ({ name: p.name, version: p.version })),
       jars
     });
+  } catch (error) {
+    if (error instanceof PluginLabFailure) throw error;
+    const reason = ({
+      SETUP: 'PLUGIN_LAB_SETUP_FAILED',
+      CONTAINER_CREATE: 'PLUGIN_CONTAINER_CREATE_FAILED',
+      BACKEND_START: 'PLUGIN_BACKEND_START_FAILED',
+      PLUGIN_INVENTORY: 'PLUGIN_INFO_MISMATCH',
+      ACCEPTANCE: 'PLUGIN_ACCEPTANCE_FAILED'
+    })[phase];
+    throw new PluginLabFailure(reason || 'PLUGIN_LAB_FAILED');
   } finally {
     if (containerStarted) {
       await command(['stop', '--time', '3', name]).catch(() => {});
@@ -179,4 +210,4 @@ async function withLavalinkPluginLab(run) {
   }
 }
 
-module.exports = { validateProfile, renderConfig, withLavalinkPluginLab };
+module.exports = { validateProfile, renderConfig, startupErrorCode, withLavalinkPluginLab };
