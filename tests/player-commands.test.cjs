@@ -222,3 +222,59 @@ test('an explicit zero position overrides embedded restored metadata', async t =
   assert.equal(restored.current.getInfo().position,0);
   assert.equal(restored.lastPosition,0);
 });
+
+test('queued seek does not move a replacement track after a newer play intent', async t => {
+  const { node, player } = createPlayer(t);
+  const original = createTrack('seek-before-replacement');
+  const replacement = createTrack('seek-replacement');
+  player.current = original;
+  const started = deferred();
+  const release = deferred();
+  const applied = [];
+  node.rest.updatePlayer = async (_guild, payload) => {
+    if (payload.paused === true) { started.resolve(); await release.promise; }
+    applied.push(payload);
+    return payload;
+  };
+
+  const pause = player.pause();
+  await started.promise;
+  const seek = player.seek(42000);
+  const play = player.play({ track: replacement });
+  release.resolve();
+  await Promise.all([pause, seek, play]);
+  assert.deepEqual(applied.map(p => p.position).filter(p => p !== undefined), []);
+  assert.equal(player.current, replacement);
+  assert.equal(original.position, 0);
+  assert.equal(replacement.position, 0);
+});
+
+test('in-flight seek acknowledgement cannot change position of a newer track', async t => {
+  const { node, player } = createPlayer(t);
+  const original = createTrack('seek-in-flight');
+  const replacement = createTrack('seek-after-flight');
+  player.current = original;
+  const started = deferred();
+  const release = deferred();
+  node.rest.updatePlayer = async (_guild, payload) => {
+    if (payload.position === 42000) { started.resolve(); await release.promise; }
+    return payload;
+  };
+
+  const seek = player.seek(42000);
+  await started.promise;
+  const play = player.play({ track: replacement });
+  release.resolve();
+  await Promise.all([seek, play]);
+  assert.equal(player.current, replacement);
+  assert.equal(original.position, 0);
+  assert.equal(replacement.position, 0);
+});
+
+test('seek rejects non-finite positions without sending a backend request', async t => {
+  const { player, requests } = createPlayer(t);
+  await assert.rejects(player.seek(Infinity), /valid number/);
+  await assert.rejects(player.seek(-Infinity), /valid number/);
+  await assert.rejects(player.seek(NaN), /valid number/);
+  assert.deepEqual(requests, []);
+});
