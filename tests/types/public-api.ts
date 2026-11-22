@@ -106,3 +106,13 @@ manager.database.importPlayer(parsed);
 const conflictCode: 'SNAPSHOT_CONFLICT' = new SnapshotConflictError().code;
 const validationCode: 'INVALID_SNAPSHOT' = new SnapshotValidationError('Invalid').code;
 void [backup, persisted, imported, parsed, compare, conflictCode, validationCode];
+
+// Node manager results are typed, rather than silently exposing any.
+const selectedNode: Node | undefined = manager.nodes.findNode();
+const onlineNodes: Node[] = manager.nodes.onlineNodes;
+const readyNodes: Node[] = manager.nodes.ready;
+// @ts-expect-error Only Nodes may be inserted in the public node registry.
+manager.nodes.nodes.set('invalid', { invalid: true });
+// @ts-expect-error No arbitrary properties exist on a selected Node.
+selectedNode?.nonexistentAudioProperty;
+void [selectedNode, onlineNodes, readyNodes];

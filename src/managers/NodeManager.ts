@@ -1,17 +1,19 @@
 import { NodeFailover } from "../nodes/NodeFailover";
 import { NodeSelector, type NodeSelectionOptions } from "../nodes/NodeSelector";
 import { NodeHealthMonitor } from "../nodes/NodeHealthMonitor";
-import { Manager } from "../core/Manager";
-import { IManagerNodeConfig } from "../typings/Interfaces";
-import { NodeSortStrategy, NodeState } from "../typings/types";
-import { Structure, validate, generateUUID } from "../Util";
+import type { Manager } from "../core/Manager";
+import type { Node } from "../entities/Node";
+import type { Player } from "../entities/Player";
+import type { IManagerNodeConfig, INodeStats } from "../typings/Interfaces";
+import { NodeState } from "../typings/types";
+import { Structure, validate } from "../Util";
 
 export class NodeManager {
     public readonly manager: Manager;
-    public readonly nodes: Map<string, any> = new Map();
+    public readonly nodes: Map<string, Node> = new Map();
     private readonly nodeConfigs: IManagerNodeConfig[];
-    private readonly drains = new WeakMap<object, Promise<boolean>>();
-    private readonly ejections = new WeakMap<object, Promise<boolean>>();
+    private readonly drains = new WeakMap<Node, Promise<boolean>>();
+    private readonly ejections = new WeakMap<Node, Promise<boolean>>();
 
     constructor(manager: Manager, nodeConfigs: IManagerNodeConfig[]) {
         this.manager = manager;
@@ -50,7 +52,7 @@ export class NodeManager {
         return this.nodes.delete(identifier);
     }
 
-    public get onlineNodes(): any[] {
+    public get onlineNodes(): Node[] {
         return [...this.nodes.values()].filter(node => NodeHealthMonitor.available(node));
     }
 
@@ -58,7 +60,7 @@ export class NodeManager {
         return this.onlineNodes.length > 0;
     }
 
-    public get ready(): any[] {
+    public get ready(): Node[] {
         return this.onlineNodes.filter(node => node.state === NodeState.READY);
     }
 
@@ -66,12 +68,12 @@ export class NodeManager {
         return this.ready.length > 0;
     }
 
-    public get leastUsedNode(): any | undefined {
+    public get leastUsedNode(): Node | undefined {
         return this.findNode();
     }
 
-    public get stats(): Record<string, any> {
-        const nodeStats: Record<string, any> = {};
+    public get stats(): Record<string, INodeStats> {
+        const nodeStats: Record<string, INodeStats> = {};
         for (const node of this.onlineNodes) {
             if(node.stats) {
                 nodeStats[node.identifier] = node.stats;
@@ -80,7 +82,7 @@ export class NodeManager {
         return nodeStats;
     }
 
-    public findNode(options: NodeSelectionOptions = {}): any | undefined {
+    public findNode(options: NodeSelectionOptions = {}): Node | undefined {
         return NodeSelector.select(this.nodes.values(), this.manager.options.node, options);
     }
 
@@ -105,7 +107,7 @@ export class NodeManager {
         return operation;
     }
 
-    private async drainPlayers(node: any): Promise<boolean> {
+    private async drainPlayers(node: Node): Promise<boolean> {
         const players = this.manager.players.filter(player => player.node === node);
         let drained = true;
         // Serial evacuation bounds maintenance traffic; the source keeps serving its remaining players.
@@ -134,13 +136,13 @@ export class NodeManager {
         return operation;
     }
 
-    private async ejectNode(identifier: string, node: any): Promise<boolean> {
+    private async ejectNode(identifier: string, node: Node): Promise<boolean> {
         const active = () => !this.manager.destroyed && !node.destroyed && this.nodes.get(identifier) === node;
         if (!active()) return false;
         const players = this.manager.players.filter(player => player.node === node);
         const results = await Promise.all(players.map(player => NodeFailover.move(player, node)));
         if (!active()) return false;
-        const attached = (player: any) => !player.destroyed && player.node === node &&
+        const attached = (player: Player) => !player.destroyed && player.node === node &&
             this.manager.players.get(player.guildId) === player;
         // A cancellation represents a newer intent, not permission to orphan or destroy it.
         if (players.some((player, index) => results[index].status === 'cancelled' && attached(player))) return false;
