@@ -1355,7 +1355,7 @@ export class Node {
       await player.play();
       return;
     }
-    await this.handleQueueEnd(player, trackForEvent);
+    await this.handleQueueEnd(player, trackForEvent, intent);
   }
 
   private async handleTrackStuck(player: any, payload: TrackStuckEvent): Promise<void> {
@@ -1754,8 +1754,8 @@ export class Node {
     return AutoPlayManager.play(this, player, previousTrack);
   }
 
-  private async handleQueueEnd(player: any, lastTrack: any): Promise<void> {
-    const ticket = playbackGuard(player).ticket;
+  private async handleQueueEnd(player: any, lastTrack: any, ticket = playbackGuard(player).ticket): Promise<void> {
+    // TrackEnd may have awaited autoplay; preserve its original playback generation.
     if (player.destroyed || player.node !== this || player.queue.size > 0 || player.playing ||
         !playbackGuard(player).isCurrent(ticket)) return;
     this.manager.emit("debug", `NyxLink > Node#handleQueueEnd >> Queue ended for player ${player.guildId}. LastTrack: ${lastTrack?.title || "None"}.`);
