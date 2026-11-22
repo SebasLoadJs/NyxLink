@@ -44,7 +44,7 @@ diff --git a/src/api/loadStream.ts b/src/api/loadStream.ts
 +function isHttpWavSource(sourceName: string, urlResult: TrackUrlResult): boolean {
 +  if (sourceName !== 'http' || typeof urlResult.url !== 'string') return false
 +  const hint = typeof urlResult.format === 'string' ? urlResult.format.toLowerCase() : ''
-+  if (/^(?:wav|wave|audio\\/(?:x-)?wav|audio\\/wave)$/.test(hint)) return true
++  if (['wav', 'wave', 'audio/wav', 'audio/x-wav', 'audio/wave'].includes(hint)) return true
 +  try {
 +    const pathname = new URL(urlResult.url).pathname.toLowerCase()
 +    return pathname.endsWith('.wav') || pathname.endsWith('.wave')
