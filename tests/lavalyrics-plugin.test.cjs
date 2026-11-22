@@ -101,10 +101,13 @@ test('LavaLyrics 204 without content is a valid unavailable-lyrics result', asyn
 });
 
 test('invalid 200 lyrics payload does not mark endpoint support as observed', async t => {
+  let malformed = '{"sourceName":"youtube","provider":"x","text":null,"lines":[{"timestamp":-2}],"plugin":{}}';
   const { node } = await setup(t, (_req, res) => {
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end('{"sourceName":"youtube","provider":"x","text":null,"lines":[{"timestamp":-2}],"plugin":{}}');
+    res.end(malformed);
   });
+  await assert.rejects(node.getLavaLyrics('encoded'), { code: 'INVALID_PROTOCOL_RESPONSE' });
+  malformed = '{}';
   await assert.rejects(node.getLavaLyrics('encoded'), { code: 'INVALID_PROTOCOL_RESPONSE' });
   assert.equal(node.backend.featureStatus('lavalyrics'), 'unknown');
 });
