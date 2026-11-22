@@ -384,3 +384,25 @@ test('failed recovery seek cannot restart a player superseded by an explicit pla
   assert.equal(player.current, replacement);
   assert.equal(restarts, 0);
 });
+
+test('seek queued immediately after first play applies to the newly started track', async t => {
+  const { player, requests } = createPlayer(t);
+  const track = createTrack('initial-play-then-seek');
+  const play = player.play({ track });
+  const seek = player.seek(42000);
+  assert.equal(await play, true);
+  await seek;
+  assert.equal(player.current, track);
+  assert.equal(track.position, 42000);
+  assert.equal(requests.at(-1).payload.position, 42000);
+});
+
+test('seek queued after explicit play is cancelled by a later stop intent', async t => {
+  const { player, requests } = createPlayer(t);
+  const playing = player.play({ track: createTrack('cancel-seek') });
+  const seek = player.seek(42000);
+  const stopping = player.stop();
+  await Promise.all([playing, seek, stopping]);
+  assert.equal(requests.some(r => r.payload.position === 42000), false);
+  assert.equal(player.current, null);
+});
