@@ -230,6 +230,9 @@ export class Node {
   public isNodeLink: boolean = false;
   public backend?: BackendAdapter;
   private backendReady: Promise<void> = Promise.resolve();
+  private backendGeneration = 0;
+  private backendRefresh?: Promise<boolean>;
+  public backendRefreshedAt?: number;
   private authenticationFailed = false;
   private connecting = false;
   private readyTimeout?: NodeJS.Timeout;
@@ -584,47 +587,86 @@ export class Node {
     }
   }
 
-  protected async open(): Promise<void> {
-    if (this.destroyed) return;
-    if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
-    this.reconnectTimeout = undefined;
-    this.connected = true;
-    this.setState(NodeState.CONNECTED);
-    if (this.destroyed || !this.connected) return;
-    this.stats = undefined;
-    this.statsReceivedAt = undefined;
+  private invalidateBackendRefresh(): void {
+    this.backendGeneration++;
+    this.backendRefresh = undefined;
+  }
+
+  private clearBackendMetadata(): void {
     this.isNodeLink = false;
     this.backend = undefined;
-    this.capabilities.clear();
+    // Never mutate the old adapter's advertised capability set.
+    this.capabilities = new Set();
     this.info = undefined;
     this.version = undefined;
+    this.backendRefreshedAt = undefined;
+  }
+
+  /** Refresh /v4/info once per connection; old responses cannot replace current metadata. */
+  public refreshBackend(): Promise<boolean> {
+    if (this.destroyed || this.manager.destroyed || !this.connected) return Promise.resolve(false);
+    if (this.backendRefresh) return this.backendRefresh;
+    const generation = this.backendGeneration;
     const socket = this.socket;
-    if (this.readyTimeout) clearTimeout(this.readyTimeout);
-    this.readyTimeout = setTimeout(() => {
-      this.readyTimeout = undefined;
-      if (!this.destroyed && this.socket === socket && this.state !== NodeState.READY) socket?.close(1011, 'No valid ready payload');
-    }, this.readyTimeoutMs);
-    this.readyTimeout.unref();
-    this.backendReady = (async () => {
+    const current = () => !this.destroyed && !this.manager.destroyed && this.connected &&
+      this.backendGeneration === generation && this.socket === socket;
+    const operation: Promise<boolean> = Promise.resolve().then(async () => {
+      if (!current()) return false;
       try {
         const result = await this.rest.getInfoWithHeaders();
-        if (!this.connected || this.destroyed || this.socket !== socket) return;
-        if (result) {
-          this.backend = BackendDetector.detect(result.data, result.headers, this.capabilities);
-          this.isNodeLink = this.backend?.kind === 'nodelink';
-          this.info = result.data;
-          this.version = this.backend?.version;
-        }
+        if (!current() || !result) return false;
+        const capabilities = new Set<string>();
+        const adapter = BackendDetector.detect(result.data, result.headers, capabilities);
+        if (!adapter) return false;
+        this.backend = adapter;
+        this.capabilities = capabilities;
+        this.isNodeLink = adapter.kind === 'nodelink';
+        this.info = result.data;
+        this.version = adapter.version;
+        this.backendRefreshedAt = Date.now();
+        return true;
       } catch (error) {
-        this.manager.emit('debug', `NyxLink > Node >> Info unavailable for ${this.identifier}: ${error instanceof Error ? error.message : String(error)}`);
+        if (current()) this.manager.emit('debug', `NyxLink > Node > Backend metadata refresh failed for ${this.identifier}`);
+        return false;
       }
-      if (this.connected && !this.destroyed && this.socket === socket) this.manager.emit('nodeConnected', this);
-    })();
+    }).finally(() => {
+      if (this.backendRefresh === operation) this.backendRefresh = undefined;
+    });
+    this.backendRefresh = operation;
+    return operation;
+  }
+
+  protected async open(): Promise<void> {
+    if (this.destroyed || this.manager.destroyed) return;
+    this.invalidateBackendRefresh();
+    const generation = this.backendGeneration;
+    const socket = this.socket;
+    if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
+    this.reconnectTimeout = undefined;
+    this.stats = undefined;
+    this.statsReceivedAt = undefined;
+    this.clearBackendMetadata();
+    this.connected = true;
+    this.setState(NodeState.CONNECTED);
+    const current = () => !this.destroyed && !this.manager.destroyed && this.connected &&
+      this.backendGeneration === generation && this.socket === socket;
+    if (!current()) return;
+    if (this.readyTimeout) clearTimeout(this.readyTimeout);
+    this.readyTimeout = setTimeout(() => {
+      if (!current()) return;
+      this.readyTimeout = undefined;
+      if (this.state !== NodeState.READY) socket?.close(1011, 'No valid ready payload');
+    }, this.readyTimeoutMs);
+    this.readyTimeout.unref();
+    this.backendReady = this.refreshBackend().then(() => {
+      if (current()) this.manager.emit('nodeConnected', this);
+    });
     await this.backendReady;
   }
 
   protected async close(event: { code: number; reason: string }): Promise<void> {
     if (this.destroyed) return;
+    this.invalidateBackendRefresh();
     this.clearVoiceReconnects();
     if (this.readyTimeout) clearTimeout(this.readyTimeout);
     this.readyTimeout = undefined;
@@ -721,8 +763,9 @@ export class Node {
       case "ready":
         if (typeof payload.sessionId !== 'string' || !payload.sessionId || typeof payload.resumed !== 'boolean') return;
         const readySocket = this.socket;
+        const readyGeneration = this.backendGeneration;
         await this.backendReady;
-        if (this.destroyed || !this.connected || this.socket !== readySocket) return;
+        if (this.destroyed || !this.connected || this.socket !== readySocket || this.backendGeneration !== readyGeneration) return;
         this.manager.emit(
           "debug",
           `NyxLink > Node >> READY for ${this.identifier}. Resumed: ${payload.resumed}.`
@@ -739,7 +782,7 @@ export class Node {
         await this.manager.database.set(`nodes.${this.uuid}`, {
           sessionId: this.sessionId,
         });
-        if (this.destroyed || !this.connected || this.socket !== readySocket) return;
+        if (this.destroyed || !this.connected || this.socket !== readySocket || this.backendGeneration !== readyGeneration) return;
 
         if (this.manager.options.resume) {
           void this.enableResumeWithRetry();
@@ -1610,9 +1653,8 @@ export class Node {
     this.reconnectTimeout = undefined;
     this.cancelResumeWindow();
     this.resetResumeUpdateState();
-    this.backend = undefined;
-    this.isNodeLink = false;
-    this.capabilities.clear();
+    this.invalidateBackendRefresh();
+    this.clearBackendMetadata();
     const socket = this.socket;
     this.socket = undefined;
     socket?.close();

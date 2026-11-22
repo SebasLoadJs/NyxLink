@@ -4,6 +4,7 @@ import { NodeHealthMonitor } from "../nodes/NodeHealthMonitor";
 import type { Manager } from "../core/Manager";
 import type { Node } from "../entities/Node";
 import type { Player } from "../entities/Player";
+import type { BackendInventoryEntry } from "../backends/BackendInventory";
 import type { IManagerNodeConfig, INodeStats } from "../typings/Interfaces";
 import { NodeState } from "../typings/types";
 import { Structure, validate } from "../Util";
@@ -80,6 +81,27 @@ export class NodeManager {
             }
         }
         return nodeStats;
+    }
+
+    /** Credential-free, detached metadata for monitoring and administrative UIs. */
+    public getBackendInventory(): BackendInventoryEntry[] {
+        return [...this.nodes.values()].map(node => {
+            const connected = NodeHealthMonitor.available(node);
+            const adapter = connected ? node.backend : undefined;
+            return {
+                identifier: node.identifier,
+                state: node.state,
+                connected,
+                ready: connected && node.state === NodeState.READY,
+                draining: node.draining,
+                kind: adapter?.kind,
+                version: adapter?.version,
+                protocolVersion: adapter?.protocolVersion,
+                refreshedAt: adapter ? node.backendRefreshedAt : undefined,
+                features: adapter?.listFeatures() ?? [],
+                plugins: adapter?.plugins.map(plugin => ({ ...plugin })) ?? [],
+            };
+        });
     }
 
     public findNode(options: NodeSelectionOptions = {}): Node | undefined {

@@ -21,3 +21,7 @@ Phase 1 baseline: accepted at 5f29811 after strict validation and a passed 600-s
 5. Migration compatibility and selection tests, including unknown capabilities.
 
 NodeLink-specific new features and expanded Lavalink plugin integrations belong to phases 3 and 4. Do not infer support from a product name or plugin presence.
+
+## 2.2 Connection-scoped inventory
+
+`Node.refreshBackend()` coalesces requests per connection and reports success or failure. A successful refresh replaces the adapter atomically and resets observed endpoint state; failed explicit refreshes preserve the previous successful inventory. Opening a new connection clears old advertised metadata before emitting its connected state. Disconnect and destruction invalidate pending refreshes. `manager.nodes.getBackendInventory()` returns detached entries, with source/filter/plugin evidence and timestamps when available, never including connection credentials or raw server information. Disconnected nodes expose no current capability claims. Old adapter references remain independent for diagnostics and track provenance.

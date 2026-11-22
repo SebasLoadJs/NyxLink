@@ -7,6 +7,7 @@ export { BackendAdapter } from './src/backends/BackendAdapter';
 export type { BackendKind, BackendPlugin, CapabilityState } from './src/backends/BackendAdapter';
 export { CapabilityRegistry } from './src/backends/CapabilityRegistry';
 export type { CapabilityDescription, CapabilityEvidence } from './src/backends/CapabilityRegistry';
+export type { BackendInventoryEntry } from './src/backends/BackendInventory';
 export { BackendDetector } from './src/backends/BackendDetector';
 export { LavalinkAdapter } from './src/backends/LavalinkAdapter';
 export { NodeLinkAdapter } from './src/backends/NodeLinkAdapter';

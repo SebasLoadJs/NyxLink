@@ -127,3 +127,9 @@ const fullDuration: number = track.getInfo().length;
 // @ts-expect-error Partial fields must be narrowed before assuming they are present.
 const unsafeDuration: number = track.duration;
 void [partialDuration, fullDuration, unsafeDuration];
+
+const inventory: import('../../dist').BackendInventoryEntry[] = manager.nodes.getBackendInventory();
+const refreshBackend: Promise<boolean> = node.refreshBackend();
+// @ts-expect-error Inventory entries never contain the node password.
+inventory[0].password;
+void [inventory, refreshBackend];
