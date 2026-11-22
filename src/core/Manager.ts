@@ -12,6 +12,7 @@ import {
 import type { DiscordGatewayPacket, DiscordVoicePacket } from "../typings/types";
 import { Structure, validate, EventEmitter, sources, nodeLinkSources, nodeLinkOnlyError, decodeTrack, encodeTrack } from "../Util";
 import { PlayerManager } from "../managers/PlayerManager";
+import type { NodeManager } from "../managers/NodeManager";
 import { DatabaseManager } from "../managers/DatabaseManager";
 import { Connector } from "../connectors/Connector";
 import { version } from "../..";
@@ -24,7 +25,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
     public readonly options: IManagerOptionsConfig;
     public send: (guildId: string, payload: any) => void;
     public clientId: string;
-    public readonly nodes: any;
+    public readonly nodes: NodeManager;
     public readonly players: PlayerManager;
     public database: DatabaseManager;
     public readonly logger?: Logger;
