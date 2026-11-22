@@ -80,16 +80,25 @@ export class Queue {
     }
 
     public insert(index: number, track: Track | Track[]): void {
-        const tracksToAdd = Array.isArray(track) ? track : [track];
+        if (!Number.isSafeInteger(index) || index < 0 || index > this.tracks.length) return;
+        const tracksToAdd = (Array.isArray(track) ? track : [track]).filter(t => t != null);
+        const allowDuplicates = this.manager.options.queue?.allowDuplicates ?? true;
+        const seen = new Set(this.tracks.map(t => t.encoded));
+        const accepted = allowDuplicates ? tracksToAdd : tracksToAdd.filter(t => {
+            if (seen.has(t.encoded)) return false;
+            seen.add(t.encoded);
+            return true;
+        });
+        if (!accepted.length) return;
         const maxSize = this.manager.options.queue?.maxSize ?? 1000;
-        
-        if (maxSize !== "unlimited" && this.tracks.length + tracksToAdd.length > maxSize) {
+
+        if (maxSize !== "unlimited" && this.tracks.length + accepted.length > maxSize) {
             this.manager.emit("debug", `Moonlink.js > Queue >> Max queue size (${maxSize}) reached. Cannot insert more tracks.`);
             return;
         }
 
-        this.tracks.splice(index, 0, ...tracksToAdd);
-        this.manager.emit("queueAdd", this.player, tracksToAdd.length === 1 ? tracksToAdd[0] : tracksToAdd);
+        this.tracks.splice(index, 0, ...accepted);
+        this.manager.emit("queueAdd", this.player, accepted.length === 1 ? accepted[0] : accepted);
         this._updateQueue();
     }
 
@@ -102,7 +111,7 @@ export class Queue {
     }
 
     public remove(index: number = 0): Track | undefined {
-        if (index < 0 || index >= this.tracks.length) return undefined;
+        if (!Number.isSafeInteger(index) || index < 0 || index >= this.tracks.length) return undefined;
         const removedTrack = this.tracks.splice(index, 1)[0];
         if (removedTrack) {
             this.manager.emit("queueRemove", this.player, removedTrack);
@@ -151,7 +160,7 @@ export class Queue {
     }
 
     public shuffleRange(start: number, end: number): void {
-        if (start < 0 || end >= this.tracks.length || start >= end) return;
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end >= this.tracks.length || start >= end) return;
         
         const chunk = this.tracks.slice(start, end + 1);
         for (let i = chunk.length - 1; i > 0; i--) {
@@ -218,7 +227,7 @@ export class Queue {
     }
 
     public move(from: number, to: number): boolean {
-        if (from < 0 || to < 0 || from >= this.tracks.length || to >= this.tracks.length) return false;
+        if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from < 0 || to < 0 || from >= this.tracks.length || to >= this.tracks.length) return false;
         
         const track = this.tracks.splice(from, 1)[0];
         this.tracks.splice(to, 0, track);
@@ -228,7 +237,8 @@ export class Queue {
     }
 
     public moveRange(fromIndex: number, toIndex: number, count: number): boolean {
-        if (fromIndex < 0 || fromIndex >= this.tracks.length ||
+        if (!Number.isSafeInteger(fromIndex) || !Number.isSafeInteger(toIndex) || !Number.isSafeInteger(count) ||
+            fromIndex < 0 || fromIndex >= this.tracks.length ||
             toIndex < 0 || toIndex > this.tracks.length ||
             count <= 0 || fromIndex + count > this.tracks.length) {
             return false;
@@ -242,7 +252,7 @@ export class Queue {
     }
 
     public removeRange(startIndex: number, endIndex: number): boolean {
-        if (startIndex < 0 || startIndex >= this.tracks.length ||
+        if (!Number.isSafeInteger(startIndex) || !Number.isSafeInteger(endIndex) || startIndex < 0 || startIndex >= this.tracks.length ||
             endIndex < startIndex || endIndex >= this.tracks.length) {
             return false;
         }
@@ -254,24 +264,29 @@ export class Queue {
     }
 
     public duplicate(index: number, count: number = 1): boolean {
-        if (index < 0 || index >= this.tracks.length || count <= 0) {
+        if (!Number.isSafeInteger(index) || !Number.isSafeInteger(count) || index < 0 || index >= this.tracks.length || count <= 0) {
             return false;
         }
 
+        const maxSize = this.manager.options.queue?.maxSize ?? 1000;
+        // Bound a single duplication request even when the queue has unlimited capacity.
+        if (this.manager.options.queue?.allowDuplicates === false ||
+            (maxSize !== "unlimited" && count > maxSize - this.tracks.length) || count > 100_000) return false;
         const trackToDuplicate = this.tracks[index];
         const duplicatedTracks: Track[] = [];
         for (let i = 0; i < count; i++) {
             duplicatedTracks.push(trackToDuplicate);
         }
 
-        this.tracks.splice(index + 1, 0, ...duplicatedTracks);
+        // Avoid the engine argument limit for large, explicitly unlimited queues.
+        this.tracks = this.tracks.slice(0, index + 1).concat(duplicatedTracks, this.tracks.slice(index + 1));
         this.manager.emit("queueDuplicate", this.player, duplicatedTracks, index);
         this._updateQueue();
         return true;
     }
 
     public jump(index: number): boolean {
-        if (index < 0 || index >= this.tracks.length) return false;
+        if (!Number.isSafeInteger(index) || index < 0 || index >= this.tracks.length) return false;
         if (index === 0) return true;
 
         const removed = this.tracks.splice(0, index);
@@ -307,7 +322,7 @@ export class Queue {
     }
 
     public swap(index1: number, index2: number): boolean {
-        if (index1 < 0 || index1 >= this.tracks.length || index2 < 0 || index2 >= this.tracks.length) return false;
+        if (!Number.isSafeInteger(index1) || !Number.isSafeInteger(index2) || index1 < 0 || index1 >= this.tracks.length || index2 < 0 || index2 >= this.tracks.length) return false;
         
         [this.tracks[index1], this.tracks[index2]] = [this.tracks[index2], this.tracks[index1]];
         this._updateQueue();
@@ -315,8 +330,9 @@ export class Queue {
     }
 
     public replace(index: number, track: Track): boolean {
-        if (index < 0 || index >= this.tracks.length) return false;
-        
+        if (!Number.isSafeInteger(index) || index < 0 || index >= this.tracks.length || !track) return false;
+        if (this.manager.options.queue?.allowDuplicates === false && this.tracks.some((existing, i) => i !== index && existing.encoded === track.encoded)) return false;
+
         this.tracks[index] = track;
         this._updateQueue();
         return true;
@@ -344,11 +360,11 @@ export class Queue {
     }
 
     public truncate(size: number): boolean {
-        if (size < 0 || size >= this.tracks.length) return false;
+        if (!Number.isSafeInteger(size) || size < 0 || size >= this.tracks.length) return false;
         
         const removed = this.tracks.splice(size, this.tracks.length - size);
         if (removed.length > 0) {
-            this.manager.emit("queueRemoveRange", this.player, removed, size, this.tracks.length + removed.length);
+            this.manager.emit("queueRemoveRange", this.player, removed, size, this.tracks.length + removed.length - 1);
             this._updateQueue();
             return true;
         }
