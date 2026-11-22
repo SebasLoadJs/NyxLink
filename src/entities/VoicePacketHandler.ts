@@ -13,11 +13,11 @@ export class VoicePacketHandler {
         if (t === 'VOICE_STATE_UPDATE') {
             if (d.user_id !== manager.clientId || !(d.channel_id === null || typeof d.channel_id === 'string' && d.channel_id.length > 0)) return;
             if (d.channel_id !== null && (typeof d.session_id !== 'string' || !d.session_id)) return;
-            manager.emit('debug', `Moonlink.js > Manager <- Received VOICE_STATE_UPDATE. Guild: ${d.guild_id}, Data: ${JSON.stringify(d)}`);
+            manager.emit('debug', `NyxLink > Manager <- Received VOICE_STATE_UPDATE. Guild: ${d.guild_id}, Channel: ${d.channel_id}`);
             await player.voice.handleStateUpdate(d as VoiceStateUpdate);
         } else {
             if (typeof d.token !== 'string' || !d.token || !(d.endpoint === null || typeof d.endpoint === 'string' && d.endpoint.length > 0)) return;
-            manager.emit('debug', `Moonlink.js > Manager <- Received VOICE_SERVER_UPDATE. Guild: ${d.guild_id}, Data: ${JSON.stringify(d)}`);
+            manager.emit('debug', `NyxLink > Manager <- Received VOICE_SERVER_UPDATE. Guild: ${d.guild_id}, Endpoint available: ${d.endpoint !== null}`);
             player.voice.handleServerUpdate(d as VoiceServerUpdate);
         }
     }

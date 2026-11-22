@@ -426,7 +426,7 @@ export class Player {
             finalOptions = options;
         }
 
-        this.manager.emit("debug", `Moonlink.js > Player#play -> play() called for guild ${this.guildId} with options: ${JSON.stringify(options)}`);
+        this.manager.emit("debug", `NyxLink > Player#play -> Playback requested for guild ${this.guildId}. Explicit track: ${Boolean(finalOptions.track || finalOptions.encoded)}`);
 
         if (!this.voice.sessionId || !this.voice.endpoint) {
             this.manager.emit("debug", `Moonlink.js > Player#play >> Voice not ready for guild ${this.guildId}, attempting to connect...`);
@@ -475,7 +475,7 @@ export class Player {
         let nextTrack = queuedTrack;
 
         if (!nextTrack || !nextTrack.encoded) {
-            this.manager.emit("debug", `Moonlink.js > Player#play >> Invalid track data for guild ${this.guildId}. Next track is ${JSON.stringify(nextTrack)}`);
+            this.manager.emit("debug", `NyxLink > Player#play >> Invalid track data for guild ${this.guildId}.`);
             return false;
         }
 
@@ -521,7 +521,7 @@ export class Player {
         }
 
         this.manager.emit("playerTriggeredPlay", this, this.current);
-        this.manager.emit("debug", `Moonlink.js > Player#play -> Sending play request to node ${this.node.identifier} for guild ${this.guildId}. Payload: ${JSON.stringify(payload)}`);
+        this.manager.emit("debug", `NyxLink > Player#play -> Sending play request to node ${this.node.identifier} for guild ${this.guildId}.`);
 
         try {
             const response = await this.sendPlayerUpdate(payload, finalOptions.noReplace ?? this.manager.options.noReplace);

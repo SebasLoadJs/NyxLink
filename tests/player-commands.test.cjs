@@ -160,3 +160,17 @@ test('first play completes the voice handshake without deadlocking the command q
   assert.ok(requests[0].payload.voice);
   assert.equal(requests[1].payload.track.encoded, track.encoded);
 });
+
+
+test('play does not serialize arbitrary options or private track data into debug messages', async t => {
+  const { manager, player, requests } = createPlayer(t);
+  const messages = [];
+  manager.on('debug', message => messages.push(message));
+  const track = createTrack('redaction-test');
+  track.userData = { privateValue: 'private-track-data-sentinel' };
+  const options = { track };
+  options.circular = options;
+  assert.equal(await player.play(options), true);
+  assert.equal(requests[0].payload.track.userData.privateValue, 'private-track-data-sentinel');
+  assert.ok(!messages.join('\n').includes('private-track-data-sentinel'));
+});

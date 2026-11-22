@@ -396,15 +396,13 @@ export class Node {
       headers["Session-Id"] = sessionId;
       this.manager.emit(
         "debug",
-        `Moonlink.js > Node > Connect > Using resume session ID: ${sessionId} for ${this.identifier}`
+        `NyxLink > Node > Connect > Resuming a stored session for ${this.identifier}`
       );
     }
 
     this.manager.emit(
       "debug",
-      `Moonlink.js > Node >> WebSocket headers for ${
-        this.identifier
-      }: ${stringifyWithReplacer(headers)}.`
+      `NyxLink > Node >> WebSocket handshake prepared for ${this.identifier}. Resume: ${Boolean(headers["Session-Id"])}.`
     );
 
     this.socket = new (Structure.get("WebSocket"))(
@@ -715,9 +713,7 @@ export class Node {
         if (this.destroyed || !this.connected || this.socket !== readySocket) return;
         this.manager.emit(
           "debug",
-          `Moonlink.js > Node >> READY payload: ${stringifyWithReplacer(
-            payload
-          )}`
+          `NyxLink > Node >> READY for ${this.identifier}. Resumed: ${payload.resumed}.`
         );
 
         this.sessionId = payload.sessionId;

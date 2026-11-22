@@ -580,7 +580,10 @@ export async function makeStreamRequest(
 
 export function stringifyWithReplacer(obj: any): string {
   const cache = new Set();
-  return JSON.stringify(obj, (_key, value) => {
+  return JSON.stringify(obj, (key, value) => {
+    const normalized = key.replace(/[^a-z0-9]/gi, '').toLowerCase();
+    if (['authorization', 'proxyauthorization', 'password', 'token', 'accesstoken', 'refreshtoken', 'clientsecret', 'apikey', 'sessionid', 'cookie', 'setcookie', 'userdata', 'requester'].includes(normalized)) return '[Redacted]';
+    if (typeof value === 'bigint') return value.toString();
     if (typeof value === 'object' && value !== null) {
       if (cache.has(value)) {
         return "[Circular Refs]";

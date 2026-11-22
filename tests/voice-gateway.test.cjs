@@ -354,3 +354,24 @@ test('connect timeout sends a gateway leave and serializes retry after its ackno
   assert.equal(voice.listenerCount('connect'), 0);
   assert.equal(voice.listenerCount('disconnect'), 0);
 });
+
+
+test('gateway debug events omit credentials while forwarding original voice packets', async t => {
+  const { manager, player } = fixture(t);
+  manager.initialized = true;
+  manager.clientId = '323456789012345678';
+  const messages = [];
+  const delivered = [];
+  manager.on('debug', message => messages.push(message));
+  player.voice.handleStateUpdate = async data => { delivered.push(data); };
+  player.voice.handleServerUpdate = data => { delivered.push(data); };
+  const state = { guild_id: player.guildId, user_id: manager.clientId, channel_id: player.voiceChannelId, session_id: 'private-session-sentinel' };
+  const server = { guild_id: player.guildId, token: 'private-voice-token-sentinel', endpoint: 'private-endpoint.test.invalid' };
+  await manager.packetUpdate({ t: 'VOICE_STATE_UPDATE', d: state });
+  await manager.packetUpdate({ t: 'VOICE_SERVER_UPDATE', d: server });
+  assert.deepEqual(delivered, [state, server]);
+  const log = messages.join('\n');
+  assert.match(log, /VOICE_STATE_UPDATE/);
+  assert.match(log, /VOICE_SERVER_UPDATE/);
+  for (const secret of [state.session_id, server.token, server.endpoint]) assert.ok(!log.includes(secret));
+});
