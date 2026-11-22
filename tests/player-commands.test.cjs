@@ -467,3 +467,33 @@ test('failed stop preserves paused state until backend acknowledgement', async t
   assert.equal(player.current, current);
   assert.equal(player.paused, true);
 });
+
+test('stop waits until persisted playing, paused and current fields are written', async t => {
+  const { manager, player } = createPlayer(t);
+  player.current = createTrack('stop-persistence');
+  player.playing = true;
+  player.paused = true;
+  const entered = deferred();
+  const release = deferred();
+  const originalSet = manager.database.set.bind(manager.database);
+  manager.database.set = async (key, value) => {
+    if (key === `players.${player.guildId}.paused` && value === false) {
+      entered.resolve();
+      await release.promise;
+    }
+    return originalSet(key, value);
+  };
+  let finished = false;
+  const stopping = player.stop().then(() => { finished = true; });
+  try {
+    await entered.promise;
+    assert.equal(finished, false);
+  } finally {
+    release.resolve();
+  }
+  await stopping;
+  const saved = await manager.database.get(`players.${player.guildId}`);
+  assert.equal(saved.playing, false);
+  assert.equal(saved.paused, false);
+  assert.equal(saved.current, null);
+});
