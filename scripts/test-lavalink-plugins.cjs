@@ -65,7 +65,19 @@ async function verify(context) {
       checks, realPluginServer: true, discordVoice: false, audibleSkipping: false,
       providersConfigured: false
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof PluginLabFailure) throw error;
+    if (stage === 'LYRICS_NO_PROVIDER') {
+      if (Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode <= 599) {
+        throw new PluginLabFailure('PLUGIN_LYRICS_HTTP_' + error.statusCode);
+      }
+      if (error?.code === 'INVALID_PROTOCOL_RESPONSE') {
+        throw new PluginLabFailure('PLUGIN_LYRICS_INVALID_RESPONSE');
+      }
+      if (error?.code === 'ERR_ASSERTION') {
+        throw new PluginLabFailure('PLUGIN_LYRICS_UNEXPECTED_RESULT');
+      }
+    }
     throw new PluginLabFailure('PLUGIN_' + stage + '_FAILED');
   } finally {
     if (node?.connected) await node.rest.destroyPlayer(guildId).catch(() => {});
