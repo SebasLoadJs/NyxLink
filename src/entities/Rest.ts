@@ -166,7 +166,7 @@ export class Rest {
             headers: this.authHeaders,
             throwOnError: protectedRequest || options !== undefined,
             signal: options?.signal
-        }, options?.timeoutMs ?? (protectedRequest ? 10000 : 0), protectedRequest || options ? 0 : 3));
+        }, options?.timeoutMs ?? 10000, protectedRequest || options ? 0 : 3));
 
         return res || { loadType: "empty", data: {} };
     }

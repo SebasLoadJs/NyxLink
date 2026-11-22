@@ -10,6 +10,13 @@ import { HttpError } from './errors/HttpError';
 import { HttpPolicyError } from './errors/HttpPolicyError';
 import { requestUrl, requestHeaders, publicRedirectHeaders } from './http/RequestPolicy';
 import { setTimeout as retryWait } from 'node:timers/promises';
+import { pipeline, Writable } from 'node:stream';
+
+const HTTP_RESPONSE_LIMIT = 32 * 1024 * 1024;
+const redirectMarker = Symbol('httpRedirect');
+function responseLimitError(): Error {
+  return Object.assign(new Error('HTTP response exceeds the 32 MiB decoded size limit'), { code: 'HTTP_RESPONSE_TOO_LARGE' });
+}
 
 export const structures: Record<string, any> = {};
 
@@ -269,6 +276,9 @@ export async function makeRequest<T = any>(
   maxRedirects = 5
 ): Promise<T | ResponseWithHeaders<T> | undefined> {
   const { returnHeaders } = options;
+  if (!Number.isSafeInteger(timeout) || timeout < 0 || timeout > 2147483647) throw new RangeError('Invalid HTTP timeout');
+  const bodyData = options.body == null ? undefined :
+    typeof options.body === "object" ? JSON.stringify(options.body) : String(options.body);
   const supportsZstd =
     typeof (zlib as { createZstdDecompress?: () => zlib.ZstdDecompress })
       .createZstdDecompress === "function";
@@ -286,7 +296,7 @@ export async function makeRequest<T = any>(
       let auth = options.auth;
 
       while (redirectCount <= maxRedirects) {
-        const result = await new Promise<T | { _redirect: string } | ResponseWithHeaders<T>>
+        const result = await new Promise<T | { [redirectMarker]: string } | ResponseWithHeaders<T>>
           ((resolve, reject) => {
             options.signal?.throwIfAborted();
             const urlObject = requestUrl(currentUrl, options.allowedOrigins);
@@ -310,6 +320,8 @@ export async function makeRequest<T = any>(
 
             const req = transport.request(requestOptions, (res) => {
               const { statusCode, headers } = res;
+              // A response may terminate before its decoder emits end.
+              res.on("error", reject);
 
               if (
                 statusCode &&
@@ -319,8 +331,8 @@ export async function makeRequest<T = any>(
                   statusCode === 308) &&
                 headers.location
               ) {
-                req.destroy();
-                return resolve({ _redirect: headers.location });
+                res.destroy();
+                return resolve({ [redirectMarker]: headers.location });
               }
 
               if (statusCode && (statusCode < 200 || statusCode >= 300)) {
@@ -343,47 +355,38 @@ export async function makeRequest<T = any>(
                   });
                   return;
                 }
-                req.destroy();
-                return reject(
-                  new Error(`Server responded with status ${statusCode}`)
-                );
+                res.destroy();
+                return reject(new HttpError(statusCode, undefined, res.headers["retry-after"]));
               }
 
-              let stream:
-                | http.IncomingMessage
-                | zlib.Gunzip
-                | zlib.Inflate
-                | zlib.BrotliDecompress = res;
               const encodingHeader = res.headers["content-encoding"];
-              const encoding = Array.isArray(encodingHeader)
-                ? encodingHeader[0]
-                : encodingHeader;
-              const normalizedEncoding =
-                typeof encoding === "string" ? encoding.toLowerCase() : undefined;
-
-              if (normalizedEncoding === "gzip") {
-                stream = res.pipe(zlib.createGunzip());
-              } else if (normalizedEncoding === "deflate") {
-                stream = res.pipe(zlib.createInflate());
-              } else if (normalizedEncoding === "br") {
-                stream = res.pipe(zlib.createBrotliDecompress());
-              } else if (normalizedEncoding === "zstd") {
-                if (!supportsZstd) {
-                  req.destroy();
-                  return reject(new Error("Zstd is not supported by this Node.js runtime."));
-                }
-                stream = res.pipe(
-                  (zlib as { createZstdDecompress: () => zlib.ZstdDecompress }).createZstdDecompress()
-                );
+              const encoding = Array.isArray(encodingHeader) ? encodingHeader[0] : encodingHeader;
+              const normalizedEncoding = typeof encoding === "string" ? encoding.toLowerCase().trim() : undefined;
+              let decoder: NodeJS.ReadWriteStream | undefined;
+              if (normalizedEncoding === "gzip") decoder = zlib.createGunzip();
+              else if (normalizedEncoding === "deflate") decoder = zlib.createInflate();
+              else if (normalizedEncoding === "br") decoder = zlib.createBrotliDecompress();
+              else if (normalizedEncoding === "zstd" && supportsZstd) {
+                decoder = (zlib as { createZstdDecompress: () => zlib.ZstdDecompress }).createZstdDecompress();
+              } else if (normalizedEncoding && normalizedEncoding !== "identity") {
+                res.destroy();
+                reject(new Error("Unsupported HTTP content encoding"));
+                return;
               }
 
               const chunks: Buffer[] = [];
-              stream.on("data", (chunk) => chunks.push(chunk));
-              stream.on("error", (err) =>
-                reject(new Error(`Stream error: ${err.message}`))
-              );
+              let size = 0;
+              const collector = new Writable({
+                write(chunk: Buffer, _encoding, callback) {
+                  size += chunk.length;
+                  if (size > HTTP_RESPONSE_LIMIT) { callback(responseLimitError()); return; }
+                  chunks.push(chunk);
+                  callback();
+                }
+              });
+              pipeline(decoder ? [res, decoder, collector] : [res, collector], (error) => {
+                if (error) { reject(error); return; }
 
-              stream.on("end", () => {
                 const body = Buffer.concat(chunks);
                 const contentType = res.headers["content-type"] || "";
 
@@ -432,23 +435,22 @@ export async function makeRequest<T = any>(
             req.on("error", (err: NodeJS.ErrnoException) =>
               reject(Object.assign(new Error(`Request error: ${err.message}`, { cause: err }), { code: err.code }))
             );
-            req.on("timeout", () => {
-              req.destroy();
-              reject(Object.assign(new Error("Request timed out"), { code: 'ETIMEDOUT' }));
-            });
-
+            const expire = () => {
+              const error = Object.assign(new Error("Request timed out"), { code: 'ETIMEDOUT' });
+              reject(error);
+              req.destroy(error);
+            };
+            req.on("timeout", expire);
             req.setTimeout(timeout);
+            // Bound the complete response, even when the peer continuously sends bytes.
+            const deadline = timeout > 0 ? setTimeout(expire, timeout) : undefined;
+            deadline?.unref();
+            req.once("close", () => { if (deadline) clearTimeout(deadline); });
 
-            if (options.body) {
-              const bodyData =
-                typeof options.body === "object" && options.body !== null
-                  ? JSON.stringify(options.body)
-                  : options.body.toString();
-
+            if (bodyData !== undefined) {
               req.setHeader("Content-Length", Buffer.byteLength(bodyData));
               req.write(bodyData);
             }
-
             req.end();
           }
         );
@@ -456,9 +458,9 @@ export async function makeRequest<T = any>(
         if (
           typeof result === "object" &&
           result !== null &&
-          (result as any)._redirect
+          redirectMarker in result
         ) {
-          const newLocation = (result as any)._redirect;
+          const newLocation = (result as { [redirectMarker]: string })[redirectMarker];
           const next = requestUrl(newLocation, options.allowedOrigins, currentUrl);
           if (next.origin !== new URL(currentUrl).origin) {
             if (options.body !== undefined && options.body !== null) throw new HttpPolicyError('redirect-body');
@@ -476,19 +478,21 @@ export async function makeRequest<T = any>(
       throw new HttpPolicyError('redirect-limit');
     } catch (error) {
       if (error instanceof HttpPolicyError || options.signal?.aborted) throw error;
-      if (options.throwOnError && attempt >= retries) throw error;
-      const is404 = (error as Error).message.includes('status 404');
-      
-      if (!is404) {
-        console.error(
-          `Attempt ${attempt + 1}/${retries + 1} failed for ${initialUrl}: ${
-            (error as Error).message
-          }`
-        );
+      const terminal = error instanceof HttpError && !error.retryable ||
+        (error as NodeJS.ErrnoException)?.code === 'HTTP_RESPONSE_TOO_LARGE';
+      if (terminal || attempt >= retries) {
+        if (options.throwOnError) throw error;
+        return undefined;
       }
 
       if (attempt < retries) {
-        await retryWait(retryDelay * Math.pow(2, attempt), undefined, { signal: options.signal });
+        const delayMs = Math.max(retryDelay * Math.pow(2, attempt), error instanceof HttpError ? error.retryAfterMs ?? 0 : 0);
+        // Do not retry sooner than the server permits or schedule an overflowing timer.
+        if (!Number.isFinite(delayMs) || delayMs > 60000) {
+          if (options.throwOnError) throw error;
+          return undefined;
+        }
+        await retryWait(delayMs, undefined, { signal: options.signal });
         currentUrl = initial.href;
       } else {
         return undefined;
@@ -521,7 +525,7 @@ export async function makeStreamRequest(
   timeout = 100000
 ): Promise<StreamResponse> {
   return new Promise((resolve, reject) => {
-    const urlObject = new URL(initialUrl);
+    const urlObject = requestUrl(initialUrl);
     const transport = urlObject.protocol === "https:" ? https : http;
 
     const requestOptions: http.RequestOptions = {
@@ -530,7 +534,8 @@ export async function makeStreamRequest(
       port: urlObject.port || (urlObject.protocol === "https:" ? 443 : 80),
       path: urlObject.pathname + urlObject.search,
     };
-    delete requestOptions.headers?.["host"];
+    requestOptions.headers = requestHeaders(options.headers);
+    for (const name of Object.keys(requestOptions.headers)) if (name.toLowerCase() === "host") delete requestOptions.headers[name];
 
     const req = transport.request(requestOptions, (res) => {
       const statusCode = res.statusCode ?? 0;
