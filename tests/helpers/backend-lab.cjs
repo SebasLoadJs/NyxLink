@@ -9,8 +9,18 @@ const { setTimeout: delay } = require('node:timers/promises');
 const exec = promisify(execFile);
 const pinnedImages = require('../integration/backend-servers.json');
 const profile = process.env.NYXLINK_NODELINK_PROFILE || 'baseline';
-if (!['baseline', 'modern'].includes(profile)) throw new Error('Unknown NodeLink test profile');
-const images = { lavalink: pinnedImages.lavalink, nodelink: profile === 'modern' ? pinnedImages.nodelinkModern : pinnedImages.nodelink };
+if (!['baseline', 'modern', 'patched'].includes(profile)) throw new Error('Unknown NodeLink test profile');
+// The patched profile ONLY targets the explicit locally built CI image; it
+// cannot silently replace an immutable baseline or modern production image.
+const patchedImage = {
+  image: 'nyxlink-nodelink-seek-patch:local',
+  commit: 'a283f2f4e2f16e856a0da315a946fad2bfb9989d'
+};
+const images = {
+  lavalink: pinnedImages.lavalink,
+  nodelink: profile === 'patched' ? patchedImage :
+    profile === 'modern' ? pinnedImages.nodelinkModern : pinnedImages.nodelink
+};
 
 function tone(samples = 48000) {
   if (!Number.isSafeInteger(samples) || samples < 1 || samples > 48000 * 10) throw new TypeError('Invalid fixture duration');
