@@ -59,3 +59,25 @@ The public category union covers `sponsor`, `selfpromo`, `interaction`, `intro`,
 The `tests/lavalink-sponsorblock.test.cjs` fixture covers the actual GET/PUT/DELETE HTTP methods, JSON array payloads, plugin gating, category validation, invalid paths, missing players, feature unavailability, and backend replacement during an in-flight request. A separate real plugin server, live segments and WebSocket `SegmentsLoaded`/`SegmentSkipped` events are **not** yet certified.
 
 Future work: pin an optional SponsorBlock-enabled Lavalink server; verify live audio segments and chapter events with controlled tracks. Do not equate an HTTP 204 with successful audible skipping.
+
+## 4.3 Real installed-plugin acceptance laboratory (pending CI)
+
+The isolated `pnpm run test:lavalink-plugins` profile starts the same **digest-pinned Lavalink 4.2.2 image** used by the core protocol suite, but installs only these exact official Maven coordinates:
+
+- `com.github.topi314.lavalyrics:lavalyrics-plugin:1.1.0` ([upstream release](https://github.com/topi314/LavaLyrics/releases/tag/1.1.0))
+- `com.github.topi314.sponsorblock:sponsorblock-plugin:3.0.1` ([upstream release](https://github.com/topi314/SponsorBlock-Plugin/releases/tag/3.0.1))
+
+The dependencies are fetched from `https://maven.lavalink.dev/releases` into a temporary, container-only writable plugin folder. The application config and password are generated for each run and removed in the cleanup path. No jar or external Java plugin source is vendored into the NyxLink repository. The script records observed downloaded JAR SHA-256 hashes in the local report for later supply-chain review, but hashes are **not yet separately approved pins**.
+
+The test starts a local HTTP WAV source, requires both plugins to appear in actual `/v4/info`, checks NyxLink's backend identity, and runs the LavaLyrics no-provider HTTP request. It also creates a paused, non-playing remote player for a SponsorBlock category GET→PUT→GET→DELETE→GET round-trip. Java module loading, endpoint routing and authenticated REST communication are tested against a real Lavalink server, **not fixture response mocks**.
+
+Run only on an authorized Linux machine with Docker or Podman:
+
+```bash
+pnpm install --frozen-lockfile
+NYXLINK_CONTAINER_ENGINE=docker pnpm run test:lavalink-plugins
+```
+
+The independent CI job `lavalink-plugins` is part of `.github/workflows/backend-integration.yml`. Its evidence file is `.runtime/lavalink-plugins/latest-report.json`. A successful run confirms real plugin startup and the tested no-provider/category behavior, not lyrics from Spotify/Deezer, synchronization of live lyric events, a playable SponsorBlock segment, audible music, or Discord voice.
+
+Do not treat this section as a successful real-plugin certification until the corresponding GitHub Actions job has completed successfully. Pinning the plugin JAR checksums separately and testing a controlled eligible SponsorBlock segment are follow-up acceptance gates.
