@@ -1,4 +1,4 @@
-import { normalizeCrossfade, type CrossfadeOptions } from '../backends/NodeLinkContracts';
+import { normalizeCrossfade, type CrossfadeOptions, type QueuePreloadOptions } from '../backends/NodeLinkContracts';
 import { preparePlayerUpdate, type PlayerUpdatePayload, type PlayerVoiceUpdate } from '../backends/ProtocolContracts';
 import { migratePlayer, migrationRestart, type RestartOptions } from "../players/PlayerMigration";
 import { PlayerCommandQueue } from "../players/PlayerCommandQueue";
@@ -57,6 +57,10 @@ export class Player {
     private fading?: IFadingOptions;
     private crossfade?: CrossfadeOptions;
     private nextTrack?: { encoded: string; userData?: Record<string, any> };
+    private preloadOptions?: QueuePreloadOptions;
+    private queuePreload?: { track: Track; node: Node; session: string };
+    private preloadJob?: Promise<void>;
+    private preloadRetryAt = 0;
     private audioTrackId?: string;
     private loudnessNormalizer?: boolean;
     private endTime?: number;
@@ -318,7 +322,7 @@ export class Player {
         throw new Error("Invalid track input. Provide a Track instance or encoded string.");
     }
 
-    private async sendPlayerUpdate(payload: PlayerUpdatePayload, noReplace?: boolean): Promise<any> {
+    private async sendPlayerUpdate(payload: PlayerUpdatePayload, noReplace?: boolean, reservedTrack?: Track): Promise<any> {
         const finalPayload = this.node.backend
             ? this.node.backend.preparePlayerUpdate(payload, this.voiceChannelId)
             : preparePlayerUpdate(this.node.isNodeLink ? 'nodelink' : 'unknown', payload, this.voiceChannelId);
@@ -328,6 +332,9 @@ export class Player {
         if (attempt) finalPayload.track = attempt.track;
         const preload = typeof payload.nextTrack?.encoded === 'string' || payload.nextTrack === null ? attempts.preload(this.node, payload.nextTrack) : undefined;
         if (preload) finalPayload.nextTrack = preload.track;
+        const previousReservation = this.queuePreload;
+        const reservation = reservedTrack ? { track: reservedTrack, node: this.node, session: this.node.sessionId } : undefined;
+        if (preload) this.queuePreload = reservation;
         let acknowledged = false;
         try {
             const response = await this.node.rest.updatePlayer(this.guildId, finalPayload, noReplace);
@@ -341,7 +348,11 @@ export class Player {
             return response;
         } catch (error) {
             attempt?.rollback();
-            if (!acknowledged) preload?.rollback();
+            if (!acknowledged) {
+                const restoreReservation = preload && this.queuePreload === reservation && (!reservation || preload.pending());
+                preload?.rollback();
+                if (restoreReservation) this.queuePreload = previousReservation;
+            }
             throw error;
         }
     }
@@ -503,7 +514,9 @@ export class Player {
 
         if (this.fading) payload.fading = this.fading;
         if (this.crossfade && this.node.isNodeLink) payload.crossfade = this.crossfade;
-        if (this.nextTrack) payload.nextTrack = this.nextTrack;
+        if (this.queuePreload) {
+            if (this.node.isNodeLink) payload.nextTrack = null;
+        } else if (this.nextTrack) payload.nextTrack = this.nextTrack;
         if (this.loudnessNormalizer !== undefined) {
             payload.loudnessNormalizer = this.loudnessNormalizer;
         }
@@ -698,9 +711,81 @@ export class Player {
         return this.nextTrack ? structuredClone(this.nextTrack) : undefined;
     }
 
+    /** Optional queue-aware preparation; enabled explicitly after configuring crossfade. */
+    public setQueuePreload(options: QueuePreloadOptions): this {
+        if (!options || typeof options.enabled !== 'boolean' ||
+            options.leadMs !== undefined && (!Number.isSafeInteger(options.leadMs) || options.leadMs < 1000 || options.leadMs > 120000)) {
+            throw new TypeError('Invalid queue preload options');
+        }
+        this.preloadOptions = { enabled: options.enabled, leadMs: options.leadMs ?? 35000 };
+        this.requestQueuePreload();
+        return this;
+    }
+
+    /** @internal Coalesces queue/position changes into the existing player command queue. */
+    public requestQueuePreload(): void {
+        if (this.destroyed || this.manager.destroyed || (!this.preloadOptions?.enabled && !this.queuePreload) || this.preloadJob) return;
+        const ticket = playbackGuard(this).ticket;
+        const node = this.node;
+        const session = node.sessionId;
+        const active = () => !this.destroyed && !this.manager.destroyed && this.node === node &&
+            node.connected && !node.destroyed && node.sessionId === session && playbackGuard(this).isCurrent(ticket);
+        const desired = (): Track | undefined => {
+            const current = this.current;
+            const next = this.queue.first;
+            if (!active() || !node.isNodeLink || node.backend?.featureStatus('nextTrack') === 'unavailable' ||
+                !this.preloadOptions?.enabled || !this.crossfade?.enabled || this.loop !== 'off' || !this.playing ||
+                !current || !next || next === current || next.encoded === current.encoded) return undefined;
+            const info = current.getInfo();
+            const remaining = info.length - info.position;
+            if (info.isStream || !Number.isFinite(remaining) || remaining <= 0 ||
+                remaining > (this.preloadOptions.leadMs ?? 35000)) return undefined;
+            return next;
+        };
+        const operation = this.commands.enqueue(async () => {
+            if (!active() || Date.now() < this.preloadRetryAt) return;
+            const reservation = this.queuePreload;
+            if (reservation && (reservation.node !== node || reservation.session !== session)) {
+                this.queuePreload = undefined;
+                this.nextTrack = undefined;
+            }
+            if (!node.isNodeLink) return;
+            let candidate = desired();
+            if (this.queuePreload) {
+                if (this.queuePreload.track === candidate) return;
+                await this.sendPlayerUpdate({ nextTrack: null });
+                candidate = desired();
+            }
+            if (!candidate || this.paused || this.nextTrack) return;
+            const current = this.current;
+            const resolved = await TrackResolver.resolve(candidate, node);
+            if (this.current !== current || desired() !== candidate || this.paused || this.nextTrack) return;
+            await this.sendPlayerUpdate({ nextTrack: { encoded: resolved.encoded, userData: resolved.userData } }, undefined, candidate);
+        }).catch(() => {
+            // Avoid retry storms from frequent position updates on an incompatible server.
+            this.preloadRetryAt = Date.now() + 10000;
+            this.manager.emit('debug', 'NyxLink > Queue preload request failed');
+        }).finally(() => {
+            if (this.preloadJob === operation) this.preloadJob = undefined;
+        });
+        this.preloadJob = operation;
+    }
+
     /** @internal Called only after PlaybackAttempt accepts a preloaded TrackStart. */
     public consumePreloadedTrack(): void {
+        const reservation = this.queuePreload;
+        this.queuePreload = undefined;
         this.nextTrack = undefined;
+        if (reservation && reservation.node === this.node && reservation.session === this.node.sessionId) {
+            const index = this.queue.tracks.indexOf(reservation.track);
+            if (index !== -1) this.queue.remove(index);
+            if (this.current) {
+                this.previous.push(this.current);
+                const limit = this.manager.options.queue?.historyLimit ?? this.historySize;
+                if (this.previous.length > limit) this.previous.shift();
+                this.updateData('previous', this.previous.map(track => TrackCodec.serialize(track)));
+            }
+        }
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
@@ -1155,7 +1240,9 @@ export class Player {
 
             if (this.fading) payload.fading = this.fading;
             if (this.crossfade && this.node.isNodeLink) payload.crossfade = this.crossfade;
-            if (this.nextTrack) payload.nextTrack = this.nextTrack;
+            if (this.queuePreload) {
+                if (this.node.isNodeLink) payload.nextTrack = null;
+            } else if (this.nextTrack) payload.nextTrack = this.nextTrack;
             if (this.loudnessNormalizer !== undefined) {
                 payload.loudnessNormalizer = this.loudnessNormalizer;
             }

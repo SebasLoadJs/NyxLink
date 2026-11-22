@@ -959,6 +959,7 @@ export class Node {
 
         this.manager.emit("playerUpdate", player, player.current ?? null, payload);
         player.voice.check(currentState.connected);
+        player.requestQueuePreload?.();
         break;
       case "event":
         if ((payload as any).type === "WorkerFailedEvent") {
@@ -1151,6 +1152,7 @@ export class Node {
 
     const trackForEvent = new (Structure.get("Track"))(trackData, player.current?.requester, undefined, this.manager.options.trackPartial ?? []);
     this.manager.emit("trackStart", player, trackForEvent);
+    player.requestQueuePreload?.();
   }
 
   private async handleTrackEnd(player: any, payload: TrackEndEvent): Promise<void> {

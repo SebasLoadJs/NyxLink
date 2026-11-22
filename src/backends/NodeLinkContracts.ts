@@ -153,3 +153,6 @@ export function normalizeCrossfade(value: unknown): CrossfadeOptions {
     }
     return result;
 }
+
+/** Opt-in queue preparation, with a lead window measured in milliseconds. */
+export interface QueuePreloadOptions { enabled: boolean; leadMs?: number }

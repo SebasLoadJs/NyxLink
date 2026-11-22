@@ -15,6 +15,7 @@ export class Queue {
 
     private _updateQueue(): void {
         this.player.updateData('queue', this.tracks.map(t => TrackCodec.serialize(t)));
+        this.player.requestQueuePreload?.();
     }
 
     public get size(): number {
