@@ -1360,11 +1360,16 @@ export class Node {
 
   private async handleTrackStuck(player: any, payload: TrackStuckEvent): Promise<void> {
     const track = player.current;
+    const ticket = playbackGuard(player).ticket;
+    const unchanged = () => !player.destroyed && player.node === this &&
+      player.current === track && playbackGuard(player).isCurrent(ticket);
     const thresholdMs = payload.thresholdMs;
     
     this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck >> Track stuck for player ${player.guildId}: "${track?.title}". Threshold: ${thresholdMs}ms. Payload: ${stringifyWithReplacer(payload)}.`);
 
     this.manager.emit("trackStuck", player, track, thresholdMs, payload);
+    // Event listeners may schedule a replacement track synchronously.
+    if (!unchanged()) return;
 
     if (track && track.duration === -1) {
         this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck >> Track has -1 duration (stream?), skipping auto-recovery to prevent loops for player ${player.guildId}.`);
@@ -1409,10 +1414,15 @@ export class Node {
 
   private async handleTrackException(player: any, payload: TrackExceptionEvent): Promise<void> {
     const track = player.current;
+    const ticket = playbackGuard(player).ticket;
+    const unchanged = () => !player.destroyed && player.node === this &&
+      player.current === track && playbackGuard(player).isCurrent(ticket);
     const exception = payload.exception;
     
     this.manager.emit("debug", `Moonlink.js > Node#handleTrackException >> Track exception for player ${player.guildId}: "${track?.title}". Severity: ${exception.severity}. Message: ${exception.message}. Payload: ${stringifyWithReplacer(payload)}.`);
     this.manager.emit("trackException", player, track, exception, payload);
+    // Do not auto-skip a newer user request issued by a trackException listener.
+    if (!unchanged()) return;
 
     if (this.manager.options.trackHandling?.autoSkipOnError) {
         this.manager.emit("debug", `Moonlink.js > Node#handleTrackException >> 'autoSkipOnError' is true, skipping track for player ${player.guildId}.`);
