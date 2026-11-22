@@ -334,6 +334,10 @@ export class Player {
             if (response == null) throw new Error("Backend did not acknowledge player update");
             acknowledged = true;
             if (attempt && !attempt.accepted(response)) throw new Error("Backend did not accept the requested track");
+            if (preload && !this.destroyed) {
+                if (payload.nextTrack === null) this.nextTrack = undefined;
+                else if (preload.pending() && payload.nextTrack) this.nextTrack = structuredClone(payload.nextTrack);
+            }
             return response;
         } catch (error) {
             attempt?.rollback();
@@ -675,7 +679,6 @@ export class Player {
             this.assertNodeLinkFeature("nextTrack");
             const nextTrack = { encoded, userData: userData ?? (track instanceof Track ? track.userData : undefined) };
             await this.sendPlayerUpdate({ nextTrack });
-            this.nextTrack = nextTrack;
             return this;
         });
     }
@@ -686,9 +689,18 @@ export class Player {
             if (this.destroyed) throw new Error("Cannot update a destroyed player");
             this.assertNodeLinkFeature("nextTrack");
             await this.sendPlayerUpdate({ nextTrack: null });
-            this.nextTrack = undefined;
             return this;
         });
+    }
+
+    /** Last acknowledged pending preload; consumed tracks are no longer returned. */
+    public getNextTrack(): { encoded: string; userData?: Record<string, unknown> } | undefined {
+        return this.nextTrack ? structuredClone(this.nextTrack) : undefined;
+    }
+
+    /** @internal Called only after PlaybackAttempt accepts a preloaded TrackStart. */
+    public consumePreloadedTrack(): void {
+        this.nextTrack = undefined;
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
@@ -852,7 +864,10 @@ export class Player {
         this.manager.emit("debug", `Moonlink.js > Player#stop -> Sending stop request to node ${this.node.identifier} for guild ${this.guildId}`);
         this.manager.emit("playerTriggeredStop", this);
 
-        await this.sendPlayerUpdate({ track: { encoded: null } });
+        await this.sendPlayerUpdate({
+            track: { encoded: null },
+            ...(this.node.isNodeLink && this.nextTrack ? { nextTrack: null } : {})
+        });
 
         const oldPlaying = this.playing;
         this.playing = false;

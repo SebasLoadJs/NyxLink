@@ -1112,6 +1112,7 @@ export class Node {
     if (!started) return;
     const trackData = attempts.clean(incoming);
     if (started === 'preloaded') {
+      player.consumePreloadedTrack();
       player.current = new (Structure.get("Track"))(trackData, trackData.userData?.requester ?? player.current?.requester, undefined, this.manager.options.trackPartial ?? []);
       player.updateData('current', TrackCodec.serialize(player.current));
     }

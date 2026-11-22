@@ -30,3 +30,9 @@ SourceHealthSnapshotEvent and SourceHealthChangeEvent are handled before guild/p
 ## 3.4 Per-player crossfade controls
 
 Public `setCrossfade`, `clearCrossfade`, `getCrossfade` and raw `crossfade` payload use the current upstream fields (`enabled`, `duration`, `curve`, `mode`, `minBufferMs`, `bufferMs`). Runtime validation follows documented wire bounds; no server code is copied. Control requests are serialized with playback commands; requested configuration is stored only after a non-null successful update acknowledgement. `getCrossfade` returns a detached copy of the last acknowledged request, not proof that an older server honored the options. NodeLink play/restart reapplies it; Lavalink never receives this field. Existing fading and loudness controls now commit state after acknowledgement as well. No claim of actual crossfade or AutoMix until an updated NodeLink lab validates behavior.
+
+## 3.5 NextTrack handoff and AutoMix boundary
+
+Accepted preloads are now tracked centrally for both typed and raw Player updates. A promoted preload is consumed immediately on its accepted TrackStart, including when the WebSocket event precedes the HTTP acknowledgment. Stop explicitly clears a pending NodeLink preload in the same update. getNextTrack returns a detached observation. Explicit setNextTrack is a manual preload API, not automatic queue ownership; queue management remains the caller's responsibility until a dedicated scheduler is implemented. Existing crossfading/gapless end events bypass queue/autoplay advancement.
+
+Upstream review at 97bbce1: AutoMix analysis is server-side in playback/player.ts and AutoMixRegistry, triggered by next-track preparation. The public per-player PATCH contract exposes nextTrack and crossfade but no separate autoMix toggle. NyxLink therefore does not invent a setAutoMix endpoint or claim that server-side analysis was tested. Real transition audio and the queue-aware scheduling layer remain pending.
