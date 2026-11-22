@@ -986,7 +986,9 @@ export class Node {
         break;
       case "event":
         if ((payload as any).type === "WorkerFailedEvent") {
-          this.handleWorkerFailed(payload as WorkerFailedEvent);
+          void this.handleWorkerFailed(payload as WorkerFailedEvent).catch(() => {
+            if (!this.destroyed) this.manager.emit("debug", `NyxLink > Worker recovery handler rejected on ${this.identifier}.`);
+          });
           loggedByCase = true;
           break;
         }
@@ -1092,36 +1094,61 @@ export class Node {
   }
 
   private async handleWorkerFailed(payload: WorkerFailedEvent): Promise<void> {
-    const affectedGuilds = Array.isArray(payload.affectedGuilds) ? payload.affectedGuilds : [];
-    this.manager.emit(
-      "debug",
-      `Moonlink.js > Node#handleWorkerFailed >> WorkerFailedEvent received on ${this.identifier}. Affected guilds: ${affectedGuilds.join(", ") || "none"}. Message: ${payload.message ?? "n/a"}.`
-    );
+    // Worker failures belong to the reporting node, not every player
+    // with a matching guild ID. Validate and deduplicate untrusted input.
+    const affectedGuilds = [...new Set(
+      (Array.isArray(payload.affectedGuilds) ? payload.affectedGuilds : [])
+        .filter((id): id is string => typeof id === "string" && /^[0-9]{17,20}$/.test(id))
+    )];
+    this.manager.emit("debug", `NyxLink > WorkerFailedEvent on ${this.identifier}: ${affectedGuilds.length} valid guild(s).`);
 
+    const session = this.sessionId;
+    const socket = this.socket;
+    const generation = this.backendGeneration;
     for (const guildId of affectedGuilds) {
       const player = this.manager.players.get(guildId);
-      if (!player || player.destroyed) continue;
+      if (!player) continue;
+      const guard = playbackGuard(player);
+      const ticket = guard.ticket;
+      const active = () =>
+        !this.destroyed && this.connected && !this.manager.destroyed &&
+        this.sessionId === session && this.socket === socket && this.backendGeneration === generation &&
+        !player.destroyed && this.manager.players.get(guildId) === player &&
+        player.node === this && guard.isCurrent(ticket);
+      if (!active()) continue;
 
       if (player.get("voiceCloseRecoveryInProgress")) {
-        this.manager.emit("debug", `Moonlink.js > Node#handleWorkerFailed >> Recovery already in progress for player ${guildId}, skipping duplicate worker recovery.`);
+        this.manager.emit("debug", `NyxLink > Worker recovery already active for ${guildId}.`);
         continue;
       }
 
       player.set("voiceCloseRecoveryInProgress", true);
       try {
+        if (!active()) continue;
         await player.disconnect();
+        if (!active()) continue;
         try {
           await this.rest.destroyPlayer(guildId);
-        } catch {}
-        await new Promise(resolve => setTimeout(resolve, 750));
-        await player.connect();
-        const restarted = await player.restart();
-        if (!restarted) {
-          this.manager.emit("debug", `Moonlink.js > Node#handleWorkerFailed >> Restart returned false for player ${guildId}.`);
+        } catch {
+          // A remote session may already be gone. Do not touch another node.
         }
-      } catch (error) {
-        this.manager.emit("debug", `Moonlink.js > Node#handleWorkerFailed >> Recovery failed for player ${guildId}. Error: ${(error as Error).message}`);
-        await player.destroy("Worker failed recovery failed");
+        if (!active()) continue;
+        await new Promise(resolve => setTimeout(resolve, 750));
+        if (!active()) continue;
+        await player.connect();
+        if (!active()) continue;
+        const restarted = await player.restart();
+        if (!active()) continue;
+        if (!restarted) {
+          this.manager.emit("debug", `NyxLink > Worker recovery did not restore ${guildId}.`);
+        }
+      } catch {
+        // Delayed worker errors must not destroy a user-stopped, migrated,
+        // replaced, or otherwise newer player.
+        if (active()) {
+          this.manager.emit("debug", `NyxLink > Worker recovery failed for ${guildId}; destroying unchanged player.`);
+          await player.destroy("Worker failed recovery failed");
+        }
       } finally {
         player.set("voiceCloseRecoveryInProgress", false);
       }
