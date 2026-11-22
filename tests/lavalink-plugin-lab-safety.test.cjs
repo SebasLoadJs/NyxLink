@@ -12,17 +12,20 @@ test('real plugin lab pins the baseline server image and both exact Maven artifa
     ['sponsorblock-plugin', '3.0.1']
   ]);
   validateProfile();
+  assert.deepEqual(pins.lavalinkPlugins.plugins.map(p => p.sha256), [
+    'b69db400a926685912ff78e9ff402fa343fdd9f661b16321f49f1acb0873c288',
+    '9150ee91b7ba0096a52ee29f041f25bc5d25f7577ba78fc8074a10c657d68db4'
+  ]);
   assert.throws(() => validateProfile({ ...pins.lavalinkPlugins, image: 'lavalink:latest' }));
   assert.throws(() => validateProfile({ ...pins.lavalinkPlugins, plugins: [{
     name: 'arbitrary', version: '0.1.0', dependency: 'com.example:x:0.1.0'
   }] }));
 });
 
-test('plugin test YAML uses fixed repositories and only an isolated password', () => {
+test('plugin test YAML disables runtime artifact downloads and uses isolated password', () => {
   const yaml = renderConfig(2333, password);
-  assert.match(yaml, /com\.github\.topi314\.lavalyrics:lavalyrics-plugin:1\.1\.0/);
-  assert.match(yaml, /com\.github\.topi314\.sponsorblock:sponsorblock-plugin:3\.0\.1/);
-  assert.equal((yaml.match(/repository: "https:\/\/maven\.lavalink\.dev\/releases"/g) || []).length, 2);
+  assert.match(yaml, /pluginsDir: "\/opt\/Lavalink\/plugins"/);
+  assert.doesNotMatch(yaml, /dependency:|repository:|snapshot:|https:\/\/maven/i);
   assert.match(yaml, /sources:\s*\[\]/);
   assert.ok(yaml.includes('password: ' + "'" + password + "'"));
   assert.match(yaml, /http: true/);

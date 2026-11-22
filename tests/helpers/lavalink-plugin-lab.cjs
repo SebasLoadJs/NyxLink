@@ -3,7 +3,8 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const http = require('node:http');
 const net = require('node:net');
-const { randomBytes, createHash } = require('node:crypto');
+const { randomBytes } = require('node:crypto');
+const { installVerifiedPlugins, PluginIntegrityError } = require('./verified-plugin-jars.cjs');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { setTimeout: delay } = require('node:timers/promises');
@@ -25,6 +26,7 @@ function validateProfile(value = profile) {
     assert.equal(plugin.name, expected[i][0]);
     assert.match(plugin.version, /^[0-9]+\.[0-9]+\.[0-9]+$/);
     assert.equal(plugin.dependency, expected[i][1] + ':' + plugin.name + ':' + plugin.version);
+    assert.match(plugin.sha256, /^[a-f0-9]{64}$/);
   }
 }
 
@@ -32,12 +34,9 @@ function renderConfig(port, password, value = profile) {
   validateProfile(value);
   assert.ok(Number.isInteger(port) && port > 0 && port <= 65535);
   assert.match(password, /^[a-f0-9]{48}$/);
-  const declarations = value.plugins.map(p => '    - dependency: "' + p.dependency + '"\n' +
-    '      repository: "https://maven.lavalink.dev/releases"\n' +
-    '      snapshot: false').join('\n');
   return [
     'server:', '  address: 127.0.0.1', '  port: ' + port,
-    'lavalink:', '  pluginsDir: "/opt/Lavalink/plugins"', '  plugins:', declarations,
+    'lavalink:', '  pluginsDir: "/opt/Lavalink/plugins"',
     '  server:', "    password: '" + password + "'",
     '    sources:', '      youtube: false', '      soundcloud: false',
     '      bandcamp: false', '      twitch: false', '      vimeo: false',
@@ -136,13 +135,15 @@ async function withLavalinkPluginLab(run) {
     const mediaPort = await openPort(server);
     serverStarted = true;
     await fs.writeFile(config, renderConfig(port, password), { mode: 0o600, flag: 'wx' });
+    phase = 'ARTIFACT_VERIFY';
+    const jars = await installVerifiedPlugins(pluginsDir, profile.plugins);
     phase = 'CONTAINER_CREATE';
     await command(['run', '-d', '--name', name, '--user',
       String(process.getuid()) + ':' + String(process.getgid()),
       '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
       '--network', 'host', '--memory', '1024m', '--cpus', '2', '--pids-limit', '256',
       '-v', config + ':/opt/Lavalink/application.yml:ro',
-      '-v', pluginsDir + ':/opt/Lavalink/plugins:rw',
+      '-v', pluginsDir + ':/opt/Lavalink/plugins:ro',
       '-e', 'JAVA_TOOL_OPTIONS=-Xms64m -Xmx512m', profile.image]);
     containerStarted = true;
     phase = 'BACKEND_START';
@@ -172,12 +173,6 @@ async function withLavalinkPluginLab(run) {
         throw new Error('Expected plugin was not advertised: ' + plugin.name);
       }
     }
-    const jars = [];
-    for (const filename of await fs.readdir(pluginsDir)) {
-      if (!filename.endsWith('.jar')) continue;
-      const bytes = await fs.readFile(path.join(pluginsDir, filename));
-      jars.push({ file: filename, sha256: createHash('sha256').update(bytes).digest('hex') });
-    }
     phase = 'ACCEPTANCE';
     return await run({
       node: { identifier: 'lavalink-plugins', host: '127.0.0.1', port,
@@ -189,8 +184,10 @@ async function withLavalinkPluginLab(run) {
     });
   } catch (error) {
     if (error instanceof PluginLabFailure) throw error;
+    if (error instanceof PluginIntegrityError) throw new PluginLabFailure(error.code);
     const reason = ({
       SETUP: 'PLUGIN_LAB_SETUP_FAILED',
+      ARTIFACT_VERIFY: 'PLUGIN_ARTIFACT_INTEGRITY_FAILED',
       CONTAINER_CREATE: 'PLUGIN_CONTAINER_CREATE_FAILED',
       BACKEND_START: 'PLUGIN_BACKEND_START_FAILED',
       PLUGIN_INVENTORY: 'PLUGIN_INFO_MISMATCH',

@@ -17,12 +17,14 @@
       {
         "name": "lavalyrics-plugin",
         "version": "1.1.0",
-        "dependency": "com.github.topi314.lavalyrics:lavalyrics-plugin:1.1.0"
+        "dependency": "com.github.topi314.lavalyrics:lavalyrics-plugin:1.1.0",
+        "sha256": "b69db400a926685912ff78e9ff402fa343fdd9f661b16321f49f1acb0873c288"
       },
       {
         "name": "sponsorblock-plugin",
         "version": "3.0.1",
-        "dependency": "com.github.topi314.sponsorblock:sponsorblock-plugin:3.0.1"
+        "dependency": "com.github.topi314.sponsorblock:sponsorblock-plugin:3.0.1",
+        "sha256": "9150ee91b7ba0096a52ee29f041f25bc5d25f7577ba78fc8074a10c657d68db4"
       }
     ]
   }
