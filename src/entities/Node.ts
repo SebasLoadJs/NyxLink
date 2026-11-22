@@ -1,5 +1,6 @@
 import type { LyricsRequestOptions, SourceHealthResponse } from '../backends/NodeLinkContracts';
 import type { LavaLyricsData, LavaLyricsOptions } from '../backends/LavaLyricsContracts';
+import type { LavalinkSponsorBlockCategory } from '../backends/LavalinkSponsorBlockContracts';
 import { SourceHealthMonitor } from '../nodes/SourceHealthMonitor';
 import { NodeFailover } from "../nodes/NodeFailover";
 import { BackendDetector } from "../backends/BackendDetector";
@@ -317,6 +318,17 @@ export class Node {
       throw nodeLinkOnlyError("youtubeLiveChat");
     }
     return new YouTubeLiveChat(this, identifier, options);
+  }
+
+  /** Lavalink SponsorBlock plugin only; categories never change automatically. */
+  public getLavalinkSponsorBlockCategories(guildId: string): Promise<LavalinkSponsorBlockCategory[]> {
+    return this.rest.getLavalinkSponsorBlockCategories(guildId);
+  }
+  public setLavalinkSponsorBlockCategories(guildId: string, categories: LavalinkSponsorBlockCategory[]): Promise<void> {
+    return this.rest.setLavalinkSponsorBlockCategories(guildId, categories);
+  }
+  public clearLavalinkSponsorBlockCategories(guildId: string): Promise<void> {
+    return this.rest.clearLavalinkSponsorBlockCategories(guildId);
   }
 
   /** Lavalink LavaLyrics plugin only; NodeLink has a different lyrics contract. */
