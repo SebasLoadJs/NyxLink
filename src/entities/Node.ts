@@ -1225,7 +1225,10 @@ export class Node {
         ? new (Structure.get("Track"))(trackData, player.current?.requester, undefined, this.manager.options.trackPartial ?? [])
         : player.current;
     const intent = playbackGuard(player).ticket;
-    if (!isCrossfadeTransition) {
+    // Crossfade and gapless are server-managed transitions, not an idle
+    // player. Preserve playing, pause and last-known position until the
+    // destination TrackStart or subsequent playerUpdate confirms new state.
+    if (!isCrossfadeTransition && !isGaplessTransition) {
       player.playing = false;
       player.paused = false;
       player.updateActivity();
