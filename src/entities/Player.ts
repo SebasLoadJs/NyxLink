@@ -979,16 +979,18 @@ export class Player {
         });
 
         const oldPlaying = this.playing;
-        this.playing = false;
-        this.updateData("playing", this.playing);
         const oldPaused = this.paused;
+        const oldTrackTitle = this.current?.title ?? "null";
+        this.playing = false;
         this.paused = false;
-        this.updateData("paused", this.paused);
+        this.current = null;
+        // A completed stop must not leave an older persisted playback snapshot.
+        // Serialize writes for adapters where each set() rewrites the same record.
+        await this.updateData("playing", false);
+        await this.updateData("paused", false);
+        await this.updateData("current", null);
         this.manager.emit("debug", `NyxLink > Player#stop >> State changed: playing: ${oldPlaying} -> ${this.playing}, paused: ${oldPaused} -> ${this.paused}`);
 
-        const oldTrackTitle = this.current?.title ?? "null";
-        this.current = null;
-        this.updateData("current", this.current);
         this.manager.emit("debug", `Moonlink.js > Player#stop >> Player state changed: current: ${oldTrackTitle} -> null`);
 
         this.manager.emit("debug", `Moonlink.js > Player#stop >> Player stopped for guild ${this.guildId}`);
