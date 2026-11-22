@@ -33,3 +33,7 @@ The public contracts distinguish common v4 player operations from NodeLink-only 
 ## 2.4 Runtime protocol validation
 
 Search and decoding now validate unknown wire responses at the REST boundary. The same validator protects native/custom search providers before construction or caching. Malformed metadata emits a typed ProtocolResponseError without raw payloads. Opaque encoded tracks are preserved; missing optional plugin metadata remains compatible. This is not a blanket validation of every REST endpoint: player/session acknowledgments and extension-specific response schemas remain follow-up work.
+
+## 2.5 Extension route catalog
+
+Existing NodeLink REST extensions now resolve through an explicit operation catalog and adapter capability policy. Paths, verbs and stream versus buffered transport are defined in one place. Route parameters are encoded rather than interpolated as raw path segments. Unsupported or observed-unavailable operations fail before HTTP. The catalog deliberately introduces no new Lavalink plugin endpoints; those require dedicated capability evidence and contract tests in phase 4.

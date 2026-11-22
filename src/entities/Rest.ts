@@ -2,6 +2,7 @@ import type http from "node:http";
 import { validateLoadResponse, validateTrackResponse, ProtocolResponseError } from "../backends/ProtocolValidation";
 import { HttpError } from "../errors/HttpError";
 import type { BackendAdapter } from "../backends/BackendAdapter";
+import { resolveExtensionRoute, type ExtensionOperation, type ExtensionRouteParameters } from "../backends/ExtensionRoutes";
 import { preparePlayerUpdate, type PlayerUpdatePayload, type SessionUpdateResponse } from "../backends/ProtocolContracts";
 import { FeatureUnavailableError } from "../errors/FeatureUnavailableError";
 import { makeRequest, makeStreamRequest, normalizeNodeLinkResponse, type NodeLinkResponse, type ResponseWithHeaders, nodeLinkOnlyError } from "../Util";
@@ -76,15 +77,24 @@ export class Rest {
         }
     }
 
-    private async featureRequest<T = any>(feature: string, url: string, options: http.RequestOptions & { body?: any }): Promise<T> {
+    private extensionRoute(operation: ExtensionOperation, params: ExtensionRouteParameters = {}) {
+        const parameters = { ...params, sessionId: this.node.sessionId };
+        return this.node.backend ? this.node.backend.resolveExtension(operation, parameters)
+            : resolveExtensionRoute(this.node.isNodeLink ? 'nodelink' : 'unknown', operation, parameters);
+    }
+
+    private async featureRequest<T = any>(operation: ExtensionOperation, params: ExtensionRouteParameters, options: http.RequestOptions & { body?: any }): Promise<T> {
+        const route = this.extensionRoute(operation, params);
+        const feature = route.feature;
         this.node.assertFeature(feature);
+        if (route.transport !== 'json') throw new TypeError('Extension requires stream transport');
         const backend = this.node.backend;
         const socket = this.node.socket;
         const session = this.node.sessionId;
         const current = () => !this.node.destroyed && this.node.backend === backend &&
             this.node.socket === socket && this.node.sessionId === session;
         const result = await this.node.circuit.run(async () => {
-            try { return await makeRequest<T>(url, { ...options, throwOnError: true }, 10000, 0); }
+            try { return await makeRequest<T>(this.url + route.path, { ...options, method: route.method, throwOnError: true }, 10000, 0); }
             catch (error) { this.featureError(feature, error, backend, current); }
         });
         if (result === undefined) throw new Error('Backend did not acknowledge feature request');
@@ -298,8 +308,7 @@ export class Rest {
     ): Promise<any | null> {
         this.node.assertFeature("mix:add");
 
-        const res = await this.featureRequest<any>("mix:add", `${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}/mix`, {
-            method: "POST",
+        const res = await this.featureRequest<any>("mix:add", { guildId }, {
             headers: this.jsonHeaders,
             body: data
         });
@@ -311,8 +320,7 @@ export class Rest {
     public async getMixLayers(guildId: string): Promise<any | null> {
         this.node.assertFeature("mix:list");
 
-        const res = await this.featureRequest<any>("mix:list", `${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}/mix`, {
-            method: "GET",
+        const res = await this.featureRequest<any>("mix:list", { guildId }, {
             headers: this.authHeaders
         });
 
@@ -323,8 +331,7 @@ export class Rest {
     public async updateMixLayerVolume(guildId: string, mixId: string, volume: number): Promise<void> {
         this.node.assertFeature("mix:update");
 
-        await this.featureRequest("mix:update", `${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}/mix/${mixId}`, {
-            method: "PATCH",
+        await this.featureRequest("mix:update", { guildId, mixId }, {
             headers: this.jsonHeaders,
             body: { volume }
         });
@@ -334,8 +341,7 @@ export class Rest {
     public async removeMixLayer(guildId: string, mixId: string): Promise<void> {
         this.node.assertFeature("mix:remove");
 
-        await this.featureRequest("mix:remove", `${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}/mix/${mixId}`, {
-            method: "DELETE",
+        await this.featureRequest("mix:remove", { guildId, mixId }, {
             headers: this.authHeaders
         });
     }
@@ -348,8 +354,7 @@ export class Rest {
         params.append("encodedTrack", encodedTrack);
         if (lang) params.append("lang", lang);
 
-        const res = await this.featureRequest<ILyricsResponse>("lyrics", `${this.url}/v4/loadlyrics?${params}`, {
-            method: "GET",
+        const res = await this.featureRequest<ILyricsResponse>("lyrics", { query: params }, {
             headers: this.authHeaders
         });
 
@@ -363,8 +368,7 @@ export class Rest {
         const params = new URLSearchParams();
         params.append("encodedTrack", encodedTrack);
 
-        const res = await this.featureRequest<IChapter[]>("chapters", `${this.url}/v4/loadchapters?${params}`, {
-            method: "GET",
+        const res = await this.featureRequest<IChapter[]>("chapters", { query: params }, {
             headers: this.authHeaders
         });
 
@@ -379,8 +383,7 @@ export class Rest {
         params.append("encodedTrack", encodedTrack);
         if (lang) params.append("lang", lang);
 
-        const res = await this.featureRequest<IMeaningResponse>("meaning", `${this.url}/v4/meaning?${params}`, {
-            method: "GET",
+        const res = await this.featureRequest<IMeaningResponse>("meaning", { query: params }, {
             headers: this.authHeaders
         });
 
@@ -391,8 +394,7 @@ export class Rest {
     public async getConnectionStatus(): Promise<NodeLinkResponse<INodeConnectionStatus> | null> {
         this.node.assertFeature("connection");
 
-        const res = await this.featureRequest<INodeConnectionStatus>("connection", `${this.url}/v4/connection`, {
-            method: "GET",
+        const res = await this.featureRequest<INodeConnectionStatus>("connection", {}, {
             headers: this.authHeaders
         });
 
@@ -403,8 +405,7 @@ export class Rest {
     public async getMetrics(): Promise<string | null> {
         this.node.assertFeature("metrics");
 
-        const res = await this.featureRequest<string>("metrics", `${this.url}/v4/metrics`, {
-            method: "GET",
+        const res = await this.featureRequest<string>("metrics", {}, {
             headers: this.authHeaders
         });
 
@@ -415,8 +416,7 @@ export class Rest {
     public async getWorkers(): Promise<NodeLinkResponse<any[]> | null> {
         this.node.assertFeature("workers:get");
 
-        const res = await this.featureRequest<any[]>("workers:get", `${this.url}/v4/workers`, {
-            method: "GET",
+        const res = await this.featureRequest<any[]>("workers:get", {}, {
             headers: this.authHeaders
         });
 
@@ -427,8 +427,7 @@ export class Rest {
     public async patchWorker(payload: Record<string, any>): Promise<any | null> {
         this.node.assertFeature("workers:patch");
 
-        const res = await this.featureRequest<any>("workers:patch", `${this.url}/v4/workers`, {
-            method: "PATCH",
+        const res = await this.featureRequest<any>("workers:patch", {}, {
             headers: this.jsonHeaders,
             body: payload
         });
@@ -442,8 +441,7 @@ export class Rest {
 
         const params = new URLSearchParams();
         if (validate) params.append("validate", "true");
-        const res = await this.featureRequest<any>("youtube:config", `${this.url}/v4/youtube/config${params.toString() ? `?${params}` : ""}`, {
-            method: "GET",
+        const res = await this.featureRequest<any>("youtube:config:get", { query: params }, {
             headers: this.authHeaders
         });
 
@@ -454,8 +452,7 @@ export class Rest {
     public async updateYoutubeConfig(payload: { refreshToken?: string; visitorData?: string }): Promise<any | null> {
         this.node.assertFeature("youtube:config");
 
-        const res = await this.featureRequest<any>("youtube:config", `${this.url}/v4/youtube/config`, {
-            method: "PATCH",
+        const res = await this.featureRequest<any>("youtube:config:update", {}, {
             headers: this.jsonHeaders,
             body: payload
         });
@@ -469,8 +466,7 @@ export class Rest {
 
         const params = new URLSearchParams();
         params.append("refreshToken", refreshToken);
-        const res = await this.featureRequest<any>("youtube:oauth", `${this.url}/v4/youtube/oauth?${params}`, {
-            method: "GET",
+        const res = await this.featureRequest<any>("youtube:oauth", { query: params }, {
             headers: this.authHeaders
         });
 
@@ -483,8 +479,7 @@ export class Rest {
 
         const params = new URLSearchParams();
         params.append("track", track);
-        const res = await this.featureRequest<string>("encodetrack", `${this.url}/v4/encodetrack?${params}`, {
-            method: "GET",
+        const res = await this.featureRequest<string>("encodetrack", { query: params }, {
             headers: this.authHeaders
         });
 
@@ -495,8 +490,7 @@ export class Rest {
     public async encodeTracksRemote(tracks: Array<{ encoded: string; info: Record<string, any> }>): Promise<string[] | null> {
         this.node.assertFeature("encodedtracks");
 
-        const res = await this.featureRequest<string[]>("encodedtracks", `${this.url}/v4/encodedtracks`, {
-            method: "POST",
+        const res = await this.featureRequest<string[]>("encodedtracks", {}, {
             headers: this.jsonHeaders,
             body: tracks
         });
@@ -514,8 +508,7 @@ export class Rest {
             params.append("itag", String(itag));
         }
 
-        const res = await this.featureRequest<any>("trackstream", `${this.url}/v4/trackstream?${params}`, {
-            method: "GET",
+        const res = await this.featureRequest<any>("trackstream", { query: params }, {
             headers: this.authHeaders
         });
 
@@ -525,14 +518,15 @@ export class Rest {
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
     public async loadStream(payload: { encodedTrack: string; volume?: number; position?: number; format?: 'pcm' | 'wav'; filters?: IFilters | Record<string, any> }, options: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<{ stream: NodeJS.ReadableStream; headers: Record<string, any> }> {
         this.node.assertFeature('loadstream');
+        const route = this.extensionRoute('loadstream');
         const backend = this.node.backend;
         const socket = this.node.socket;
         const session = this.node.sessionId;
         const current = () => !this.node.destroyed && this.node.backend === backend &&
             this.node.socket === socket && this.node.sessionId === session;
         try {
-            const res = await makeStreamRequest(`${this.url}/v4/loadstream`, {
-                method: 'POST', headers: this.jsonHeaders, body: payload, signal: options.signal,
+            const res = await makeStreamRequest(this.url + route.path, {
+                method: route.method, headers: this.jsonHeaders, body: payload, signal: options.signal,
             }, options.timeoutMs ?? 100000);
             if (current()) backend?.recordFeature('loadstream', 'available');
             return { stream: res.stream, headers: res.headers };
@@ -545,8 +539,7 @@ export class Rest {
 
         const params = new URLSearchParams();
         if (skipTrackSource) params.append("skipTrackSource", "true");
-        await this.featureRequest("lyrics:subscribe", `${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}/lyrics/subscribe${params.toString() ? `?${params}` : ""}`, {
-            method: "POST",
+        await this.featureRequest("lyrics:subscribe", { guildId, query: params }, {
             headers: this.authHeaders
         });
     }
@@ -555,8 +548,7 @@ export class Rest {
     public async unsubscribeLyrics(guildId: string): Promise<void> {
         this.node.assertFeature("lyrics:unsubscribe");
 
-        await this.featureRequest("lyrics:unsubscribe", `${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}/lyrics/subscribe`, {
-            method: "DELETE",
+        await this.featureRequest("lyrics:unsubscribe", { guildId }, {
             headers: this.authHeaders
         });
     }

@@ -1,5 +1,6 @@
 import { CapabilityRegistry, type CapabilityDescription, type CapabilityState } from './CapabilityRegistry';
 import { preparePlayerUpdate, type PlayerUpdatePayload } from './ProtocolContracts';
+import { resolveExtensionRoute, type ExtensionOperation, type ExtensionRouteParameters, type ExtensionRoute } from './ExtensionRoutes';
 export type { CapabilityState } from './CapabilityRegistry';
 export type BackendKind = 'lavalink' | 'nodelink';
 export type BackendPlugin = Readonly<{ name: string; version: string }>;
@@ -26,6 +27,10 @@ export abstract class BackendAdapter {
 
     public preparePlayerUpdate(payload: PlayerUpdatePayload, channelId?: string): PlayerUpdatePayload {
         return preparePlayerUpdate(this.kind, payload, channelId, feature => this.featureStatus(feature) === 'unavailable');
+    }
+
+    public resolveExtension(operation: ExtensionOperation, params?: ExtensionRouteParameters): ExtensionRoute {
+        return resolveExtensionRoute(this.kind, operation, params, feature => this.featureStatus(feature) === 'unavailable');
     }
 
     /** An endpoint response may refine support without guessing from a product name. */
