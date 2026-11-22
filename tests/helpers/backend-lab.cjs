@@ -9,10 +9,20 @@ const { setTimeout: delay } = require('node:timers/promises');
 const exec = promisify(execFile);
 const pinnedImages = require('../integration/backend-servers.json');
 const profile = process.env.NYXLINK_NODELINK_PROFILE || 'baseline';
-if (!['baseline', 'modern'].includes(profile)) throw new Error('Unknown NodeLink test profile');
-const images = { lavalink: pinnedImages.lavalink, nodelink: profile === 'modern' ? pinnedImages.nodelinkModern : pinnedImages.nodelink };
+if (!['baseline', 'modern', 'patched'].includes(profile)) throw new Error('Unknown NodeLink test profile');
+// The patched profile ONLY targets the explicit locally built CI image; it
+// cannot silently replace an immutable baseline or modern production image.
+const patchedImage = {
+  image: 'nyxlink-nodelink-seek-patch:local',
+  commit: 'a283f2f4e2f16e856a0da315a946fad2bfb9989d'
+};
+const images = {
+  lavalink: pinnedImages.lavalink,
+  nodelink: profile === 'patched' ? patchedImage :
+    profile === 'modern' ? pinnedImages.nodelinkModern : pinnedImages.nodelink
+};
 
-function tone(samples = 48000) {
+function tone(samples = 48000, switchFrequencyAt = Infinity) {
   if (!Number.isSafeInteger(samples) || samples < 1 || samples > 48000 * 10) throw new TypeError('Invalid fixture duration');
   const data = Buffer.alloc(44 + samples * 2);
   data.write('RIFF'); data.writeUInt32LE(data.length - 8, 4); data.write('WAVEfmt ', 8);
@@ -20,7 +30,7 @@ function tone(samples = 48000) {
   data.writeUInt32LE(48000, 24); data.writeUInt32LE(96000, 28);
   data.writeUInt16LE(2, 32); data.writeUInt16LE(16, 34); data.write('data', 36);
   data.writeUInt32LE(samples * 2, 40);
-  for (let i = 0; i < samples; i++) data.writeInt16LE(Math.round(Math.sin(i * 2 * Math.PI * 440 / 48000) * 2000), 44 + i * 2);
+  for (let i = 0; i < samples; i++) data.writeInt16LE(Math.round(Math.sin(i * 2 * Math.PI * (i >= switchFrequencyAt ? 880 : 440) / 48000) * 2000), 44 + i * 2);
   return data;
 }
 
@@ -45,7 +55,9 @@ async function withBackendLab(run, options = {}) {
   const directory = await fs.mkdtemp(path.join(root, '.runtime/integration/run-'));
   const password = randomBytes(24).toString('hex');
   const media = tone();
-  const seekMedia = tone(48000 * 3);
+  // A frequency transition at 500ms makes an actual seek audible/measurable:
+  // before 500ms = 440Hz, after 500ms = 880Hz.
+  const seekMedia = tone(48000 * 3, 48000 / 2);
   await fs.writeFile(path.join(directory, 'tone.wav'), media);
   await fs.writeFile(path.join(directory, 'seek-tone.wav'), seekMedia);
   const mediaServer = http.createServer((req, res) => {
