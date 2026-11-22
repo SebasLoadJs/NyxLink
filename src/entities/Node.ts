@@ -1359,6 +1359,8 @@ export class Node {
   }
 
   private async handleTrackStuck(player: any, payload: TrackStuckEvent): Promise<void> {
+    // Node events may arrive after a different track has started.
+    if (payload.track?.encoded && payload.track.encoded !== player.current?.encoded) return;
     const track = player.current;
     const ticket = playbackGuard(player).ticket;
     const unchanged = () => !player.destroyed && player.node === this &&
@@ -1414,6 +1416,7 @@ export class Node {
   }
 
   private async handleTrackException(player: any, payload: TrackExceptionEvent): Promise<void> {
+    if (payload.track?.encoded && payload.track.encoded !== player.current?.encoded) return;
     const track = player.current;
     const ticket = playbackGuard(player).ticket;
     const unchanged = () => !player.destroyed && player.node === this &&
