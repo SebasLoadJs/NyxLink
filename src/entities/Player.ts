@@ -1024,24 +1024,31 @@ export class Player {
     }
 
     public async seek(position: number): Promise<this> {
-        return this.commands.enqueue(() => this.seekPlayback(position));
+        const ticket = playbackGuard(this).ticket;
+        const track = this.current;
+        return this.commands.enqueue(() => this.seekPlayback(position, ticket, track));
     }
 
-    private async seekPlayback(position: number): Promise<this> {
+    private async seekPlayback(position: number, ticket: number, track: Track | null): Promise<this> {
         if (this.destroyed) return this;
         validate(
             position,
-            (v) => typeof v === "number" && !isNaN(v) && v >= 0,
+            (v) => typeof v === "number" && Number.isFinite(v) && v >= 0,
             "Player#seek > Position must be a valid number."
         );
 
-        this.manager.emit("debug", `Moonlink.js > Player#seek -> Seeking to position ${position}ms for guild ${this.guildId}`);
+        // A queued seek must never move a replacement track or a migrated player.
+        const guard = playbackGuard(this);
+        if (!guard.isCurrent(ticket) || this.current !== track) return this;
+
+        this.manager.emit("debug", `NyxLink > Player#seek -> Seeking to position ${position}ms for guild ${this.guildId}`);
         this.manager.emit("playerTriggeredSeek", this, position);
         await this.sendPlayerUpdate({ position });
-        if (this.current) {
-            this.current.position = position;
+        // A subsequent playback intent may have superseded this seek while HTTP was in flight.
+        if (guard.isCurrent(ticket) && !this.destroyed && this.current === track && track) {
+            track.position = position;
         }
-        this.manager.emit("debug", `Moonlink.js > Player#seek >> Sent seek request to node ${this.node.identifier}`);
+        this.manager.emit("debug", `NyxLink > Player#seek >> Sent seek request to node ${this.node.identifier}`);
 
         return this;
     }
