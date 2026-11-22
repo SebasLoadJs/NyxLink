@@ -1056,7 +1056,7 @@ export class Player {
     public setVolume(volume: number): this {
         validate(
             volume,
-            (v) => typeof v === "number" && !isNaN(v) && v >= 0 && v <= 1000,
+            (v) => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1000,
             "Player#setVolume > Volume must be between 0 and 1000."
         );
 
