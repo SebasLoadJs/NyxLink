@@ -52,6 +52,8 @@ export class Player {
     public lastActivityTime: number = Date.now();
     private readonly commands = new PlayerCommandQueue();
     private destructionPromise?: Promise<void>;
+    /** Explicit play queued but not yet settled; seeks after it target that new play. */
+    private pendingPlayTicket?: number;
     private volumeRevision = 0;
     private optimisticVolumeRevision = 0;
     private fading?: IFadingOptions;
@@ -395,7 +397,10 @@ export class Player {
 
     public async play(options: { track?: Track; encoded?: string, requester?: any, position?: number, noReplace?: boolean, audioTrackId?: string } | Track = {}): Promise<boolean> {
         const ticket = playbackGuard(this).invalidate();
-        return this.commands.enqueue(() => this.playNext(options, ticket));
+        this.pendingPlayTicket = ticket;
+        return this.commands.enqueue(() => this.playNext(options, ticket)).finally(() => {
+            if (this.pendingPlayTicket === ticket) this.pendingPlayTicket = undefined;
+        });
     }
 
     /** @internal Automatic playback retains the intent that resolved its recommendations. */
@@ -1026,10 +1031,11 @@ export class Player {
     public async seek(position: number): Promise<this> {
         const ticket = playbackGuard(this).ticket;
         const track = this.current;
-        return this.commands.enqueue(() => this.seekPlayback(position, ticket, track));
+        const afterPendingPlay = this.pendingPlayTicket === ticket;
+        return this.commands.enqueue(() => this.seekPlayback(position, ticket, track, afterPendingPlay));
     }
 
-    private async seekPlayback(position: number, ticket: number, track: Track | null): Promise<this> {
+    private async seekPlayback(position: number, ticket: number, track: Track | null, afterPendingPlay: boolean): Promise<this> {
         if (this.destroyed) return this;
         validate(
             position,
@@ -1037,11 +1043,10 @@ export class Player {
             "Player#seek > Position must be a valid number."
         );
 
-        // A queued seek must never move a replacement track or a migrated player.
+        // Reject seeks for stale playback intents, unless this seek was issued
+        // immediately after the explicit play which replaces the captured track.
         const guard = playbackGuard(this);
-        // When play() is queued just before seek(), current can still be null
-        // at call time. The generation is enough to bind that seek to the play.
-        if (!guard.isCurrent(ticket) || (track !== null && this.current !== track)) return this;
+        if (!guard.isCurrent(ticket) || (!afterPendingPlay && track !== null && this.current !== track)) return this;
 
         const activeTrack = this.current;
         this.manager.emit("debug", `NyxLink > Player#seek -> Seeking to position ${position}ms for guild ${this.guildId}`);
