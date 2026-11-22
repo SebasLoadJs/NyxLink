@@ -102,8 +102,19 @@ async function withLavalinkPluginLab(run) {
     if (req.url !== '/tone.wav' || !['GET', 'HEAD'].includes(req.method)) {
       res.writeHead(404); res.end(); return;
     }
-    res.writeHead(200, { 'content-type': 'audio/wav', 'content-length': media.length });
-    res.end(req.method === 'HEAD' ? undefined : media);
+    const match = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range || '');
+    const start = match ? Number(match[1]) : 0;
+    const end = match?.[2] ? Math.min(Number(match[2]), media.length - 1) : media.length - 1;
+    if (start >= media.length || start > end) {
+      res.writeHead(416); res.end(); return;
+    }
+    res.writeHead(match ? 206 : 200, {
+      'content-type': 'audio/wav',
+      'content-length': end - start + 1,
+      'accept-ranges': 'bytes',
+      ...(match ? { 'content-range': 'bytes ' + start + '-' + end + '/' + media.length } : {})
+    });
+    res.end(req.method === 'HEAD' ? undefined : media.subarray(start, end + 1));
   });
   let containerStarted = false;
   let serverStarted = false;
