@@ -12,8 +12,8 @@ const profile = process.env.NYXLINK_NODELINK_PROFILE || 'baseline';
 if (!['baseline', 'modern'].includes(profile)) throw new Error('Unknown NodeLink test profile');
 const images = { lavalink: pinnedImages.lavalink, nodelink: profile === 'modern' ? pinnedImages.nodelinkModern : pinnedImages.nodelink };
 
-function tone() {
-  const samples = 48000;
+function tone(samples = 48000) {
+  if (!Number.isSafeInteger(samples) || samples < 1 || samples > 48000 * 10) throw new TypeError('Invalid fixture duration');
   const data = Buffer.alloc(44 + samples * 2);
   data.write('RIFF'); data.writeUInt32LE(data.length - 8, 4); data.write('WAVEfmt ', 8);
   data.writeUInt32LE(16, 16); data.writeUInt16LE(1, 20); data.writeUInt16LE(1, 22);
@@ -45,18 +45,21 @@ async function withBackendLab(run, options = {}) {
   const directory = await fs.mkdtemp(path.join(root, '.runtime/integration/run-'));
   const password = randomBytes(24).toString('hex');
   const media = tone();
+  const seekMedia = tone(48000 * 3);
   await fs.writeFile(path.join(directory, 'tone.wav'), media);
+  await fs.writeFile(path.join(directory, 'seek-tone.wav'), seekMedia);
   const mediaServer = http.createServer((req, res) => {
-    if (req.url !== '/tone.wav') { res.writeHead(404); res.end(); return; }
+    const fixture = req.url === '/tone.wav' ? media : req.url === '/seek-tone.wav' ? seekMedia : undefined;
+    if (!fixture) { res.writeHead(404); res.end(); return; }
     const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range || '');
     const start = range ? Number(range[1]) : 0;
-    const end = range?.[2] ? Math.min(Number(range[2]), media.length - 1) : media.length - 1;
+    const end = range?.[2] ? Math.min(Number(range[2]), fixture.length - 1) : fixture.length - 1;
     if (start > end) { res.writeHead(416); res.end(); return; }
     res.writeHead(range ? 206 : 200, {
       'content-type': 'audio/wav', 'content-length': end - start + 1, 'accept-ranges': 'bytes',
-      ...(range ? { 'content-range': `bytes ${start}-${end}/${media.length}` } : {}),
+      ...(range ? { 'content-range': `bytes ${start}-${end}/${fixture.length}` } : {}),
     });
-    res.end(req.method === 'HEAD' ? undefined : media.subarray(start, end + 1));
+    res.end(req.method === 'HEAD' ? undefined : fixture.subarray(start, end + 1));
   });
   const mediaPort = await listen(mediaServer);
   const containers = [];
@@ -104,7 +107,7 @@ async function withBackendLab(run, options = {}) {
       }
       backends.push({ kind, host: '127.0.0.1', port, password, secure: false, identifier: `lab-${kind}`, version: info.version.semver, image: images[kind].image });
     }
-    return await run({ backends, mediaUrl: `http://127.0.0.1:${mediaPort}/tone.wav`, directory });
+    return await run({ backends, mediaUrl: `http://127.0.0.1:${mediaPort}/tone.wav`, seekMediaUrl: `http://127.0.0.1:${mediaPort}/seek-tone.wav`, directory });
   } finally {
     for (const name of containers.reverse()) {
       await command(['stop', '--time', '3', name]).catch(() => {});

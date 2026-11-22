@@ -78,7 +78,7 @@ Changes to queue order, removal or preload options while an HTTP PATCH is pendin
 Added `scripts/test-live-voice.cjs` and [operator checklist](live-voice-verification.md) to exercise real Discord gateway + NodeLink audio only with explicit local credentials and the `--armed` flag. The harness records ordered TrackStart and TrackEnd events and protects token secrecy, but cannot itself claim audible Crossfade. It is not run in CI because the project has no authorized test bot or voice-server credentials connected. The script's defensive configuration and no-network default are regression-tested; actual Discord playback remains pending manual execution and listener verification.
 
 
-## 3.9 Real NodeLink PCM stream acceptance
+## 3.12 Real NodeLink PCM stream acceptance
 
 The modern NodeLink revision at `97bbce1` defines `POST /v4/loadstream`
 with output format `raw` (48 kHz stereo signed 16-bit PCM) or `wav`
@@ -97,3 +97,37 @@ is used. A successful result demonstrates real source decoding and
 binary streaming, **not** a Discord UDP/Opus audio session, audible
 crossfade, AutoMix, sample-accurate gapless playback or failover.
 The test is a CI release gate, so its status must be verified per run.
+
+
+## 3.13 Real PCM volume and seek acceptance
+
+The modern NodeLink container lab decodes a locally generated one-second,
+440 Hz WAV using four client requests: full WAV (100% volume), raw PCM,
+muted WAV (0%) and quarter-volume WAV (25%). A separate three-second
+440 Hz WAV tests position 500 milliseconds without hitting the short
+fixture's end-of-file decoder boundary. Every request uses the actual
+container's HTTP decoder. The first 500 ms seek attempt against the
+one-second fixture failed with `aborted`; that behavior is not recorded
+as successful seek support.
+A bounded reader limits each response to 1 MiB and cancels stalled requests
+after 30 seconds. The test checks real 48 kHz stereo S16LE samples, verifies
+the silent and quiet output using RMS amplitude, and verifies that seeking
+removes approximately half a second of audio while preserving nonzero samples.
+
+The initial seek test (one-second WAV) failed, returning `aborted`.
+A second run using a three-second WAV revealed untrustworthy duration
+metadata; the third run measured the duration directly from decoded PCM but
+still failed with `ECONNRESET: aborted` on `position: 500`. These results
+prove an unresolved real-server compatibility issue, **not** a successful
+seek. They do not, by themselves, establish whether the defect belongs
+to NodeLink's seekable HTTP source, stream finalization, or the client
+transport. The pinned modern CI job records `seekEvidence` as
+`verified` or `failed` separately from the mandatory, independently
+passing WAV/raw/volume checks. Set `NYXLINK_REQUIRE_SEEK=1` to turn
+a failed seek probe into a required CI failure when diagnosing it.
+
+All acceptance claims depend on the relevant **successful
+modern-nodelink CI job**. PCM volume processing alone does not prove
+position decoding, Opus encoding, UDP/Discord voice transport,
+sample-accurate two-track crossfade, AutoMix or survival of real voice
+disconnections. Those remain separate acceptance gates.

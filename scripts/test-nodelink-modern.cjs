@@ -3,11 +3,13 @@ const fs = require('node:fs/promises');
 const { Manager } = require('../dist');
 const { event } = require('../tests/helpers/v4-server.cjs');
 const { withBackendLab } = require('../tests/helpers/backend-lab.cjs');
+const { streamAudio } = require('../tests/helpers/pcm-evidence.cjs');
 const checks = [];
 const guild = '923456789012345678';
 const other = '923456789012345679';
 let version;
 let image;
+let seekEvidence = { status: 'not-run' };
 (async () => {
   let failure;
   try {
@@ -54,44 +56,66 @@ let image;
         checks.push('crossfade PATCH accepted (not audible mixing evidence)');
         const loaded = await node.rest.loadTracks(lab.mediaUrl);
         assert.equal(loaded.loadType,'track');
-        // Unlike an accepted PATCH, the loadstream endpoint returns actual
-        // decoded PCM. This is a real source/decoder test without Discord voice.
-        const controller = new AbortController();
-        const streamTimeout = setTimeout(() => controller.abort(), 30000);
-        streamTimeout.unref?.();
-        let audio;
+        // These assertions process actual bytes streamed by a pinned NodeLink
+        // server from a locally synthesized tone. No voice/gateway is involved.
+        const encoded = loaded.data.encoded;
+        const full = await streamAudio(node.rest, encoded);
+        assert.ok(full.evidence.bytes >= 96000 && full.evidence.bytes <= 210000,
+          'Expected decoded full-length 48 kHz stereo samples');
+        assert.ok(full.evidence.nonZero > 4000 && full.evidence.rms > 10,
+          'Actual decoded audio must contain a substantial non-silent signal');
+        checks.push('real local WAV decode: streamed 48 kHz stereo PCM (not Discord voice)');
+
+        const raw = await streamAudio(node.rest, encoded, { format: 'raw' });
+        assert.match(String(raw.headers['content-type']), /audio\/l16/i);
+        assert.ok(Math.abs(raw.evidence.durationMs - full.evidence.durationMs) < 120,
+          'Raw and WAV requests must decode comparable track duration');
+        assert.ok(raw.evidence.rms > 10,
+          'Raw PCM response must contain decoded sound');
+        checks.push('raw PCM stream: verified non-silent decoded samples');
+
+        const muted = await streamAudio(node.rest, encoded, { volume: 0 });
+        assert.ok(muted.evidence.bytes >= 96000, 'Muted stream must retain audio frames');
+        assert.ok(muted.evidence.rms < Math.max(2, full.evidence.rms * 0.03),
+          'Volume zero must actually silence the output PCM');
+        checks.push('volume zero: actual PCM signal attenuation confirmed');
+
+        const quiet = await streamAudio(node.rest, encoded, { volume: 25 });
+        assert.ok(quiet.evidence.nonZero > 100, 'Quiet stream must still have signal');
+        assert.ok(quiet.evidence.rms > muted.evidence.rms + 1,
+          'Quarter-volume stream must be louder than muted stream');
+        assert.ok(quiet.evidence.rms < full.evidence.rms * 0.8,
+          'Quarter-volume stream must attenuate the actual PCM signal');
+        checks.push('volume 25 versus 100: actual PCM RMS attenuation confirmed');
+
+        // The pinned NodeLink build has repeatedly reset HTTP streams when
+        // seeking into generated WAVs (both 1 s and 3 s fixtures). Keep an
+        // explicit, independently inspectable probe; do not advertise seek as
+        // verified, and do not hide regression in the supported PCM checks.
         try {
-          const wav = await node.rest.loadStream({
-            encodedTrack: loaded.data.encoded, format: 'wav', volume: 100, position: 0
-          }, { signal: controller.signal, timeoutMs: 30000 });
-          const chunks = [];
-          let size = 0;
-          try {
-            for await (const chunk of wav.stream) {
-              size += chunk.length;
-              if (size > 1024 * 1024) throw new Error('Decoded WAV exceeded the local fixture budget');
-              chunks.push(chunk);
-            }
-          } finally {
-            wav.stream.destroy?.();
-          }
-          audio = Buffer.concat(chunks);
-          assert.ok(audio.length >= 48044 && audio.length <= 1024 * 1024, 'Expected decoded WAV audio');
-          assert.equal(audio.toString('ascii',0,4),'RIFF');
-          assert.equal(audio.toString('ascii',8,12),'WAVE');
-          assert.equal(audio.toString('ascii',12,16),'fmt ');
-          assert.equal(audio.readUInt16LE(20),1,'16-bit linear PCM format');
-          assert.equal(audio.readUInt16LE(22),2,'Stereo output');
-          assert.equal(audio.readUInt32LE(24),48000,'48 kHz output');
-          assert.equal(audio.readUInt16LE(34),16,'16-bit output');
-          assert.equal(audio.toString('ascii',36,40),'data');
-          // Prove this is decoded sound, not a silent, empty or metadata-only stream.
-          let nonZero = 0;
-          for (let i=44; i + 1 < audio.length; i+=2) if (audio.readInt16LE(i)!==0) nonZero++;
-          assert.ok(nonZero > 4000, 'Decoded PCM must contain non-silent audio samples');
-          checks.push('real local WAV decode: streamed 48 kHz stereo PCM (not Discord voice)');
-        } finally {
-          clearTimeout(streamTimeout);
+          const longer = await node.rest.loadTracks(lab.seekMediaUrl);
+          assert.equal(longer.loadType, 'track');
+          const longerFull = await streamAudio(node.rest, longer.data.encoded);
+          const durationMs = longerFull.evidence.durationMs;
+          assert.ok(durationMs > 2500 && durationMs < 3500,
+            'Expected three-second decoded seek fixture, got ' + durationMs.toFixed(1) + ' ms');
+          const resumed = await streamAudio(node.rest, longer.data.encoded, { position: 500 });
+          const trimmedMs = durationMs - resumed.evidence.durationMs;
+          assert.ok(trimmedMs > 300 && trimmedMs < 700,
+            '500 ms seek must trim about half a second of PCM; got ' + trimmedMs.toFixed(1) + ' ms');
+          assert.ok(resumed.evidence.rms > 10 && resumed.evidence.nonZero > 1000,
+            'Seeked stream must contain non-silent PCM');
+          seekEvidence = { status: 'verified', requestedPositionMs: 500, observedTrimMs: trimmedMs };
+          checks.push('500 ms seek: verified shorter non-silent decoded three-second fixture');
+        } catch (error) {
+          seekEvidence = {
+            status: 'failed',
+            requestedPositionMs: 500,
+            code: typeof error?.code === 'string' ? error.code : 'unknown',
+            message: String(error?.message ?? error).slice(0, 240),
+          };
+          console.warn('NodeLink seek probe not verified:', JSON.stringify(seekEvidence));
+          if (process.env.NYXLINK_REQUIRE_SEEK === '1') throw new Error('Strict seek verification failed');
         }
         const lyrics = await node.rest.loadLyrics(loaded.data.encoded,{type:'onlyCaptions',source:'youtube',lang:'es'});
         assert.ok(lyrics && ['empty','error','lyrics'].includes(lyrics.loadType));
@@ -105,7 +129,7 @@ let image;
       }
     },{streaming:true,mix:true});
   } catch(error) {failure=error instanceof Error?error.message:String(error);}
-  const report={scope:'modern NodeLink isolated API; no Discord audio',version,image,checks,passed:!failure,...(failure?{error:failure}:{})};
+  const report={scope:'modern NodeLink isolated API; no Discord audio',version,image,checks,seekEvidence,passed:!failure,...(failure?{error:failure}:{})};
   await fs.mkdir('.runtime/extensions',{recursive:true});
   await fs.writeFile('.runtime/extensions/modern-report.json',JSON.stringify(report,null,2)+'\n');
   console.log(JSON.stringify(report));
