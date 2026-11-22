@@ -91,3 +91,34 @@ track with its duration measured from actual decoded PCM (3 seconds),
 then tries a byte range and nonzero JSON position. This is an isolated
 diagnostic **only**: forged duration metadata must not be applied to
 ordinary music streams without reliable duration evidence.
+
+
+### Controlled re-encoding result (known 3,000 ms)
+
+The candidate NodeLink `dev` head is still the pinned
+`97bbce1e169f18811c69836e3d0fa7f87e1d13fe`; there is no
+newer `dev` revision to test from this remote at the time of the probe.
+
+The modern test re-encoded **only the generated 3-second HTTP track**
+with its known duration from decoded audio; no production track metadata
+was changed. The pinned backend reported:
+
+- Original HTTP track: `length=-1`, `isStream=false`.
+- Test-only track: `length=3000`, `isStream=false`.
+- `format=raw`, `Range: bytes=96000-` on known-duration track:
+  request ended in `ECONNRESET` **before headers**.
+- `format=wav`, `position=500` on known-duration track:
+  HTTP 200 advertised `Content-Length: 480044`, wrote only
+  44 RIFF/WAV header bytes, then aborted (`complete=false`).
+
+The positive track length makes the route calculate finite output sizes,
+but it **does not repair the decoder or stream completion**. For the
+original unknown-length HTTP track, responses used chunked framing and
+ignored HTTP Range. The statement that this defect is *solely* caused
+by missing duration metadata is therefore disproven by this experiment.
+
+**Unresolved:** inspect the server's `seekableStream` integration for
+WAV and its handling of source range/seek requests. Do not automatically
+re-encode ordinary user tracks with fabricated durations or retry broken
+remote seeks as successful playback. The NyxLink client must continue
+reporting these streams as failed.
