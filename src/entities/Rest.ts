@@ -1,5 +1,6 @@
 import { requireGroupId, requireGuildId, groupCreateBody, groupPatchBody, validateGroup, validateGroups, validateGroupPatch, sponsorOptionsBody, sponsorSegmentsBody, validateSponsorState, type PlayerGroup, type GroupCreate, type GroupPatch, type GroupPatchResult, type SponsorBlockOptions, type SponsorBlockSegment, type SponsorBlockState } from '../backends/NodeLinkOrchestration';
 import { lyricsParameters, validateSourceHealth, type LyricsRequestOptions, type SourceHealthResponse } from '../backends/NodeLinkContracts';
+import { hasLavaLyricsPlugin, lavaLyricsParameters, validateLavaLyrics, type LavaLyricsData, type LavaLyricsOptions } from '../backends/LavaLyricsContracts';
 import type http from "node:http";
 import { validateLoadResponse, validateTrackResponse, validatePlayerRead, validatePlayerAcknowledgement, validateSessionResponse, ProtocolResponseError } from "../backends/ProtocolValidation";
 import { HttpError } from "../errors/HttpError";
@@ -398,6 +399,43 @@ export class Rest {
         await this.featureRequest("mix:remove", { guildId, mixId }, {
             headers: this.authHeaders
         });
+    }
+
+    /**
+     * Lavalink LavaLyrics plugin API: GET /v4/lyrics?track=...
+     * Never treat a NodeLink or unrelated Lavalink plugin as this endpoint.
+     * The 204 No Content response maps to null; this method does not subscribe
+     * to live lyric events or guarantee that a provider has lyrics.
+     */
+    public async getLavaLyrics(encodedTrack: string, options?: LavaLyricsOptions): Promise<LavaLyricsData | null> {
+        const params = lavaLyricsParameters(encodedTrack, options);
+        const backend = this.node.backend;
+        if (backend?.kind !== 'lavalink' || !hasLavaLyricsPlugin(backend.plugins) ||
+            backend.featureStatus('lavalyrics') === 'unavailable') {
+            throw new FeatureUnavailableError('lavalyrics', backend?.kind ?? 'unknown');
+        }
+        const socket = this.node.socket;
+        const session = this.node.sessionId;
+        const current = () => !this.node.destroyed && this.node.backend === backend &&
+            this.node.socket === socket && this.node.sessionId === session;
+        const result = await this.node.circuit.run(async () => {
+            try {
+                return await makeRequest<unknown>(this.url + '/v4/lyrics?' + params.toString(), {
+                    method: 'GET', headers: this.authHeaders, throwOnError: true
+                }, 10000, 0);
+            } catch (error) {
+                this.featureError('lavalyrics', error, backend, current);
+            }
+        });
+        // The shared HTTP transport represents a bodyless 204 as an empty
+        // string. Never accept an empty JSON object as a valid 200 response.
+        if (result === '') {
+            if (current()) backend.recordFeature('lavalyrics', 'available');
+            return null;
+        }
+        validateLavaLyrics(result);
+        if (current()) backend.recordFeature('lavalyrics', 'available');
+        return result;
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */

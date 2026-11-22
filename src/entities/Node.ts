@@ -1,4 +1,5 @@
 import type { LyricsRequestOptions, SourceHealthResponse } from '../backends/NodeLinkContracts';
+import type { LavaLyricsData, LavaLyricsOptions } from '../backends/LavaLyricsContracts';
 import { SourceHealthMonitor } from '../nodes/SourceHealthMonitor';
 import { NodeFailover } from "../nodes/NodeFailover";
 import { BackendDetector } from "../backends/BackendDetector";
@@ -316,6 +317,16 @@ export class Node {
       throw nodeLinkOnlyError("youtubeLiveChat");
     }
     return new YouTubeLiveChat(this, identifier, options);
+  }
+
+  /** Lavalink LavaLyrics plugin only; NodeLink has a different lyrics contract. */
+  public async getLavaLyrics(
+    track: string | ITrack | Track | { encoded?: string },
+    options?: LavaLyricsOptions
+  ): Promise<LavaLyricsData | null> {
+    const encoded = typeof track === 'string' ? track : track?.encoded;
+    if (!encoded) throw new TypeError('getLavaLyrics requires an encoded track');
+    return this.rest.getLavaLyrics(encoded, options);
   }
 
   /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
