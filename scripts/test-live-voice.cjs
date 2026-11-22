@@ -79,16 +79,13 @@ function event(manager, name, matches, timeoutMs) {
   return { promise, cancel };
 }
 
-function redactDiagnostic(error, config, extraSecrets = []) {
-  let message = error instanceof Error ? error.message : String(error);
-  for (const secret of [config.token, config.node.password, ...config.urls, ...extraSecrets]) {
-    if (typeof secret !== 'string' || secret.length < 4) continue;
-    for (const variant of new Set([secret, encodeURIComponent(secret)])) {
-      message = message.replaceAll(variant, '[REDACTED]');
-    }
-  }
-  // Third-party HTTP exceptions can also include redirect or proxy URLs.
-  return message.replace(/https?:\/\/[^\s<>"']+/gi, '[REDACTED_URL]');
+function errorCode(error) {
+  // Never persist or log third-party error messages: they can contain
+  // credentials, remote URLs, bearer headers, or encoded audio tracks.
+  if (error instanceof TypeError) return 'TYPE_ERROR';
+  if (error instanceof RangeError) return 'RANGE_ERROR';
+  if (error instanceof SyntaxError) return 'SYNTAX_ERROR';
+  return 'OPERATION_ERROR';
 }
 
 async function writePrivateReport(target, report) {
@@ -125,7 +122,7 @@ async function run(config) {
   };
   let player;
   let readyWait;
-  const redact = error => redactDiagnostic(error, config, [report.firstEncoded, report.secondEncoded]);
+  let stage = 'initialization';
   manager.on('trackStart', (p, track) => {
     if (p.guildId === config.guildId) record('trackStart', { track: track.encoded === report.firstEncoded ? 'A' :
       track.encoded === report.secondEncoded ? 'B' : 'unexpected' });
@@ -134,15 +131,18 @@ async function run(config) {
     if (p.guildId === config.guildId) record('trackEnd', { reason, track: track.encoded === report.firstEncoded ? 'A' :
       track.encoded === report.secondEncoded ? 'B' : 'unexpected' });
   });
-  manager.on('nodeError', (_node, error) => record('nodeError', { error: redact(error) }));
+  manager.on('nodeError', (_node, error) => record('nodeError', { errorCode: errorCode(error) }));
   manager.use(new Connectors.DiscordJs(), client);
   try {
     readyWait = event(manager, 'nodeReady', n => n.identifier === config.node.identifier, 45000);
+    stage = 'discord-login';
     await client.login(config.token);
+    stage = 'node-ready';
     const [node] = await readyWait.promise;
     if (node.backend?.kind !== 'nodelink') throw new Error('Expected NodeLink backend');
     record('nodeReady', { version: node.backend.version });
     const tracks = [];
+    stage = 'track-resolution';
     for (const url of config.urls) {
       const result = await manager.search({ query: url, node: node.identifier });
       const track = result.tracks?.[0];
@@ -156,14 +156,18 @@ async function run(config) {
     player = manager.players.create({
       guildId: config.guildId, voiceChannelId: config.channelId, autoPlay: false
     });
+    stage = 'voice-connect';
     await player.connect();
     record('gatewayVoiceReady');
+    stage = 'transition-configuration';
     await player.setCrossfade({ enabled: true, mode: 'smart', duration: config.crossfadeMs, curve: 'sinusoidal' });
     player.setQueuePreload({ enabled: true, leadMs: Math.min(35000, tracks[0].getInfo().length) });
     player.queue.add(tracks);
+    stage = 'playback-start';
     const played = await player.play();
     if (!played) throw new Error('Backend did not accept initial playback');
     // Do not trust REST acknowledgement as evidence of voice audio.
+    stage = 'handoff-observation';
     const expires = Date.now() + Math.min(240000, tracks[0].getInfo().length + 45000);
     while (Date.now() < expires) {
       const starts = events.filter(e => e.type === 'trackStart').map(e => e.track);
@@ -181,7 +185,8 @@ async function run(config) {
     record('protocolSequencePassed');
   } catch (error) {
     report.success = false;
-    report.error = redact(error);
+    report.errorCode = errorCode(error);
+    report.failureStage = stage;
   } finally {
     // Cancel a pending nodeReady listener if Discord login failed or shutdown began.
     readyWait?.cancel();
@@ -195,7 +200,7 @@ async function run(config) {
     await writePrivateReport(target, report);
     console.log(JSON.stringify({ report: target, protocolPassed: report.success,
       crossfadeEventObserved: report.crossfadeEventObserved ?? false,
-      audioMeasured: false, error: report.error }));
+      audioMeasured: false, errorCode: report.errorCode, failureStage: report.failureStage }));
   }
   if (!report.success) process.exitCode = 1;
 }
@@ -204,7 +209,7 @@ if (require.main === module) {
   try {
     const config = validateConfiguration(process.env, process.argv.slice(2));
     void run(config).catch(error => {
-      console.error('Live voice test failed: ' + redactDiagnostic(error, config));
+      console.error('Live voice test failed: ' + errorCode(error));
       process.exitCode = 1;
     });
   } catch (error) {
@@ -213,4 +218,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { validateConfiguration, redactDiagnostic, event, writePrivateReport };
+module.exports = { validateConfiguration, errorCode, event, writePrivateReport };
