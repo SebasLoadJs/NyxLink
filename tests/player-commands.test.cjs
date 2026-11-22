@@ -358,3 +358,29 @@ test('stale trackException event for a previous encoded track does not stop curr
   assert.equal(player.current, current);
   assert.deepEqual(requests, []);
 });
+
+test('failed recovery seek cannot restart a player superseded by an explicit play', async t => {
+  const { node, player } = createPlayer(t);
+  player.current = createTrack('stuck-before-play');
+  const replacement = createTrack('play-after-stuck');
+  const started = deferred();
+  const release = deferred();
+  let restarts = 0;
+  player.restart = async () => { restarts++; return true; };
+  node.rest.updatePlayer = async (_guild, payload) => {
+    if (payload.position !== undefined) {
+      started.resolve();
+      await release.promise;
+      throw new Error('old seek failed');
+    }
+    return payload;
+  };
+
+  const stuck = node.handleTrackStuck(player, { thresholdMs: 10000 });
+  await started.promise;
+  const play = player.play({ track: replacement });
+  release.resolve();
+  await Promise.all([stuck, play]);
+  assert.equal(player.current, replacement);
+  assert.equal(restarts, 0);
+});
