@@ -30,6 +30,8 @@ test('group identity and invalid payloads are rejected without poisoning endpoin
  const {rest,node,calls,respond}=await setup(t);
  await assert.rejects(rest.updateGroup('radio',{volume:1001}),TypeError);
  await assert.rejects(rest.getGroup('../bad'),TypeError);
+ await assert.rejects(rest.updateGroup('radio',{players:{add:[guild],remove:[guild]}}),TypeError);
+ await assert.rejects(rest.updateGroup('radio',{players:{add:{}}}),TypeError);
  await assert.rejects(rest.createGroup({id:'radio',guildIds:['bad']}),TypeError);
  assert.equal(calls.length,0);
  respond({...group,id:'different'});

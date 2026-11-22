@@ -66,8 +66,12 @@ export function groupPatchBody(value: GroupPatch): GroupPatch {
     const keys = ['players','track','position','endTime','volume','paused','filters','fading','loudnessNormalizer','ducking'];
     if (Object.keys(value).some(key => !keys.includes(key))) throw new TypeError('Unsupported group update field');
     const membership = value.players;
-    if (membership !== undefined && (!object(membership) || !optional(membership.add, guilds) ||
-        !optional(membership.remove, guilds) || membership.add?.some(id => membership.remove?.includes(id)))) throw new TypeError('Invalid group membership');
+    if (membership !== undefined) {
+        if (!object(membership)) throw new TypeError('Invalid group membership');
+        const { add, remove } = membership;
+        if (add !== undefined && !guilds(add) || remove !== undefined && !guilds(remove)) throw new TypeError('Invalid group membership');
+        if (add && remove && add.some(id => remove.includes(id))) throw new TypeError('Conflicting group membership');
+    }
     const track = value.track;
     if (track !== undefined && track !== null && (!object(track) ||
         !(text(track.encoded) || track.encoded === null || text(track.identifier)) ||
