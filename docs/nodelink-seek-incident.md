@@ -122,3 +122,45 @@ WAV and its handling of source range/seek requests. Do not automatically
 re-encode ordinary user tracks with fabricated durations or retry broken
 remote seeks as successful playback. The NyxLink client must continue
 reporting these streams as failed.
+
+
+## Opt-in NyxLink workaround: client-side raw PCM crop
+
+When the server cannot seek, callers who explicitly opt in can request
+NyxLink's `seekMode: 'pcm-trim'` on `Rest.loadStream()`, or pass it as
+the fifth argument options to `Node.loadDirectStream()`:
+
+```ts
+const { stream, headers } = await node.rest.loadStream(
+  { encodedTrack, format: 'raw', volume: 100, position: 500 },
+  { seekMode: 'pcm-trim' }
+);
+```
+
+This is a **client-side PCM crop, not a server-side seek**. NyxLink sends
+`position:0, format:'raw'` to NodeLink, streams the real decoded
+48 kHz/stereo/S16LE bytes, discards exactly `192 * positionMs` initial
+bytes with backpressure, then exposes the remaining raw PCM stream.
+A sample boundary is respected by requiring integer milliseconds.
+
+Safety and compatibility:
+- **Explicit opt-in only**: the standard `seekMode:'server'` behavior
+  and all existing applications are unchanged.
+- **Raw PCM only**, including the historical `format:'pcm'` alias.
+  WAV output is rejected rather than returning an incorrect RIFF header.
+- Offsets must be integers between 0 and **30,000 ms**; a longer offset
+  fails before issuing any network request.
+- Remote decode/stream errors, cancellation and EOF before the offset
+  remain errors. Missing audio is never replaced by synthetic silence.
+- Cropping uses stream backpressure (bounded buffer) but requires NodeLink
+  to decode and transmit everything before the requested offset. It
+  consumes extra CPU, bandwidth and latency and is inappropriate for
+  large seeks or ordinary long-form music seeking.
+- The returned headers exclude remote length, range and transfer framing
+  that no longer describes the cropped PCM.
+- A real isolated NodeLink CI result is required before claiming this
+  workaround succeeds, and **it does not resolve** the NodeLink HTTP
+  `position:500`/`Range` decoder error described above.
+
+For production use, prioritize fixing the server's seeking behavior
+and verifying the audio route under a real Discord voice connection.
