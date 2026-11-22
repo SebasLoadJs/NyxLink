@@ -65,14 +65,14 @@ function audioEvidence(pcm) {
   };
 }
 
-async function streamAudio(rest, encodedTrack, controls = {}) {
+async function streamAudio(rest, encodedTrack, controls = {}, options = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
   timeout.unref?.();
   try {
     const response = await rest.loadStream(
       { encodedTrack, format: 'wav', volume: 100, position: 0, ...controls },
-      { signal: controller.signal, timeoutMs: 30000 }
+      { ...options, signal: controller.signal, timeoutMs: options.timeoutMs ?? 30000 }
     );
     const data = await readBounded(response.stream);
     const pcm = controls.format === 'raw' || controls.format === 'pcm' ? data : parseWavPcm(data);
