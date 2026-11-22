@@ -1,6 +1,6 @@
 # Phase 1 — Stabilization audit
 
-Status: strict stabilization baseline verified; extended local endurance verification pending. Green CI is not proof of production audio continuity. No npm release or stable branch update is part of this baseline.
+Status: initial stabilization baseline accepted; phase 2 may begin. Green CI is not proof of production audio continuity. No npm release or stable branch update is part of this baseline.
 
 ## Quality gates
 
@@ -62,8 +62,8 @@ Runtime dependency: consola 3.4.2. Lockfile resolves TypeScript 5.9.3, @types/no
 - [x] Mandatory strict compiler gate; diagnostics decreased 88 → 44 → 14 → 1 → 0.
 - [x] Initial corrective audit of ownership, transport, storage, queues, events, recovery and shutdown.
 - [x] Initial API compatibility notes and explicit tested backend scope.
-- [ ] Extended local endurance gate (600 seconds on the stabilization workflow, plus the existing manual 10–7200 second option).
-- [ ] Review extended evidence and record baseline acceptance before starting phase 2.
+- [x] Extended local endurance gate: 600.6 seconds, 600 cycles and 37 resumes per backend at the final logged checkpoint. [Evidence](https://github.com/SebasLoadJs/NyxLink/actions/runs/44988681125), commit 5f29811.
+- [x] Initial baseline accepted: all five workflows passed for 5f29811. Phase 2 can proceed.
 
 Production/release gates remain separate: controlled 24–72 hour soak, audible Discord voice tests, failover during actual playback in both directions, additional backend/plugin versions, and deeper critical-path coverage. No claim of production readiness or complete elimination of bugs is warranted.
 

@@ -1,6 +1,11 @@
-import type { BackendAdapter } from './BackendAdapter';
+import type { BackendAdapter, BackendPlugin } from './BackendAdapter';
 import { LavalinkAdapter } from './LavalinkAdapter';
 import { NodeLinkAdapter } from './NodeLinkAdapter';
+
+function object(value: unknown): Record<string, unknown> | undefined {
+    return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+const namePattern = /^[a-z0-9][\w.-]*$/i;
 
 export class BackendDetector {
     /**
@@ -9,20 +14,33 @@ export class BackendDetector {
      */
     public static detect(info: unknown, headers: Record<string, unknown> = {}, capabilities = new Set<string>()): BackendAdapter | undefined {
         capabilities.clear();
-        if (!info || typeof info !== 'object' || Array.isArray(info)) return undefined;
-        const data = info as Record<string, any>;
-        const version = data.version?.semver;
+        const data = object(info);
+        if (!data) return undefined;
+        const version = object(data.version)?.semver;
         if (typeof version !== 'string' || !/^\d+\.\d+\.\d+(?:[-+][\w.+-]+)?$/.test(version)) return undefined;
-        const marker = headers.iamnodelink;
+        const marker = Object.entries(headers).find(([name]) => name.toLowerCase() === 'iamnodelink')?.[1];
         const header = Array.isArray(marker) ? marker[0] : marker;
         const nodeLink = data.isNodelink === true || (typeof header === 'string' && header.trim().toLowerCase() === 'true');
         if (!nodeLink && !version.startsWith('4.')) return undefined;
-        for (const [field, prefix] of [['sourceManagers', 'source'], ['filters', 'filter']]) {
-            if (!Array.isArray(data[field])) continue;
-            for (const name of data[field]) {
-                if (typeof name === 'string' && /^[a-z0-9][\w.-]*$/i.test(name)) capabilities.add(`${prefix}:${name.toLowerCase()}`);
+        for (const [field, prefix] of [['sourceManagers', 'source'], ['filters', 'filter']] as const) {
+            const values = data[field];
+            if (!Array.isArray(values)) continue;
+            for (const name of values) {
+                if (typeof name === 'string' && namePattern.test(name)) capabilities.add(`${prefix}:${name.toLowerCase()}`);
             }
         }
-        return nodeLink ? new NodeLinkAdapter(version, capabilities) : new LavalinkAdapter(version, capabilities);
+        const plugins = new Map<string, BackendPlugin>();
+        if (Array.isArray(data.plugins)) {
+            for (const item of data.plugins) {
+                const plugin = object(item);
+                if (typeof plugin?.name !== 'string' || !namePattern.test(plugin.name) ||
+                    typeof plugin.version !== 'string' || !plugin.version.trim() || plugin.version.length > 128 || /[\x00-\x1f\x7f]/.test(plugin.version)) continue;
+                const key = plugin.name.toLowerCase();
+                if (!plugins.has(key)) plugins.set(key, { name: plugin.name, version: plugin.version });
+                capabilities.add(`plugin:${key}`);
+            }
+        }
+        const metadata = [...plugins.values()];
+        return nodeLink ? new NodeLinkAdapter(version, capabilities, metadata) : new LavalinkAdapter(version, capabilities, metadata);
     }
 }

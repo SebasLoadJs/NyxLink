@@ -1,26 +1,28 @@
+import { CapabilityRegistry, type CapabilityDescription, type CapabilityState } from './CapabilityRegistry';
+export type { CapabilityState } from './CapabilityRegistry';
 export type BackendKind = 'lavalink' | 'nodelink';
-export type CapabilityState = 'available' | 'unavailable' | 'unknown';
+export type BackendPlugin = Readonly<{ name: string; version: string }>;
 
 /** Metadata/capability contract; both backends continue to share the v4 Rest transport. */
 export abstract class BackendAdapter {
     public abstract readonly kind: BackendKind;
     public readonly protocolVersion = 4;
-    private readonly observedFeatures = new Map<string, CapabilityState>();
+    public readonly registry: CapabilityRegistry;
+    public readonly plugins: readonly BackendPlugin[];
 
-    constructor(public readonly version: string, public readonly capabilities: Set<string>) {
-        for (const feature of ['tracks:load', 'tracks:decode', 'player:update', 'session:resume']) {
-            this.observedFeatures.set(feature, 'available');
-        }
+    constructor(public readonly version: string, public readonly capabilities: Set<string>, plugins: readonly BackendPlugin[] = []) {
+        this.registry = new CapabilityRegistry(capabilities);
+        this.plugins = Object.freeze(plugins.map(plugin => Object.freeze({ ...plugin })));
     }
 
     public supports(feature: string): boolean { return this.featureStatus(feature) === 'available'; }
-
-    public featureStatus(feature: string): CapabilityState {
-        return this.observedFeatures.get(feature) ?? (this.capabilities.has(feature) ? 'available' : 'unknown');
+    public featureStatus(feature: string): CapabilityState { return this.registry.describe(feature).state; }
+    public describeFeature(feature: string): CapabilityDescription { return this.registry.describe(feature); }
+    public listFeatures(): CapabilityDescription[] { return this.registry.list(); }
+    public getPlugin(name: string): BackendPlugin | undefined {
+        return this.plugins.find(plugin => plugin.name.toLowerCase() === name.toLowerCase());
     }
 
     /** An endpoint response may refine support without guessing from a product name. */
-    public recordFeature(feature: string, state: CapabilityState): void {
-        this.observedFeatures.set(feature, state);
-    }
+    public recordFeature(feature: string, state: CapabilityState): void { this.registry.record(feature, state); }
 }

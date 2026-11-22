@@ -1,5 +1,6 @@
 import type http from "node:http";
 import { HttpError } from "../errors/HttpError";
+import type { BackendAdapter } from "../backends/BackendAdapter";
 import { FeatureUnavailableError } from "../errors/FeatureUnavailableError";
 import { makeRequest, makeStreamRequest, normalizeNodeLinkResponse, type NodeLinkResponse, type ResponseWithHeaders, nodeLinkOnlyError } from "../Util";
 import type { IChapter, IFilters, ILyricsData, ILyricsResponse, IMeaningResponse, INodeConnectionStatus } from "../typings/Interfaces";
@@ -75,23 +76,28 @@ export class Rest {
 
     private async featureRequest<T = any>(feature: string, url: string, options: http.RequestOptions & { body?: any }): Promise<T> {
         this.node.assertFeature(feature);
+        const backend = this.node.backend;
+        const socket = this.node.socket;
+        const session = this.node.sessionId;
+        const current = () => !this.node.destroyed && this.node.backend === backend &&
+            this.node.socket === socket && this.node.sessionId === session;
         const result = await this.node.circuit.run(async () => {
             try { return await makeRequest<T>(url, { ...options, throwOnError: true }, 10000, 0); }
-            catch (error) { this.featureError(feature, error); }
+            catch (error) { this.featureError(feature, error, backend, current); }
         });
         if (result === undefined) throw new Error('Backend did not acknowledge feature request');
-        this.node.backend?.recordFeature(feature, 'available');
+        if (current()) backend?.recordFeature(feature, 'available');
         return result;
     }
 
-    private featureError(feature: string, error: unknown): never {
+    private featureError(feature: string, error: unknown, backend: BackendAdapter | undefined, current: () => boolean): never {
         const body = error instanceof HttpError ? error.body : undefined;
         const message = body && typeof body === 'object' && 'message' in body ? String(body.message) : '';
         const unavailable = error instanceof HttpError && (error.statusCode === 501 ||
             [403, 404].includes(error.statusCode) && /requested route was not found|unknown (?:route|endpoint)|(?:endpoint|feature).*disabled/i.test(message));
         if (unavailable) {
-            this.node.backend?.recordFeature(feature, 'unavailable');
-            throw new FeatureUnavailableError(feature, this.node.backend?.kind ?? 'unknown', error.statusCode);
+            if (current()) backend?.recordFeature(feature, 'unavailable');
+            throw new FeatureUnavailableError(feature, backend?.kind ?? 'unknown', error.statusCode);
         }
         throw error;
     }
@@ -508,13 +514,18 @@ export class Rest {
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
     public async loadStream(payload: { encodedTrack: string; volume?: number; position?: number; format?: 'pcm' | 'wav'; filters?: IFilters | Record<string, any> }, options: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<{ stream: NodeJS.ReadableStream; headers: Record<string, any> }> {
         this.node.assertFeature('loadstream');
+        const backend = this.node.backend;
+        const socket = this.node.socket;
+        const session = this.node.sessionId;
+        const current = () => !this.node.destroyed && this.node.backend === backend &&
+            this.node.socket === socket && this.node.sessionId === session;
         try {
             const res = await makeStreamRequest(`${this.url}/v4/loadstream`, {
                 method: 'POST', headers: this.jsonHeaders, body: payload, signal: options.signal,
             }, options.timeoutMs ?? 100000);
-            this.node.backend?.recordFeature('loadstream', 'available');
+            if (current()) backend?.recordFeature('loadstream', 'available');
             return { stream: res.stream, headers: res.headers };
-        } catch (error) { this.featureError('loadstream', error); }
+        } catch (error) { this.featureError('loadstream', error, backend, current); }
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
