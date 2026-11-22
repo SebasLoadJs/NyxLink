@@ -18,11 +18,13 @@ export class Local extends Memory {
   }
   private tail: Promise<unknown> = Promise.resolve();
   private closing = false;
+  private initialized = false;
   private shutdownPromise?: Promise<void>;
   private compactionTimer?: NodeJS.Timeout;
 
   public async init(manager: Manager, options?: { path?: string }): Promise<void> {
-    if (!/^[\w-]+$/.test(manager.clientId)) throw new TypeError('Invalid local database client ID');
+    if (this.closing || this.paths) throw new Error('Local database cannot be initialized twice');
+    if (typeof manager.clientId !== 'string' || !/^[\w-]+$/.test(manager.clientId)) throw new TypeError('Invalid local database client ID');
     const directory = options?.path ?? manager.options.database?.options?.path
       ?? process.env.MOONLINK_DB_PATH ?? path.join(process.cwd(), '.moonlink', 'data');
     this.paths = { snapshot: path.join(directory, `data.${manager.clientId}.json`), log: path.join(directory, `data.${manager.clientId}.wal`) };
@@ -62,6 +64,8 @@ export class Local extends Memory {
     }
     // Isolate a torn final record so the next acknowledged write remains replayable.
     await fs.appendFile(this.logPath, wal && !wal.endsWith('\n') ? '\n' : '', { mode: 0o600 });
+    if (this.closing) throw new Error('Local database is shutting down');
+    this.initialized = true;
     this.compactionTimer = setInterval(() => {
       void this.enqueue(() => this.compact()).catch(error => manager.emit('debug', `NyxLink > Local > Compaction failed: ${error.message}`));
     }, 60000);
@@ -70,6 +74,7 @@ export class Local extends Memory {
 
   private enqueue<T>(operation: () => Promise<T>): Promise<T> {
     if (this.closing) return Promise.reject(new Error('Local database is shutting down'));
+    if (!this.initialized) return Promise.reject(new Error('Local database is not initialized'));
     const result = this.tail.then(operation);
     this.tail = result.catch(() => undefined);
     return result;
@@ -137,7 +142,7 @@ export class Local extends Memory {
     if (!this.shutdownPromise) {
       this.closing = true;
       if (this.compactionTimer) clearInterval(this.compactionTimer);
-      this.shutdownPromise = this.tail.then(() => this.paths ? this.compact() : undefined);
+      this.shutdownPromise = this.tail.then(() => this.initialized ? this.compact() : undefined);
     }
     return this.shutdownPromise;
   }
