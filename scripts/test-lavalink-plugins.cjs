@@ -58,17 +58,22 @@ async function verify(context) {
     stage = 'PLAYER_CREATE';
     const acknowledgement = await node.rest.updatePlayer(guildId, { volume: 0, paused: true });
     assert.ok(acknowledgement);
+    // SponsorBlock 3.0.1 stores no guild entry until PUT. In that
+    // revision GET before PUT and GET after DELETE explicitly return 404
+    // "Guild not found", not an empty JSON array.
     stage = 'SPONSORBLOCK_GET';
-    assert.deepEqual(await node.getLavalinkSponsorBlockCategories(guildId), []);
+    await assert.rejects(node.getLavalinkSponsorBlockCategories(guildId),
+      error => error?.statusCode === 404);
     stage = 'SPONSORBLOCK_PUT';
     await node.setLavalinkSponsorBlockCategories(guildId, ['sponsor', 'selfpromo']);
     const categories = await node.getLavalinkSponsorBlockCategories(guildId);
     assert.deepEqual([...categories].sort(), ['selfpromo', 'sponsor'].sort());
     stage = 'SPONSORBLOCK_DELETE';
     await node.clearLavalinkSponsorBlockCategories(guildId);
-    assert.deepEqual(await node.getLavalinkSponsorBlockCategories(guildId), []);
+    await assert.rejects(node.getLavalinkSponsorBlockCategories(guildId),
+      error => error?.statusCode === 404);
     assert.equal(node.backend.featureStatus('lavalink:sponsorblock'), 'available');
-    checks.push('installed SponsorBlock GET/PUT/DELETE round-trip on non-playing player');
+    checks.push('installed SponsorBlock missing guild 404, PUT/GET and DELETE/404 on non-playing player');
 
     stage = 'LIFECYCLE';
     assert.equal(errors.length, 0, 'Unexpected backend lifecycle error during plugin lab');
