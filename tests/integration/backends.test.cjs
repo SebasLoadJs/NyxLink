@@ -7,6 +7,7 @@ const { setTimeout: delay } = require('node:timers/promises');
 const { event } = require('../helpers/v4-server.cjs');
 
 const lab = JSON.parse(process.env.NYXLINK_BACKENDS_JSON || 'null');
+const modernNodeLink = process.env.NYXLINK_NODELINK_PROFILE === 'modern';
 if (!lab) throw new Error('Run pnpm run test:backends to create the isolated server lab.');
 const evidence = [];
 const trackResolution = [];
@@ -237,14 +238,19 @@ test('tracks resolve in both directions using each destination server', async t 
       assert.equal(remote.paused, true);
       assert.equal(remote.track, null);
       assert.equal(filterRequest.timescale.pitch, 1.2);
-      // Pinned NodeLink setFilters() returns false without a track; an HTTP ack alone
-      // cannot demonstrate an applied filter on an empty player. Preserve that distinction.
-      if (target.backend.kind === 'nodelink') assert.deepEqual(remote.filters, {});
-      else assert.equal(remote.filters.timescale.pitch, 1.2);
+      // Revision 804e0d6 ignores filters without an active track. The pinned
+      // revision 97bbce1 persists timescale filters even for an empty player.
+      // Keep both contracts explicit instead of loosening assertions.
+      if (target.backend.kind === 'nodelink' && !modernNodeLink) {
+        assert.deepEqual(remote.filters, {});
+      } else {
+        assert.equal(remote.filters.timescale.pitch, 1.2);
+        assert.equal(remote.filters.timescale.speed, 1.2);
+      }
       assert.ok(player.filters.toJSON().activeFilters.includes('nightcore'));
       assert.equal(await manager.database.get(`players.${guildId}.node`), target.identifier);
       await player.destroy('Protocol migration check complete');
-      playerMigration.push({ source: source.backend.kind, target: target.backend.kind, passed: true, voice: 'stubbed', audio: 'not-tested', remoteEmptyFilters: target.backend.kind === 'nodelink' ? 'ignored by pinned server without a track' : 'confirmed' });
+      playerMigration.push({ source: source.backend.kind, target: target.backend.kind, passed: true, voice: 'stubbed', audio: 'not-tested', remoteEmptyFilters: target.backend.kind === 'nodelink' && !modernNodeLink ? 'ignored by baseline NodeLink without a track' : 'confirmed on selected pinned server' });
     });
   }
 });

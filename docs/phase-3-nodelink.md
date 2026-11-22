@@ -48,3 +48,7 @@ The NodeLink-specific route catalog now includes group list/get/create/update/de
 ## 3.8 Modern server lab (candidate)
 
 The previous digest remains the baseline. A second CI job uses the immutable NodeLink image for revision 97bbce1e169f18811c69836e3d0fa7f87e1d13fe, digest sha256:922acc221c5f3239a795ba616e925c01b86f9f41a3ac3bc5c1b2b91859fcc64e, verified from upstream [Docker Image CI](https://github.com/PerformanC/NodeLink/actions/runs/44984274202). The lab checks the container revision label. The modern profile runs the common protocol suite and dedicated health, groups, SponsorBlock and crossfade control tests on empty players. It does not send Discord gateway credentials or test audible transitions. This entry describes the intended tests, not successful results; CI evidence is required before promoting the candidate.
+
+### 3.8.1 Modern protocol CI finding
+
+In the first modern-image run, all dedicated NodeLink extension checks passed, but one common-protocol integration assertion failed: a rolled-over empty player retains its timescale filter in pinned NodeLink 97bbce1, while pinned 804e0d6 returned an empty filter object. The client sent the same filter payload in both cases; the changed outcome belongs to the server. The test suite now explicitly asserts the distinct remote behavior for each immutable profile. This is not an audible filter test: no Discord voice was used. Full modern-profile CI must pass before the modern matrix is accepted. [First diagnostic run](https://github.com/SebasLoadJs/NyxLink/actions/runs/44997271539).
