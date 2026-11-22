@@ -15,6 +15,7 @@ import { Node } from "./Node";
 import type { Player } from "./Player";
 import { IRESTLoadTracks, IRESTGetLyrics, IRESTGetPlayers, ITrack, INodeStats, IRoutePlannerStatus } from "../typings/Interfaces";
 import { playbackGuard } from '../players/PlaybackGuard';
+import { assertClientPcmSeekPosition, createClientPcmSeekStream } from '../backends/ClientPCMSeek';
 
 export class RestError extends Error {
     public statusCode: number;
@@ -659,8 +660,14 @@ export class Rest {
         return res || null;
     }
 
-    /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
-    public async loadStream(payload: { encodedTrack: string; volume?: number; position?: number; format?: 'raw' | 'pcm' | 'wav'; filters?: IFilters | Record<string, any> }, options: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<{ stream: NodeJS.ReadableStream; headers: Record<string, any> }> {
+    /**
+     * NodeLink-only decoded audio API. The native server-side position path
+     * remains the default. Opt-in seekMode:'pcm-trim' fetches position=0 raw
+     * PCM and discards the first N ms locally; it is not a decoder/source seek.
+     * This mode supports raw/pcm only and is capped at 30 seconds to bound
+     * wasted decoding and bandwidth. Errors are never retried or suppressed.
+     */
+    public async loadStream(payload: { encodedTrack: string; volume?: number; position?: number; format?: 'raw' | 'pcm' | 'wav'; filters?: IFilters | Record<string, any> }, options: { signal?: AbortSignal; timeoutMs?: number; seekMode?: 'server' | 'pcm-trim' } = {}): Promise<{ stream: NodeJS.ReadableStream; headers: Record<string, any> }> {
         this.node.assertFeature('loadstream');
         // NodeLink's wire format is 'raw' (16-bit stereo PCM) or 'wav'.
         // Keep the older NyxLink 'pcm' name as a client-side alias only.
@@ -675,7 +682,17 @@ export class Rest {
             payload.filters !== undefined && (!payload.filters || typeof payload.filters !== 'object' || Array.isArray(payload.filters))) {
             throw new TypeError('Invalid LoadStream playback options');
         }
-        const requestPayload = payload.format === 'pcm' ? { ...payload, format: 'raw' as const } : payload;
+        if (options.seekMode !== undefined && !['server', 'pcm-trim'].includes(options.seekMode)) {
+            throw new TypeError('LoadStream seekMode must be server or pcm-trim');
+        }
+        const clientTrim = options.seekMode === 'pcm-trim';
+        if (clientTrim) {
+            if (payload.format === 'wav') throw new TypeError('Client PCM seeking supports raw/pcm only; WAV headers cannot be preserved');
+            assertClientPcmSeekPosition(payload.position ?? 0);
+        }
+        const requestPayload = clientTrim
+            ? { ...payload, position: 0, format: 'raw' as const }
+            : payload.format === 'pcm' ? { ...payload, format: 'raw' as const } : payload;
         const route = this.extensionRoute('loadstream');
         const backend = this.node.backend;
         const socket = this.node.socket;
@@ -687,7 +704,18 @@ export class Rest {
                 method: route.method, headers: this.jsonHeaders, body: requestPayload, signal: options.signal,
             }, options.timeoutMs ?? 100000);
             if (current()) backend?.recordFeature('loadstream', 'available');
-            return { stream: res.stream, headers: res.headers };
+            if (!clientTrim) return { stream: res.stream, headers: res.headers };
+            const headers = { ...res.headers };
+            // Local cropping changes output length and invalidates backend
+            // range/length framing. Do not expose stale remote metadata.
+            delete headers['content-length'];
+            delete headers['content-range'];
+            delete headers['transfer-encoding'];
+            delete headers['accept-ranges'];
+            return {
+                stream: createClientPcmSeekStream(res.stream, payload.position ?? 0),
+                headers,
+            };
         } catch (error) { this.featureError('loadstream', error, backend, current); }
     }
 
