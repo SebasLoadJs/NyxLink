@@ -87,3 +87,5 @@ export {
 };
 
 export type { SourceHealthObservation } from './src/nodes/SourceHealthMonitor';
+
+export type { PlayerGroup, GroupCreate, GroupPatch, GroupPatchResult, SponsorBlockOptions, SponsorBlockSegment, SponsorBlockState } from './src/backends/NodeLinkOrchestration';

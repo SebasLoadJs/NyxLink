@@ -4,7 +4,18 @@ import { FeatureUnavailableError } from '../errors/FeatureUnavailableError';
 type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 type RouteDefinition = Readonly<{ feature: string; method: Method; path: string; transport: 'json' | 'stream' }>;
 const player = '/v4/sessions/:sessionId/players/:guildId';
+const groups = '/v4/sessions/:sessionId/groups';
+const sponsor = player + '/sponsorblock';
 const definitions = {
+    'groups:list': { feature: 'groups', method: 'GET', path: groups, transport: 'json' },
+    'groups:get': { feature: 'groups', method: 'GET', path: groups + '/:groupId', transport: 'json' },
+    'groups:create': { feature: 'groups', method: 'POST', path: groups, transport: 'json' },
+    'groups:update': { feature: 'groups', method: 'PATCH', path: groups + '/:groupId', transport: 'json' },
+    'groups:delete': { feature: 'groups', method: 'DELETE', path: groups + '/:groupId', transport: 'json' },
+    'sponsorblock:get': { feature: 'sponsorblock', method: 'GET', path: sponsor, transport: 'json' },
+    'sponsorblock:update': { feature: 'sponsorblock', method: 'PATCH', path: sponsor, transport: 'json' },
+    'sponsorblock:segments': { feature: 'sponsorblock', method: 'POST', path: sponsor, transport: 'json' },
+    'sponsorblock:clear': { feature: 'sponsorblock', method: 'DELETE', path: sponsor, transport: 'json' },
     'mix:add': { feature: 'mix:add', method: 'POST', path: player + '/mix', transport: 'json' },
     'mix:list': { feature: 'mix:list', method: 'GET', path: player + '/mix', transport: 'json' },
     'mix:update': { feature: 'mix:update', method: 'PATCH', path: player + '/mix/:mixId', transport: 'json' },
@@ -30,7 +41,7 @@ const definitions = {
 
 export type ExtensionOperation = keyof typeof definitions;
 export type ExtensionRoute = RouteDefinition;
-export type ExtensionRouteParameters = { sessionId?: string; guildId?: string; mixId?: string; query?: URLSearchParams };
+export type ExtensionRouteParameters = { sessionId?: string; guildId?: string; mixId?: string; groupId?: string; query?: URLSearchParams };
 
 /** A deliberately closed catalog: no arbitrary URL or inferred Lavalink plugin routes. */
 export function resolveExtensionRoute(backend: BackendKind | 'unknown', operation: ExtensionOperation,
@@ -38,7 +49,7 @@ export function resolveExtensionRoute(backend: BackendKind | 'unknown', operatio
     if (!Object.hasOwn(definitions, operation)) throw new TypeError('Unknown extension operation');
     const route = definitions[operation];
     if (backend !== 'nodelink' || unavailable?.(route.feature)) throw new FeatureUnavailableError(route.feature, backend);
-    const path = route.path.replace(/:(sessionId|guildId|mixId)/g, (_, key: 'sessionId' | 'guildId' | 'mixId') => {
+    const path = route.path.replace(/:(sessionId|guildId|mixId|groupId)/g, (_, key: 'sessionId' | 'guildId' | 'mixId' | 'groupId') => {
         const value = params[key];
         if (typeof value !== 'string' || !value || value === '.' || value === '..') throw new TypeError(`Missing or invalid extension route parameter: ${key}`);
         return encodeURIComponent(value);

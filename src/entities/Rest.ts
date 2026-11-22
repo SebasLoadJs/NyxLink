@@ -1,3 +1,4 @@
+import { requireGroupId, requireGuildId, groupCreateBody, groupPatchBody, validateGroup, validateGroups, validateGroupPatch, sponsorOptionsBody, sponsorSegmentsBody, validateSponsorState, type PlayerGroup, type GroupCreate, type GroupPatch, type GroupPatchResult, type SponsorBlockOptions, type SponsorBlockSegment, type SponsorBlockState } from '../backends/NodeLinkOrchestration';
 import { lyricsParameters, validateSourceHealth, type LyricsRequestOptions, type SourceHealthResponse } from '../backends/NodeLinkContracts';
 import type http from "node:http";
 import { validateLoadResponse, validateTrackResponse, validatePlayerRead, validatePlayerAcknowledgement, validateSessionResponse, ProtocolResponseError } from "../backends/ProtocolValidation";
@@ -114,6 +115,44 @@ export class Rest {
             throw new FeatureUnavailableError(feature, backend?.kind ?? 'unknown', error.statusCode);
         }
         throw error;
+    }
+
+    /** Low-level session group API: does not synchronize NyxLink's local queues or player commands. */
+    public async getGroups(): Promise<PlayerGroup[]> {
+        return this.featureRequest<PlayerGroup[]>('groups:list', {}, { headers: this.authHeaders }, validateGroups);
+    }
+    public async getGroup(groupId: string): Promise<PlayerGroup> {
+        requireGroupId(groupId);
+        return this.featureRequest<PlayerGroup>('groups:get', { groupId }, { headers: this.authHeaders }, value => validateGroup(value, groupId));
+    }
+    public async createGroup(options: GroupCreate): Promise<PlayerGroup> {
+        const body = groupCreateBody(options);
+        return this.featureRequest<PlayerGroup>('groups:create', {}, { headers: this.jsonHeaders, body }, value => validateGroup(value, body.id));
+    }
+    /** Non-atomic across members. Inspect errors even when HTTP succeeds. */
+    public async updateGroup(groupId: string, options: GroupPatch): Promise<GroupPatchResult> {
+        requireGroupId(groupId);
+        return this.featureRequest<GroupPatchResult>('groups:update', { groupId }, { headers: this.jsonHeaders, body: groupPatchBody(options) }, value => validateGroupPatch(value, groupId));
+    }
+    public async deleteGroup(groupId: string): Promise<void> {
+        requireGroupId(groupId);
+        await this.featureRequest('groups:delete', { groupId }, { headers: this.authHeaders });
+    }
+    public async getSponsorBlock(guildId: string): Promise<SponsorBlockState> {
+        requireGuildId(guildId);
+        return this.featureRequest<SponsorBlockState>('sponsorblock:get', { guildId }, { headers: this.authHeaders }, validateSponsorState);
+    }
+    public async updateSponsorBlock(guildId: string, options: SponsorBlockOptions): Promise<SponsorBlockState> {
+        requireGuildId(guildId);
+        return this.featureRequest<SponsorBlockState>('sponsorblock:update', { guildId }, { headers: this.jsonHeaders, body: sponsorOptionsBody(options) }, validateSponsorState);
+    }
+    public async setSponsorBlockSegments(guildId: string, segments: SponsorBlockSegment[]): Promise<SponsorBlockState> {
+        requireGuildId(guildId);
+        return this.featureRequest<SponsorBlockState>('sponsorblock:segments', { guildId }, { headers: this.jsonHeaders, body: sponsorSegmentsBody(segments) }, validateSponsorState);
+    }
+    public async clearSponsorBlock(guildId: string): Promise<void> {
+        requireGuildId(guildId);
+        await this.featureRequest('sponsorblock:clear', { guildId }, { headers: this.authHeaders });
     }
 
     public async getPlayers(): Promise<IRESTGetPlayers[] | null> {
