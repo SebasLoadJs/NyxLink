@@ -26,3 +26,7 @@ Both server images are digest-pinned in tests/integration/backend-servers.json. 
 ## Modern NodeLink candidate (initial CI observation)
 
 Pinned NodeLink 97bbce1, image digest sha256:922acc221c5f3239a795ba616e925c01b86f9f41a3ac3bc5c1b2b91859fcc64e, was used in the modern integration run [44997271539](https://github.com/SebasLoadJs/NyxLink/actions/runs/44997271539). Dedicated source-health, group CRUD, SponsorBlock, crossfade control acknowledgment and captions-filter HTTP checks **passed**. The common-protocol test found a confirmed behavioral difference: empty-player timescale filters are retained by the newer NodeLink, while pinned baseline 804e0d6 ignores them. The revision-sensitive assertion was updated accordingly; the initial run was not fully green. This is not live audio or crossfade proof.
+
+### Additional observation (second candidate CI)
+
+The same modern digest later returned an empty filter map for an empty player instead of the previous timescale object. [Run 45038480695](https://github.com/SebasLoadJs/NyxLink/actions/runs/45038480695) demonstrates that this is not a fixed revision-level behavioral change. The integration suite now accepts only an empty map or the exact requested timescale values and reports which state occurred, while maintaining strict request, local filter persistence, ownership and rollback checks. This case does not certify audible filters after track start.
