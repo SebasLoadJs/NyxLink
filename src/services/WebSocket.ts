@@ -17,6 +17,8 @@ export class WebSocket extends EventEmitter {
     private buffer: Buffer = Buffer.alloc(0);
     private fragmentedPayload: Buffer[] = [];
     private fragmentedOpCode: number | null = null;
+    private fragmentedBytes = 0;
+    private readonly MAX_MESSAGE_BYTES = 16 * 1024 * 1024;
     
     private redirectCount: number = 0;
     private readonly MAX_REDIRECTS = 5;
@@ -34,7 +36,10 @@ export class WebSocket extends EventEmitter {
     constructor(url: string, options?: { headers?: Record<string, string> }) {
         super();
         this.url = new URL(url);
-        this.headers = options?.headers || {};
+        if (!["ws:", "wss:"].includes(this.url.protocol) || this.url.username || this.url.password) {
+            throw new TypeError("Invalid WebSocket URL");
+        }
+        this.headers = { ...options?.headers };
         this.redirectCount = 0;
 
         if (isBun) {
@@ -91,40 +96,42 @@ export class WebSocket extends EventEmitter {
             timeout: 10000,
         };
 
-        this.socket = protocol.request(options);
+        const request = protocol.request(options);
+        this.socket = request;
+        const active = () => !this.closeNotified && this.socket === request;
 
-        this.socket.on("response", (res: http.IncomingMessage) => {
+        request.on("response", (res: http.IncomingMessage) => {
+            if (!active()) { res.destroy(); return; }
             const { statusCode, headers } = res;
 
             if (statusCode === 301 || statusCode === 302 || statusCode === 307 || statusCode === 308) {
-                if (this.redirectCount >= this.MAX_REDIRECTS) {
-                    this.socket?.destroy();
-                    this.emit("error", { error: new Error("Too many redirects") });
-                    this.emit("close", { code: 1006, reason: "Too many redirects" });
+                let target: URL;
+                try {
+                    if (this.redirectCount >= this.MAX_REDIRECTS || !headers.location) throw new Error("Invalid WebSocket redirect");
+                    target = new URL(headers.location, this.url);
+                    // Authentication and resume credentials belong only to the configured origin.
+                    // In particular, never follow a secure-to-insecure redirect.
+                    if (target.origin !== this.url.origin || target.username || target.password) {
+                        throw new Error("WebSocket redirect changes origin or credentials");
+                    }
+                } catch (error) {
+                    res.destroy();
+                    this.failConnection(error as Error, 1006, "Rejected WebSocket redirect");
                     return;
                 }
 
-                const newLocation = headers.location;
-                if (!newLocation) {
-                    this.socket?.destroy();
-                    this.emit("error", { error: new Error(`Redirect status ${statusCode} but no 'location' header`) });
-                    this.emit("close", { code: 1006, reason: "Invalid redirect response" });
-                    return;
-                }
-
-                this.socket?.destroy();
+                this.socket = null;
+                res.destroy();
+                request.destroy();
                 this.redirectCount++;
-                
-                this.url = new URL(newLocation, this.url.href); 
-                this.emit("debug", `Redirected to: ${this.url.toString()}`);
-                
-                this.connectNode(); 
+                this.url = target;
+                this.connectNode();
                 return;
             }
 
             if (statusCode !== 101) {
-                this.emit('error', { error: new HttpError(statusCode ?? 0) });
-                this.handleClose(statusCode === 401 || statusCode === 403 ? 1008 : 1006, `HTTP ${statusCode}`);
+                res.destroy();
+                this.failConnection(new HttpError(statusCode ?? 0), statusCode === 401 || statusCode === 403 ? 1008 : 1006, `HTTP ${statusCode}`);
                 switch (statusCode) {
                     case 401:
                         this.emit("debug", "Authentication failed, please check your credentials.");
@@ -138,15 +145,15 @@ export class WebSocket extends EventEmitter {
             }
         });
 
-        this.socket.on("upgrade", (res, socket, head) => {
-            if (this.closeNotified) { socket.destroy(); return; }
+        request.on("upgrade", (res, socket, head) => {
+            if (!active()) { socket.destroy(); return; }
             const expectedKey = createHash("sha1")
               .update(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
               .digest("base64");
 
             if (res.headers["sec-websocket-accept"] !== expectedKey) {
                 socket.destroy();
-                this.emit("error", { error: new Error("Invalid Sec-WebSocket-Accept header") });
+                this.failConnection(new Error("Invalid Sec-WebSocket-Accept header"), 1002, "Invalid handshake");
                 return;
             }
 
@@ -164,35 +171,24 @@ export class WebSocket extends EventEmitter {
                 this.stopHeartbeat();
                 return this.handleClose(1006, "Connection closed abruptly"); 
             });
-            this.netSocket.on("error", (err: Error) => { return this.emit("error", { error: err }); });
+            this.netSocket.on("error", (err: Error) => { if (!this.closeNotified) this.failConnection(err, 1006, "Transport error"); });
             this.processBuffer();
         });
 
-        this.socket.on("error", (err) => {
-            if (this.closeNotified) return;
-            if (this.url.protocol === "wss:" && this.url.hostname === "localhost") {
-                this.emit("debug", "Secure connection failed, trying insecure connection.");
-                this.url.protocol = "ws:";
-                this.connectNode();
-                return;
-            }
-
-            this.emit("error", { error: err });
-            if (!this.connected) {
-                this.redirectCount = 0;
-                this.handleClose(1006, err.message);
-            }
+        request.on("error", (err) => {
+            if (active()) this.failConnection(err, 1006, "Connection failed");
         });
 
-        this.socket.on("timeout", () => {
-            this.emit("error", { error: new Error("Connection timed out") });
-            if (!this.connected) {
-                this.redirectCount = 0;
-                this.handleClose(1006, 'Connection timed out');
-            }
+        request.on("timeout", () => {
+            if (active() && !this.connected) this.failConnection(new Error("Connection timed out"), 1006, "Connection timed out");
         });
 
-        this.socket.end();
+        request.end();
+    }
+
+    private failConnection(error: Error, code: number, reason: string): void {
+        try { this.emit("error", { error }); }
+        finally { this.handleClose(code, reason); }
     }
 
     private nextPingPayload(): Buffer {
@@ -260,12 +256,13 @@ export class WebSocket extends EventEmitter {
     }
 
     private handleData(data: Buffer) {
+        if (this.closeNotified) return;
         this.buffer = Buffer.concat([this.buffer, data]);
         this.processBuffer();
     }
 
     private processBuffer() {
-        while (this.buffer.length >= 2) {
+        while (!this.closeNotified && this.buffer.length >= 2) {
             const firstByte = this.buffer[0];
             const secondByte = this.buffer[1];
             const fin = (firstByte & 0x80) !== 0;
@@ -285,6 +282,10 @@ export class WebSocket extends EventEmitter {
                 offset = 10;
             }
 
+            if (payloadLength > this.MAX_MESSAGE_BYTES) {
+                this.close(1009, "Frame too large");
+                return;
+            }
             const maskingKeyOffset = offset;
             const payloadOffset = maskingKeyOffset + (masked ? 4 : 0);
             const totalLength = payloadOffset + payloadLength;
@@ -316,16 +317,26 @@ export class WebSocket extends EventEmitter {
                     return;
                 }
 
+                if (opcode === 0x0 && this.fragmentedOpCode === null) {
+                    this.close(1002, "Unexpected continuation");
+                    return;
+                }
+                if (this.fragmentedBytes + payload.length > this.MAX_MESSAGE_BYTES) {
+                    this.close(1009, "Message too large");
+                    return;
+                }
                 if (opcode !== 0x0) this.fragmentedOpCode = opcode;
+                this.fragmentedBytes += payload.length;
                 this.fragmentedPayload.push(payload);
 
                 if (fin) {
                     const message = Buffer.concat(this.fragmentedPayload);
                     const messageData = this.fragmentedOpCode === 0x1 ? message.toString() : message;
 
-                    this.emit("message", { data: messageData });
                     this.fragmentedPayload = [];
                     this.fragmentedOpCode = null;
+                    this.fragmentedBytes = 0;
+                    this.emit("message", { data: messageData });
                 }
                 break;
 
@@ -382,11 +393,14 @@ export class WebSocket extends EventEmitter {
         this.buffer = Buffer.alloc(0);
         this.fragmentedPayload = [];
         this.fragmentedOpCode = null;
-        this.emit("close", { code, reason });
-        this.netSocket?.destroy();
+        this.fragmentedBytes = 0;
+        const network = this.netSocket;
+        const request = this.socket;
         this.netSocket = null;
-        this.socket?.destroy();
         this.socket = null;
+        network?.destroy();
+        request?.destroy();
+        this.emit("close", { code, reason });
     }
 
     public send(data: string | Buffer) {
