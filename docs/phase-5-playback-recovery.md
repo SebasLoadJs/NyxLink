@@ -17,3 +17,30 @@ Test coverage in `tests/worker-failure-ownership.test.cjs`:
 - Malformed and repeated guild IDs do not cause extra recovery requests.
 
 **Limitations:** this is an ownership/concurrency regression suite with mocked voice and backend calls. It does not certify Discord audible playback, real voice worker resilience, AutoMix, Crossfade or gap-free failover. The 750 ms cooldown remains for genuinely current recovery. Verifying real Discord transport and the recovered audio stream is a separate opt-in acceptance milestone; the harness does not connect a bot to any server.
+
+
+## 5.2 Voice WebSocket close codes 4022 / NodeLink 5001
+
+Both close codes used to perform disconnect, remote player deletion, a 750 ms
+delay, reconnect and restart without checking whether the source still owned
+the player after each asynchronous boundary. A stale 4022 or NodeLink 5001
+error could therefore interfere with music already moved to another node or
+changed by the user.
+
+The shared recovery path now captures the player's playback intent and
+registration identity, the node's session ID, transport and backend generation.
+It verifies all of these before and after operations, and before any
+destructive error action. Restart is explicitly invoked with
+`destroyOnFailure: false` so the nested operation cannot destroy the player
+before the outer recovery checks its validity. The original progress flag,
+750 ms cooldown and retry counter remain, but the retry counter is reset
+only after an in-scope recovery completes.
+
+Dedicated tests cover both codes during migration, user stop, session
+rotation and rejected stale disconnect, plus a successful 4022 recovery and
+the Lavalink exclusion from NodeLink-only 5001 handling.
+
+**Scope:** this is a deterministic concurrency and ownership regression
+suite. Discord transport, audible stream continuity and actual voice-worker
+resilience are not established by these tests. Real voice acceptance is
+separate and opt-in.
