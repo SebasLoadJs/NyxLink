@@ -34,3 +34,9 @@ The same modern digest later returned an empty filter map for an empty player in
 ### Wire format detail
 
 NodeLink 97bbce1 serializes its filter state as `player.filters.filters.timescale` when a timescale filter is present. Lavalink uses `player.filters.timescale`. The latest integration assertions inspect the server-native envelope and require exactly the expected timescale values when present, with an empty-state outcome still allowed for an empty NodeLink player. This is a protocol representation difference; live audio quality remains unverified.
+
+## Current modern-profile acceptance — 2026-11-22
+
+All four NyxLink CI workflows passed at [b9c451e](https://github.com/SebasLoadJs/NyxLink/commit/b9c451eedc1da1c07dd230a73840ddfe3e2fc951): [protocol tests including the pinned modern NodeLink profile](https://github.com/SebasLoadJs/NyxLink/actions/runs/45038936275), [587/587 automated tests and strict Node.js 22/24 compilation](https://github.com/SebasLoadJs/NyxLink/actions/runs/45038936280), [CodeQL](https://github.com/SebasLoadJs/NyxLink/actions/runs/45038936273) and [endurance](https://github.com/SebasLoadJs/NyxLink/actions/runs/45038936360). Modern NodeLink image version string: 3.10.0-dev.2026-11-15.8; immutable source revision 97bbce1.
+
+Modern results are authoritative for **tested REST and WebSocket operations only**. Group music synchronization, crossfaded audio, AutoMix results and Discord voice remain unverified. The previous baseline image and protocol checks are still retained for regression detection.
