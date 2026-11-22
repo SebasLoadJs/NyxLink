@@ -981,7 +981,10 @@ export class Player {
         const oldPlaying = this.playing;
         this.playing = false;
         this.updateData("playing", this.playing);
-        this.manager.emit("debug", `Moonlink.js > Player#stop >> Player state changed: playing: ${oldPlaying} -> ${this.playing}`);
+        const oldPaused = this.paused;
+        this.paused = false;
+        this.updateData("paused", this.paused);
+        this.manager.emit("debug", `NyxLink > Player#stop >> State changed: playing: ${oldPlaying} -> ${this.playing}, paused: ${oldPaused} -> ${this.paused}`);
 
         const oldTrackTitle = this.current?.title ?? "null";
         this.current = null;
