@@ -710,7 +710,7 @@ export class Rest {
             throw new TypeError('itag is only valid for passthrough and must be positive');
         }
         if (options.range !== undefined && (!passthrough ||
-            !/^bytes=(?:\\d+-\\d*|-\\d+)$/.test(options.range) || options.range.length > 64)) {
+            !/^bytes=(?:\d+-\d*|-\d+)$/.test(options.range) || options.range.length > 64)) {
             throw new TypeError('HTTP Range requires passthrough and a valid single byte range');
         }
         if (payload.volume !== undefined && (!Number.isFinite(payload.volume) || payload.volume < 0 || payload.volume > 1000) ||
