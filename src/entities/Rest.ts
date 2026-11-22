@@ -1,4 +1,5 @@
 import type http from "node:http";
+import { validateLoadResponse, validateTrackResponse, ProtocolResponseError } from "../backends/ProtocolValidation";
 import { HttpError } from "../errors/HttpError";
 import type { BackendAdapter } from "../backends/BackendAdapter";
 import { preparePlayerUpdate, type PlayerUpdatePayload, type SessionUpdateResponse } from "../backends/ProtocolContracts";
@@ -174,34 +175,42 @@ export class Rest {
         params.append("identifier", identifier);
 
         const protectedRequest = this.node.circuit.enabled;
-        const res = await this.node.circuit.run(() => makeRequest<any>(`${this.url}/v4/loadtracks?${params}`, {
-            method: "GET",
-            headers: this.authHeaders,
-            throwOnError: protectedRequest || options !== undefined,
-            signal: options?.signal
-        }, options?.timeoutMs ?? 10000, protectedRequest || options ? 0 : 3));
-
-        return res || { loadType: "empty", data: {} };
+        return this.node.circuit.run(async () => {
+            const res = await makeRequest<unknown>(`${this.url}/v4/loadtracks?${params}`, {
+                method: "GET",
+                headers: this.authHeaders,
+                throwOnError: protectedRequest || options !== undefined,
+                signal: options?.signal
+            }, options?.timeoutMs ?? 10000, protectedRequest || options ? 0 : 3);
+            if (res === undefined || res === null) return { loadType: "empty", data: {} };
+            validateLoadResponse(res);
+            return res;
+        });
     }
 
     public async decodeTrack(encodedTrack: string): Promise<ITrack | null> {
         const params = new URLSearchParams();
         params.append("encodedTrack", encodedTrack);
 
-        const res = await makeRequest<ITrack>(`${this.url}/v4/decodetrack?${params}`, {
+        const res = await makeRequest<unknown>(`${this.url}/v4/decodetrack?${params}`, {
             method: "GET",
             headers: this.authHeaders
         });
-        return res || null;
+        if (res === undefined || res === null) return null;
+        validateTrackResponse(res);
+        return res;
     }
 
     public async decodeTracks(encodedTracks: string[]): Promise<ITrack[] | null> {
-        const res = await makeRequest<ITrack[]>(`${this.url}/v4/decodetracks`, {
+        const res = await makeRequest<unknown>(`${this.url}/v4/decodetracks`, {
             method: "POST",
             headers: this.jsonHeaders,
             body: encodedTracks
         });
-        return res || null;
+        if (res === undefined || res === null) return null;
+        if (!Array.isArray(res)) throw new ProtocolResponseError('decode tracks', 'track array');
+        for (const track of res) validateTrackResponse(track, 'decode tracks');
+        return res;
     }
 
     public async getInfo(): Promise<any | null> {

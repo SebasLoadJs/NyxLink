@@ -29,3 +29,7 @@ NodeLink-specific new features and expanded Lavalink plugin integrations belong 
 ## 2.3 Shared player protocol contracts
 
 The public contracts distinguish common v4 player operations from NodeLink-only extensions. BackendAdapter.preparePlayerUpdate centralizes extension admission, including explicit null/false values. The legacy raw extension boundary retains additional plugin fields. Both Player and direct Rest callers use this policy. Lavalink's documented endTime field is common rather than NodeLink-only ([v4 Update Player](https://lavalink.dev/api/rest#update-player)). Session update responses have a typed contract. Further REST response validation and explicit endpoint routing remain separate increments.
+
+## 2.4 Runtime protocol validation
+
+Search and decoding now validate unknown wire responses at the REST boundary. The same validator protects native/custom search providers before construction or caching. Malformed metadata emits a typed ProtocolResponseError without raw payloads. Opaque encoded tracks are preserved; missing optional plugin metadata remains compatible. This is not a blanket validation of every REST endpoint: player/session acknowledgments and extension-specific response schemas remain follow-up work.

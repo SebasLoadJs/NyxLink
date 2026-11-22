@@ -1,4 +1,5 @@
 import type { Manager } from '../core/Manager';
+import { validateLoadResponse } from '../backends/ProtocolValidation';
 import type { Node } from '../entities/Node';
 import type { SearchResult } from '../structures/SearchResult';
 import type { IRESTLoadTracks, ISearchQuery } from '../typings/Interfaces';
@@ -26,18 +27,8 @@ export class SearchService {
         });
     }
 
-    private validate(result: IRESTLoadTracks): void {
-        if (!result || typeof result !== 'object' || !['track', 'search', 'playlist', 'empty', 'error'].includes(result.loadType)) throw new TypeError('Invalid search response');
-        const track = (value: any) => value && typeof value.encoded === 'string' && value.encoded.length > 0 && value.info && typeof value.info === 'object';
-        if (result.loadType === 'track' && !track(result.data) ||
-            result.loadType === 'search' && (!Array.isArray(result.data) || !result.data.every(track)) ||
-            result.loadType === 'playlist' && (!result.data?.info || !Array.isArray(result.data.tracks) || !result.data.tracks.every(track))) {
-            throw new TypeError('Invalid search response payload');
-        }
-    }
-
     private present(response: IRESTLoadTracks, query: ISearchQuery, node?: Node): SearchResult {
-        this.validate(response);
+        validateLoadResponse(response);
         const result: SearchResult = new (Structure.get('SearchResult'))(response, query.requester, this.manager.options.search?.playlistLoadLimit, this.manager.options.trackPartial ?? []);
         if (result.loadType === 'search') result.tracks = result.tracks.slice(0, this.manager.options.search?.resultLimit ?? 10);
         const disabled = this.manager.options.sources?.disabledSources ?? [];
@@ -93,11 +84,11 @@ export class SearchService {
                 const prefix = Object.hasOwn(sources, platform) ? sources[platform as keyof typeof sources] : platform;
                 const identifier = isUrl ? query.query : `${prefix}:${query.query}`;
                 response = await this.wait(node.rest.loadTracks(identifier, { timeoutMs, signal }), signal);
-                this.validate(response);
+                validateLoadResponse(response);
                 if (!['empty', 'error'].includes(response.loadType) && !(response.loadType === 'search' && response.data.length === 0)) break;
             }
             signal.throwIfAborted();
-            this.validate(response);
+            validateLoadResponse(response);
             if (ttl && !options.resolver && !['empty', 'error'].includes(response.loadType)) {
                 try {
                     const value = structuredClone(response);
