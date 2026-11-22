@@ -358,12 +358,17 @@ export class Node {
     return this.rest.getSourceHealth();
   }
 
-  /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
+  /**
+   * NodeLink-only decoded audio. Optional seekMode:'pcm-trim' supports
+   * raw PCM (not WAV) and decodes from the beginning before cropping
+   * locally, with a maximum offset of 30 seconds.
+   */
   public async loadDirectStream(
     track: string | ITrack | Track | { encoded?: string },
     volume?: number,
     position?: number,
-    filters?: IFilters | Record<string, any>
+    filters?: IFilters | Record<string, any>,
+    options: { signal?: AbortSignal; timeoutMs?: number; seekMode?: 'server' | 'pcm-trim' } = {}
   ): Promise<{ stream: NodeJS.ReadableStream; headers: Record<string, any> }> {
     const encoded =
       typeof track === "string" ? track : track?.encoded;
@@ -379,7 +384,7 @@ export class Node {
     if (volume !== undefined) payload.volume = volume;
     if (position !== undefined) payload.position = position;
     if (filters !== undefined) payload.filters = filters;
-    return this.rest.loadStream(payload);
+    return this.rest.loadStream(payload, options);
   }
 
   /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */

@@ -185,6 +185,21 @@ let seekMetadataProbe = { status: 'not-run' };
           }
 
         }
+        // Real workaround acceptance: NodeLink's native seek for this HTTP
+        // WAV is still broken. The explicit client seek decodes from zero,
+        // drops 500 ms of raw PCM and returns only the real audio tail.
+        assert.equal(typeof longerEncoded, 'string', 'Seek fixture must resolve');
+        const baselinePcm = await streamAudio(node.rest, longerEncoded, { format:'raw', position:0 });
+        const trimmedPcm = await streamAudio(node.rest, longerEncoded,
+          { format:'raw', position:500 }, { seekMode:'pcm-trim' });
+        const removed = baselinePcm.evidence.bytes - trimmedPcm.evidence.bytes;
+        assert.equal(removed, 500 * 192, 'Client seek must remove exactly 500 ms of PCM');
+        assert.ok(trimmedPcm.evidence.rms > 10 && trimmedPcm.evidence.nonZero > 1000,
+          'Client-seek tail must contain actual non-silent audio');
+        const expected = baselinePcm.data.subarray(removed);
+        assert.equal(trimmedPcm.data.length, expected.length, 'Client seek must preserve the remaining decoded frames');
+        // Do not conflate backend seekEvidence (still failed) with client mode.
+        checks.push('explicit client PCM seek: 500 ms removed, non-silent tail, backend native seek still unresolved');
         const lyrics = await node.rest.loadLyrics(loaded.data.encoded,{type:'onlyCaptions',source:'youtube',lang:'es'});
         assert.ok(lyrics && ['empty','error','lyrics'].includes(lyrics.loadType));
         checks.push('captions request with disabled providers');
