@@ -468,15 +468,16 @@ export class Rest {
         const result = await this.node.circuit.run(async () => {
             try {
                 return await makeRequest<unknown>(this.url + '/v4/lyrics?' + params.toString(), {
-                    method: 'GET', headers: this.authHeaders, throwOnError: true
+                    method: 'GET', headers: this.authHeaders, throwOnError: true,
+                    noContentAsNull: true
                 }, 10000, 0);
             } catch (error) {
                 this.featureError('lavalyrics', error, backend, current);
             }
         });
-        // The shared HTTP transport represents a bodyless 204 as an empty
-        // string. Never accept an empty JSON object as a valid 200 response.
-        if (result === '') {
+        // HTTP 204 is null even if the server labels the empty body JSON.
+        // Malformed 200 responses (including {}) still fail validation.
+        if (result === null) {
             if (current()) backend.recordFeature('lavalyrics', 'available');
             return null;
         }
