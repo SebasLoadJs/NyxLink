@@ -1,5 +1,5 @@
 import { requireGroupId, requireGuildId, groupCreateBody, groupPatchBody, validateGroup, validateGroups, validateGroupPatch, sponsorOptionsBody, sponsorSegmentsBody, validateSponsorState, type PlayerGroup, type GroupCreate, type GroupPatch, type GroupPatchResult, type SponsorBlockOptions, type SponsorBlockSegment, type SponsorBlockState } from '../backends/NodeLinkOrchestration';
-import { lyricsParameters, validateSourceHealth, type LyricsRequestOptions, type SourceHealthResponse } from '../backends/NodeLinkContracts';
+import { lyricsParameters, validateSourceHealth, validateNodeLinkStreamFormats, type LyricsRequestOptions, type SourceHealthResponse, type NodeLinkStreamFormats } from '../backends/NodeLinkContracts';
 import { hasLavaLyricsPlugin, lavaLyricsParameters, validateLavaLyrics, type LavaLyricsData, type LavaLyricsOptions } from '../backends/LavaLyricsContracts';
 import { hasLavalinkSponsorBlockPlugin, lavalinkSponsorBlockPath, sponsorBlockCategoryBody, validateSponsorBlockCategories, type LavalinkSponsorBlockCategory } from '../backends/LavalinkSponsorBlockContracts';
 import type http from "node:http";
@@ -661,21 +661,57 @@ export class Rest {
     }
 
     /**
+     * Newer NodeLink (2026-11-22+) lists the available original audio/video
+     * representations via POST /v4/loadstream, format:'formats'. This is
+     * JSON metadata, NEVER a PCM/audio stream. Older servers may return 400.
+     */
+    public async getStreamFormats(encodedTrack: string, options: { itag?: number; signal?: AbortSignal; timeoutMs?: number } = {}): Promise<NodeLinkStreamFormats> {
+        this.node.assertFeature('loadstream');
+        if (typeof encodedTrack !== 'string' || !encodedTrack.trim()) throw new TypeError('Stream formats require an encoded track');
+        if (options.itag !== undefined && (!Number.isSafeInteger(options.itag) || options.itag <= 0)) throw new TypeError('itag must be a positive integer');
+        if (options.timeoutMs !== undefined && (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1 || options.timeoutMs > 30000)) throw new RangeError('Invalid stream formats timeout');
+        const route = this.extensionRoute('loadstream');
+        const backend = this.node.backend;
+        const socket = this.node.socket;
+        const session = this.node.sessionId;
+        const current = () => !this.node.destroyed && this.node.backend === backend &&
+            this.node.socket === socket && this.node.sessionId === session;
+        try {
+            const response = await makeRequest<unknown>(this.url + route.path, {
+                method: route.method, headers: this.jsonHeaders,
+                body: { encodedTrack, format: 'formats', ...(options.itag !== undefined ? { itag: options.itag } : {}) },
+                signal: options.signal, throwOnError: true,
+            }, options.timeoutMs ?? 10000, 0);
+            validateNodeLinkStreamFormats(response);
+            if (current()) backend?.recordFeature('loadstream', 'available');
+            return response;
+        } catch (error) { this.featureError('loadstream', error, backend, current); }
+    }
+
+    /**
      * NodeLink-only decoded audio API. The native server-side position path
      * remains the default. Opt-in seekMode:'pcm-trim' fetches position=0 raw
      * PCM and discards the first N ms locally; it is not a decoder/source seek.
      * This mode supports raw/pcm only and is capped at 30 seconds to bound
      * wasted decoding and bandwidth. Errors are never retried or suppressed.
      */
-    public async loadStream(payload: { encodedTrack: string; volume?: number; position?: number; format?: 'raw' | 'pcm' | 'wav'; filters?: IFilters | Record<string, any> }, options: { signal?: AbortSignal; timeoutMs?: number; seekMode?: 'server' | 'pcm-trim' } = {}): Promise<{ stream: NodeJS.ReadableStream; headers: Record<string, any> }> {
+    public async loadStream(payload: { encodedTrack: string; volume?: number; position?: number; format?: 'raw' | 'pcm' | 'wav' | 'passthrough' | 'original' | 'source'; itag?: number; filters?: IFilters | Record<string, any> }, options: { signal?: AbortSignal; timeoutMs?: number; seekMode?: 'server' | 'pcm-trim'; range?: string } = {}): Promise<{ stream: NodeJS.ReadableStream; headers: Record<string, any>; statusCode: number }> {
         this.node.assertFeature('loadstream');
-        // NodeLink's wire format is 'raw' (16-bit stereo PCM) or 'wav'.
-        // Keep the older NyxLink 'pcm' name as a client-side alias only.
+        // Only raw/wav represent decoded PCM. Newer NodeLink also supports
+        // original compressed bytes through passthrough. Keep 'pcm' as alias.
         if (!payload || typeof payload !== 'object' || typeof payload.encodedTrack !== 'string' || !payload.encodedTrack.trim()) {
             throw new TypeError('LoadStream requires an encoded track');
         }
-        if (payload.format !== undefined && !['raw', 'pcm', 'wav'].includes(payload.format)) {
-            throw new TypeError('LoadStream format must be raw or wav');
+        if (payload.format !== undefined && !['raw', 'pcm', 'wav', 'passthrough', 'original', 'source'].includes(payload.format)) {
+            throw new TypeError('LoadStream format must be raw, wav or passthrough (formats JSON uses getStreamFormats)');
+        }
+        const passthrough = ['passthrough', 'original', 'source'].includes(payload.format ?? '');
+        if (payload.itag !== undefined && (!passthrough || !Number.isSafeInteger(payload.itag) || payload.itag <= 0)) {
+            throw new TypeError('itag is only valid for passthrough and must be positive');
+        }
+        if (options.range !== undefined && (!passthrough ||
+            !/^bytes=(?:\d+-\d*|-\d+)$/.test(options.range) || options.range.length > 64)) {
+            throw new TypeError('HTTP Range requires passthrough and a valid single byte range');
         }
         if (payload.volume !== undefined && (!Number.isFinite(payload.volume) || payload.volume < 0 || payload.volume > 1000) ||
             payload.position !== undefined && (!Number.isFinite(payload.position) || payload.position < 0) ||
@@ -687,12 +723,13 @@ export class Rest {
         }
         const clientTrim = options.seekMode === 'pcm-trim';
         if (clientTrim) {
-            if (payload.format === 'wav') throw new TypeError('Client PCM seeking supports raw/pcm only; WAV headers cannot be preserved');
+            if (payload.format !== undefined && !['raw', 'pcm'].includes(payload.format)) throw new TypeError('Client PCM seeking supports raw/pcm only; original bytes cannot be trimmed as PCM');
             assertClientPcmSeekPosition(payload.position ?? 0);
         }
         const requestPayload = clientTrim
             ? { ...payload, position: 0, format: 'raw' as const }
-            : payload.format === 'pcm' ? { ...payload, format: 'raw' as const } : payload;
+            : payload.format === 'pcm' ? { ...payload, format: 'raw' as const }
+            : passthrough ? { ...payload, format: 'passthrough' as const } : payload;
         const route = this.extensionRoute('loadstream');
         const backend = this.node.backend;
         const socket = this.node.socket;
@@ -701,10 +738,12 @@ export class Rest {
             this.node.socket === socket && this.node.sessionId === session;
         try {
             const res = await makeStreamRequest(this.url + route.path, {
-                method: route.method, headers: this.jsonHeaders, body: requestPayload, signal: options.signal,
+                method: route.method,
+                headers: options.range ? { ...this.jsonHeaders, Range: options.range } : this.jsonHeaders,
+                body: requestPayload, signal: options.signal,
             }, options.timeoutMs ?? 100000);
             if (current()) backend?.recordFeature('loadstream', 'available');
-            if (!clientTrim) return { stream: res.stream, headers: res.headers };
+            if (!clientTrim) return { stream: res.stream, headers: res.headers, statusCode: res.statusCode };
             const headers = { ...res.headers };
             // Local cropping changes output length and invalidates backend
             // range/length framing. Do not expose stale remote metadata.
@@ -714,7 +753,7 @@ export class Rest {
             delete headers['accept-ranges'];
             return {
                 stream: createClientPcmSeekStream(res.stream, payload.position ?? 0),
-                headers,
+                headers, statusCode: res.statusCode,
             };
         } catch (error) { this.featureError('loadstream', error, backend, current); }
     }

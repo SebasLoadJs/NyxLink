@@ -156,3 +156,53 @@ export function normalizeCrossfade(value: unknown): CrossfadeOptions {
 
 /** Opt-in queue preparation, with a lead window measured in milliseconds. */
 export interface QueuePreloadOptions { enabled: boolean; leadMs?: number }
+
+
+/** NodeLink's 2026-11-22 /v4/loadstream format=formats payload. */
+export interface NodeLinkStreamFormat {
+    itag: number | null;
+    type: 'audio' | 'video' | 'muxed' | null;
+    format: string | null;
+    codec: string | null;
+    mimeType: string | null;
+    bitrate: number | null;
+    quality: string | null;
+    width: number | null;
+    height: number | null;
+    fps: number | null;
+    contentLength: number | null;
+}
+export interface NodeLinkStreamFormats {
+    source: string;
+    protocol: string;
+    format: string | null;
+    mimeType: string;
+    itag: number | null;
+    seekable: boolean;
+    byteRangeSupported: boolean;
+    formats: NodeLinkStreamFormat[];
+}
+
+/** Keep malformed JSON metadata out of downstream stream-selection logic. */
+export function validateNodeLinkStreamFormats(value: unknown): asserts value is NodeLinkStreamFormats {
+    const invalid = (part: string): never => { throw new ProtocolResponseError('NodeLink stream formats', part); };
+    const nullableString = (v: unknown): boolean => v === null || typeof v === 'string';
+    const nullableCount = (v: unknown): boolean => v === null || number(v);
+    const nullableItag = (v: unknown): boolean => v === null || (count(v) && (v as number) > 0);
+    if (!obj(value)) invalid('envelope');
+    const catalogue = value as Record<string, unknown>;
+    if (typeof catalogue.source !== 'string' || typeof catalogue.protocol !== 'string' ||
+        !nullableString(catalogue.format) || typeof catalogue.mimeType !== 'string' || !nullableItag(catalogue.itag) ||
+        typeof catalogue.seekable !== 'boolean' || typeof catalogue.byteRangeSupported !== 'boolean' ||
+        !Array.isArray(catalogue.formats) || catalogue.formats.length > 256) invalid('envelope');
+    const formats = catalogue.formats as unknown[];
+    for (const format of formats) {
+        if (!obj(format) || !nullableItag(format.itag) ||
+            ![null, 'audio', 'video', 'muxed'].includes(format.type as any) ||
+            !nullableString(format.format) || !nullableString(format.codec) ||
+            !nullableString(format.mimeType) || !nullableString(format.quality) ||
+            !nullableCount(format.bitrate) || !nullableCount(format.width) ||
+            !nullableCount(format.height) || !nullableCount(format.fps) ||
+            !nullableCount(format.contentLength)) invalid('format entry');
+    }
+}

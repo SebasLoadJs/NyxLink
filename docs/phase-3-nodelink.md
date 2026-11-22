@@ -131,3 +131,46 @@ modern-nodelink CI job**. PCM volume processing alone does not prove
 position decoding, Opus encoding, UDP/Discord voice transport,
 sample-accurate two-track crossfade, AutoMix or survival of real voice
 disconnections. Those remain separate acceptance gates.
+
+
+## 3.14 NodeLink original media passthrough and format discovery (upstream 2026-11-22)
+
+NodeLink `dev` commit
+[`a283f2f4`](https://github.com/PerformanC/NodeLink/commit/a283f2f4e2f16e856a0da315a946fad2bfb9989d)
+introduced two new `POST /v4/loadstream` representations:
+
+- `format:'formats'`: a **JSON** metadata catalogue listing source, protocol,
+  MIME type, optional itag and available formats. NyxLink exposes this as
+  `node.getStreamFormats(track)` and `node.rest.getStreamFormats(encodedTrack)`,
+  with nested response validation and bounded HTTP timeout. The JSON catalogue
+  is not a readable audio stream.
+- `format:'passthrough'` (including wire aliases `'original'`/`'source'`):
+  source-container bytes **without PCM decoding or filters**. NyxLink exposes
+  `node.loadSourceStream(track, { itag, range })` and supports the same mode
+  in `node.rest.loadStream`. The response includes HTTP `statusCode` so a
+  caller can distinguish a confirmed `206` partial response from a `200`
+  origin that ignored `Range`. The source format must be inspected from the
+  returned HTTP headers, **not assumed to be PCM/WAV**.
+
+Example:
+
+```ts
+const formats = await node.getStreamFormats(track);
+const { stream, headers, statusCode } = await node.loadSourceStream(track, {
+  range: 'bytes=0-65535',
+});
+if (statusCode !== 206) throw new Error('Source ignored the requested byte range');
+// stream contains source-container data, not decoded S16LE samples.
+```
+
+Single HTTP byte ranges are strictly validated; newline injection, multipart
+ranges, invalid itag values, and use of `pcm-trim` with compressed passthrough
+are rejected before network I/O. The legacy PCM/WAV API is unchanged.
+
+**Compatibility gate:** the NyxLink isolated modern NodeLink image is
+currently pinned to older commit `97bbce1`, which predates these extensions.
+A green pinned-container CI run validates the existing PCM protocol; the new
+formats/passthrough client behavior is separately verified by local HTTP
+protocol fixtures. Do **not** claim new NodeLink binary features were
+integration-tested against the latest upstream build until a newer immutable
+container revision is published, pinned, and exercised.
