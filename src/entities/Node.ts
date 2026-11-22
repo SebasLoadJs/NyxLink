@@ -1368,8 +1368,9 @@ export class Node {
     this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck >> Track stuck for player ${player.guildId}: "${track?.title}". Threshold: ${thresholdMs}ms. Payload: ${stringifyWithReplacer(payload)}.`);
 
     this.manager.emit("trackStuck", player, track, thresholdMs, payload);
-    // Event listeners may schedule a replacement track synchronously.
-    if (!unchanged()) return;
+    // There is nothing to recover without an active track. Event listeners may
+    // also schedule a replacement track synchronously.
+    if (!track || !unchanged()) return;
 
     if (track && track.duration === -1) {
         this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck >> Track has -1 duration (stream?), skipping auto-recovery to prevent loops for player ${player.guildId}.`);
