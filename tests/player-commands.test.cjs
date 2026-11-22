@@ -406,3 +406,38 @@ test('seek queued after explicit play is cancelled by a later stop intent', asyn
   assert.equal(requests.some(r => r.payload.position === 42000), false);
   assert.equal(player.current, null);
 });
+
+test('seek queued after replacing a playing track seeks the replacement', async t => {
+  const { player, requests } = createPlayer(t);
+  const original = createTrack('replace-seek-original');
+  player.current = original;
+  player.playing = true;
+  const replacement = createTrack('replace-seek-new');
+  const playing = player.play({ track: replacement });
+  const seeking = player.seek(42000);
+  assert.equal(await playing, true);
+  await seeking;
+  assert.equal(player.current, replacement);
+  assert.equal(original.position, 0);
+  assert.equal(replacement.position, 42000);
+  assert.equal(requests.at(-1).payload.position, 42000);
+});
+
+test('seek queued after a failed explicit play does not move the former track', async t => {
+  const { node, player, requests } = createPlayer(t);
+  const original = createTrack('failed-replacement-original');
+  player.current = original;
+  player.playing = true;
+  const originalUpdate = node.rest.updatePlayer;
+  node.rest.updatePlayer = async (guild, payload) => {
+    if (payload.track?.encoded) throw new Error('replacement failed');
+    return originalUpdate(guild, payload);
+  };
+  const playing = player.play({ track: createTrack('failed-replacement-new') });
+  const seeking = player.seek(42000);
+  assert.equal(await playing, false);
+  await seeking;
+  assert.equal(player.current, original);
+  assert.equal(original.position, 0);
+  assert.equal(requests.some(request => request.payload.position === 42000), false);
+});
