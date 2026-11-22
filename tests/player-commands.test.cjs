@@ -323,3 +323,15 @@ test('stuck event without an active track does not seek an idle player', async t
   await node.handleTrackStuck(player, { thresholdMs: 10000 });
   assert.deepEqual(requests, []);
 });
+
+test('orphan trackException does not stop an idle player or consume queued tracks', async t => {
+  const { node, player, requests } = createPlayer(t);
+  const queued = createTrack('queued-after-exception');
+  player.queue.add(queued);
+  await node.handleTrackException(player, {
+    exception: { severity: 'fault', message: 'late error from old track' },
+  });
+  assert.equal(player.current, null);
+  assert.equal(player.queue.first, queued);
+  assert.deepEqual(requests, []);
+});
