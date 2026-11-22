@@ -251,7 +251,7 @@ export type ResponseWithHeaders<T> = {
 
 export function makeRequest<T = any>(
   initialUrl: string,
-  options: http.RequestOptions & { body?: any; returnHeaders: true; throwOnError?: boolean; allowedOrigins?: readonly string[] },
+  options: http.RequestOptions & { body?: any; returnHeaders: true; throwOnError?: boolean; allowedOrigins?: readonly string[]; noContentAsNull?: boolean },
   timeout?: number,
   retries?: number,
   retryDelay?: number,
@@ -260,7 +260,7 @@ export function makeRequest<T = any>(
 
 export function makeRequest<T = any>(
   initialUrl: string,
-  options: http.RequestOptions & { body?: any; returnHeaders?: false; throwOnError?: boolean; allowedOrigins?: readonly string[] },
+  options: http.RequestOptions & { body?: any; returnHeaders?: false; throwOnError?: boolean; allowedOrigins?: readonly string[]; noContentAsNull?: boolean },
   timeout?: number,
   retries?: number,
   retryDelay?: number,
@@ -269,7 +269,7 @@ export function makeRequest<T = any>(
 
 export async function makeRequest<T = any>(
   initialUrl: string,
-  options: http.RequestOptions & { body?: any; returnHeaders?: boolean; throwOnError?: boolean; allowedOrigins?: readonly string[] },
+  options: http.RequestOptions & { body?: any; returnHeaders?: boolean; throwOnError?: boolean; allowedOrigins?: readonly string[]; noContentAsNull?: boolean },
   timeout = 100000,
   retries = 3,
   retryDelay = 1000,
@@ -389,6 +389,15 @@ export async function makeRequest<T = any>(
                 const contentType = res.headers["content-type"] || "";
 
                 if (body.length === 0) {
+                  // An explicit opt-in preserves the HTTP 204 no-body semantics
+                  // even when the server labels it application/json. Ordinary
+                  // empty 200 JSON remains {}, never an implicit 204.
+                  if (statusCode === 204 && options.noContentAsNull) {
+                    const empty = null as T;
+                    return resolve(returnHeaders
+                      ? { data: empty, headers: res.headers }
+                      : empty);
+                  }
                   if (contentType.includes("application/json")) {
                     const emptyJson = {} as T;
                     return resolve(

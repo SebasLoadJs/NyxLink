@@ -27,7 +27,8 @@
     "test:endurance": "pnpm run build && node scripts/endurance.cjs",
     "test:package": "pnpm run build && node scripts/test-package.cjs",
     "test:extensions": "pnpm run build && node scripts/test-extensions.cjs",
-    "test:coverage": "pnpm run build && node --test --experimental-test-coverage --test-coverage-exclude='tests/**' tests/*.test.cjs"
+    "test:coverage": "pnpm run build && node --test --experimental-test-coverage --test-coverage-exclude='tests/**' tests/*.test.cjs",
+    "test:lavalink-plugins": "pnpm run build && node scripts/test-lavalink-plugins.cjs"
   },
   "homepage": "https://github.com/SebasLoadJs/NyxLink#readme",
   "bugs": {

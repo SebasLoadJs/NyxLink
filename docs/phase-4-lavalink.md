@@ -59,3 +59,27 @@ The public category union covers `sponsor`, `selfpromo`, `interaction`, `intro`,
 The `tests/lavalink-sponsorblock.test.cjs` fixture covers the actual GET/PUT/DELETE HTTP methods, JSON array payloads, plugin gating, category validation, invalid paths, missing players, feature unavailability, and backend replacement during an in-flight request. A separate real plugin server, live segments and WebSocket `SegmentsLoaded`/`SegmentSkipped` events are **not** yet certified.
 
 Future work: pin an optional SponsorBlock-enabled Lavalink server; verify live audio segments and chapter events with controlled tracks. Do not equate an HTTP 204 with successful audible skipping.
+
+## 4.3 Real installed-plugin acceptance laboratory (CI verified, 2026-11-22)
+
+The isolated `pnpm run test:lavalink-plugins` profile starts the same **digest-pinned Lavalink 4.2.2 image** used by the core protocol suite, but installs only these exact official Maven coordinates:
+
+- `com.github.topi314.lavalyrics:lavalyrics-plugin:1.1.0` ([upstream release](https://github.com/topi314/LavaLyrics/releases/tag/1.1.0))
+- `com.github.topi314.sponsorblock:sponsorblock-plugin:3.0.1` ([upstream release](https://github.com/topi314/SponsorBlock-Plugin/releases/tag/3.0.1))
+
+The dependencies are fetched from `https://maven.lavalink.dev/releases` into a temporary, container-only writable plugin folder. The application config and password are generated for each run and removed in the cleanup path. No jar or external Java plugin source is vendored into the NyxLink repository. The script records observed downloaded JAR SHA-256 hashes in the local report for later supply-chain review, but hashes are **not yet separately approved pins**.
+
+The test starts a local HTTP WAV source, requires both plugins to appear in actual `/v4/info`, checks NyxLink's backend identity, and tests the LavaLyrics no-provider HTTP request. **LavaLyrics 1.1.0 throws when no lyric manager is registered**; this is an explicit server-side HTTP 500 limitation and should not be mistaken for a lyric-not-found 204. The lab records the actual outcome and verifies that NyxLink does not mark an unsupported inference as confirmed. It also creates a paused, non-playing remote player for a SponsorBlock category GET(404)→PUT→GET(categories)→DELETE→GET(404) round-trip. **SponsorBlock 3.0.1 returns 404 for an absent guild category record**, rather than an empty list; that behavior is verified against [its released implementation](https://github.com/topi314/SponsorBlock-Plugin/blob/3.0.1/src/main/java/com/github/topi314/sponsorblock/plugin/SponsorBlockPlugin.java). Java module loading, endpoint routing and authenticated REST communication are tested against a real Lavalink server, **not fixture response mocks**.
+
+Run only on an authorized Linux machine with Docker or Podman:
+
+```bash
+pnpm install --frozen-lockfile
+NYXLINK_CONTAINER_ENGINE=docker pnpm run test:lavalink-plugins
+```
+
+The independent CI job `lavalink-plugins` is part of `.github/workflows/backend-integration.yml`. Its evidence file is `.runtime/lavalink-plugins/latest-report.json`. A successful run confirms real plugin startup and the tested no-provider/category behavior, not lyrics from Spotify/Deezer, synchronization of live lyric events, a playable SponsorBlock segment, audible music, or Discord voice.
+
+The [real plugin GitHub Actions job](https://github.com/SebasLoadJs/NyxLink/actions/runs/45046994794) completed successfully on PR #20 with **four real-server checks**: both plugins advertised, HTTP WAV loading, LavaLyrics no-manager response, and SponsorBlock absent-state/PUT/GET/DELETE transitions. This is real **installed-plugin REST** evidence, not certification of lyric retrieval, segment skipping or audio quality. Pinning the plugin JAR checksums separately and testing controlled eligible playback remain release gates.
+
+Source-level distinction: [`LyricsManager.loadLyrics`](https://github.com/topi314/LavaLyrics/blob/1.1.0/main/src/main/java/com/github/topi314/lavalyrics/LyricsManager.java) throws `IllegalStateException("No lyrics managers registered")` when its list of managers is empty, before provider lookup; [`LavaLyricsPlugin.loadLyrics`](https://github.com/topi314/LavaLyrics/blob/1.1.0/plugin/src/main/java/com/github/topi314/lavalyrics/plugin/LavaLyricsPlugin.kt) returns 204 only if `LyricsManager.loadLyrics` returns null. A successful no-provider lab check therefore **does not** certify retrieval or fallback of any lyric content.
