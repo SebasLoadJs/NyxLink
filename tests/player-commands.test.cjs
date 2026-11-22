@@ -497,3 +497,34 @@ test('stop waits until persisted playing, paused and current fields are written'
   assert.equal(saved.paused, false);
   assert.equal(saved.current, null);
 });
+
+test('autoLeave does not destroy a player when queueEnd listener starts a new track', async t => {
+  const { manager, node, player } = createPlayer(t);
+  player.autoLeave = true;
+  const replacement = createTrack('queue-end-replacement');
+  let pending;
+  manager.once('queueEnd', () => { pending = player.play({ track: replacement }); });
+  await node.handleQueueEnd(player, createTrack('finished'));
+  assert.equal(await pending, true);
+  assert.equal(player.destroyed, false);
+  assert.equal(player.current, replacement);
+});
+
+test('autoLeave does not destroy a player when autoLeaved listener starts playback', async t => {
+  const { manager, node, player } = createPlayer(t);
+  player.autoLeave = true;
+  const replacement = createTrack('autoleaved-replacement');
+  let pending;
+  manager.once('autoLeaved', () => { pending = player.play({ track: replacement }); });
+  await node.handleQueueEnd(player, createTrack('finished'));
+  assert.equal(await pending, true);
+  assert.equal(player.destroyed, false);
+  assert.equal(player.current, replacement);
+});
+
+test('autoLeave still destroys an idle player after queueEnd', async t => {
+  const { node, player } = createPlayer(t);
+  player.autoLeave = true;
+  await node.handleQueueEnd(player, createTrack('finished'));
+  assert.equal(player.destroyed, true);
+});
