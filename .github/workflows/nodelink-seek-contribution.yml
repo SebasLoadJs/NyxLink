@@ -1,0 +1,59 @@
+name: NodeLink seek contribution acceptance
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'contrib/nodelink/**'
+      - 'scripts/test-nodelink-server-seek.cjs'
+      - 'tests/helpers/backend-lab.cjs'
+      - '.github/workflows/nodelink-seek-contribution.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  patched-nodelink-wav-seek:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out NyxLink (patch and regression harness)
+        uses: actions/checkout@v4
+      - name: Check out exact upstream NodeLink revision
+        uses: actions/checkout@v4
+        with:
+          repository: PerformanC/NodeLink
+          ref: a283f2f4e2f16e856a0da315a946fad2bfb9989d
+          path: .runtime/nodelink-upstream
+          persist-credentials: false
+      - name: Validate and apply proposed upstream patch
+        shell: bash
+        run: |
+          git -C .runtime/nodelink-upstream apply --check ../../contrib/nodelink/http-wav-seek.patch
+          git -C .runtime/nodelink-upstream apply ../../contrib/nodelink/http-wav-seek.patch
+          git -C .runtime/nodelink-upstream diff --check
+      - name: Build disposable patched NodeLink image
+        run: |
+          docker build --build-arg GIT_COMMIT=a283f2f4e2f16e856a0da315a946fad2bfb9989d \
+            --build-arg GIT_BRANCH=nyxlink-seek-candidate \
+            -t nyxlink-nodelink-seek-patch:local .runtime/nodelink-upstream
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - name: Exercise pinned patched server with 440/880 Hz synthetic WAV
+        run: node scripts/test-nodelink-server-seek.cjs
+        env:
+          NYXLINK_CONTAINER_ENGINE: docker
+          NYXLINK_NODELINK_PROFILE: patched
+      - name: Persist redacted seek evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nodelink-wav-seek-contribution
+          path: .runtime/extensions/nodelink-wav-seek-repair-report.json
+          if-no-files-found: warn
