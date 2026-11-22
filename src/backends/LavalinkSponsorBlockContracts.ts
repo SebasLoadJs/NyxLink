@@ -33,7 +33,7 @@ export function lavalinkSponsorBlockPath(sessionId: string, guildId: string): st
     if (typeof sessionId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(sessionId)) {
         throw new TypeError('Invalid Lavalink session ID');
     }
-    if (typeof guildId !== 'string' || !/^\\d{17,20}$/.test(guildId)) {
+    if (typeof guildId !== 'string' || !/^[0-9]{17,20}$/.test(guildId)) {
         throw new TypeError('Invalid guild ID');
     }
     return '/v4/sessions/' + encodeURIComponent(sessionId) +
