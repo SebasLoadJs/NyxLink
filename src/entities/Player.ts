@@ -984,8 +984,8 @@ export class Player {
         this.playing = false;
         this.paused = false;
         this.current = null;
-        // A completed stop must not leave an older persisted playback snapshot.
-        // Serialize writes for adapters where each set() rewrites the same record.
+        // Wait for the stop state to be persisted before resolving the command.
+        // Serialize these writes for adapters where set() rewrites a shared record.
         await this.updateData("playing", false);
         await this.updateData("paused", false);
         await this.updateData("current", null);
