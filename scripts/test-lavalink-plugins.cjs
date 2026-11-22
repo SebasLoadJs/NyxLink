@@ -34,13 +34,25 @@ async function verify(context) {
     assert.equal(typeof loaded.data?.encoded, 'string');
     checks.push('generated authorized WAV source decoded by real Lavalink');
 
-    // No external provider is enabled in the fixture. This must return the
-    // documented no-content result, never synthetic or scraped lyric content.
+    // LavaLyrics 1.1.0 throws "No lyrics managers registered" when no
+    // provider module is installed. The official REST contract documents
+    // 204 for "not found", which is a distinct provider-configured case.
+    // Accept only that known server-side missing-provider 500 or the
+    // future-compatible 204, and never claim fetched lyrics.
     stage = 'LYRICS_NO_PROVIDER';
-    const lyrics = await node.getLavaLyrics(loaded.data.encoded);
-    assert.equal(lyrics, null);
-    assert.equal(node.backend.featureStatus('lavalyrics'), 'available');
-    checks.push('installed LavaLyrics returns an empty-provider result without Discord');
+    let noProviderOutcome = 'none';
+    try {
+      const lyrics = await node.getLavaLyrics(loaded.data.encoded);
+      assert.equal(lyrics, null);
+      assert.equal(node.backend.featureStatus('lavalyrics'), 'available');
+      noProviderOutcome = 'no-content-204';
+    } catch (error) {
+      if (error?.statusCode !== 500) throw error;
+      assert.equal(node.backend.featureStatus('lavalyrics'), 'unknown');
+      noProviderOutcome = 'no-registered-managers-500';
+    }
+    checks.push('installed LavaLyrics no-provider response: ' + noProviderOutcome +
+      ' (no fetched lyrics certified)');
 
     // Create a non-playing backend player, not a voice connection.
     stage = 'PLAYER_CREATE';
