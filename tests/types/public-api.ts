@@ -156,3 +156,14 @@ const requestedCrossfade: import('../../dist').CrossfadeOptions | undefined = pl
 // @ts-expect-error Only supported transition modes are accepted.
 void player.setCrossfade({enabled:true,mode:'random'});
 void requestedCrossfade;
+
+const lavaLyricsOptions: import('../../dist').LavaLyricsOptions = { skipTrackSource: true };
+const lavaLyricsResult: Promise<import('../../dist').LavaLyricsData | null> =
+    node.getLavaLyrics(track, lavaLyricsOptions);
+const lavaLyricsViaRest: Promise<import('../../dist').LavaLyricsData | null> =
+    node.rest.getLavaLyrics(track.encoded, { skipTrackSource: false });
+// @ts-expect-error LavaLyrics does not accept the NodeLink language selector.
+node.getLavaLyrics(track, 'es');
+// @ts-expect-error Only boolean skipTrackSource is legal.
+node.getLavaLyrics(track, { skipTrackSource: 'yes' });
+void [lavaLyricsResult, lavaLyricsViaRest];
