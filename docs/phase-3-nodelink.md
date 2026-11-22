@@ -101,10 +101,14 @@ The test is a CI release gate, so its status must be verified per run.
 
 ## 3.13 Real PCM volume and seek acceptance
 
-The modern NodeLink container lab now decodes the same generated one-second,
-440 Hz WAV using five client requests: full WAV (100% volume), raw PCM,
-muted WAV (0%), quarter-volume WAV (25%) and WAV starting at position
-500 milliseconds. Every request uses the actual container's HTTP decoder.
+The modern NodeLink container lab decodes a locally generated one-second,
+440 Hz WAV using four client requests: full WAV (100% volume), raw PCM,
+muted WAV (0%) and quarter-volume WAV (25%). A separate three-second
+440 Hz WAV tests position 500 milliseconds without hitting the short
+fixture's end-of-file decoder boundary. Every request uses the actual
+container's HTTP decoder. The first 500 ms seek attempt against the
+one-second fixture failed with `aborted`; that behavior is not recorded
+as successful seek support.
 A bounded reader limits each response to 1 MiB and cancels stalled requests
 after 30 seconds. The test checks real 48 kHz stereo S16LE samples, verifies
 the silent and quiet output using RMS amplitude, and verifies that seeking
