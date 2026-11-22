@@ -1409,7 +1409,9 @@ export class Node {
             await player.seek(currentPosition + 1000);
             this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck >> Seeked forward 1s for player ${player.guildId}.`);
         } catch (error) {
-            this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck >> Failed to seek, attempting full restart for player ${player.guildId}. Error: ${error instanceof Error ? error.message : String(error)}.`);
+            // The failing seek may have been superseded by a user play/stop.
+            if (!unchanged()) return;
+            this.manager.emit("debug", `NyxLink > Node#handleTrackStuck >> Failed to seek, attempting full restart for player ${player.guildId}. Error: ${error instanceof Error ? error.message : String(error)}.`);
             await player.restart();
         }
     }
