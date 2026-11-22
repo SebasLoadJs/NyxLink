@@ -678,7 +678,7 @@ export function isValidDiscordId(id: string): boolean {
 export class EventEmitter<E extends { [K in keyof E]: (...args: any[]) => void }> {
     private readonly listenerMap: {
         [K in keyof E]?: Set<EmitterListenerEntry<E[K]>>;
-    } = {};
+    } = Object.create(null);
 
     constructor(private readonly parent?: EventEmitter<E>) {}
 
@@ -698,7 +698,10 @@ export class EventEmitter<E extends { [K in keyof E]: (...args: any[]) => void }
 
         bucket.add(entry);
         this.sortListeners(bucket);
-        return () => this.off(event, listener);
+        return () => {
+            bucket.delete(entry);
+            if (bucket.size === 0 && this.listenerMap[event] === bucket) delete this.listenerMap[event];
+        };
     }
 
     public once<K extends keyof E>(
@@ -725,27 +728,25 @@ export class EventEmitter<E extends { [K in keyof E]: (...args: any[]) => void }
 
     public emit<K extends keyof E>(event: K, ...args: Parameters<E[K]>): void {
         const set = this.listenerMap[event];
-        if (!set) return;
-
-        const removeAfter: EmitterListenerEntry<E[K]>[] = [];
-
-        for (const entry of [...set]) {
-            try {
-                entry.listener(...args);
-            } catch (err) {
-                if (event !== 'error' && this.listenerMap['error']) {
-                    (this as any).emit('error', err);
-                } else {
-                    throw err;
+        if (set) {
+            for (const entry of [...set]) {
+                // A once callback must be removed before invocation, including reentrant
+                // emits and exceptions. Do not erase a replacement bucket.
+                if (entry.once) {
+                    if (!set.delete(entry)) continue;
+                    if (set.size === 0 && this.listenerMap[event] === set) delete this.listenerMap[event];
+                }
+                try {
+                    entry.listener(...args);
+                } catch (err) {
+                    if (event !== 'error' && this.listenerMap['error']) {
+                        (this as any).emit('error', err);
+                    } else {
+                        throw err;
+                    }
                 }
             }
-
-            if (entry.once) removeAfter.push(entry);
         }
-
-        for (const rm of removeAfter) set.delete(rm);
-        if (set.size === 0) delete this.listenerMap[event];
-
         if (this.parent) this.parent.emit(event, ...args);
     }
 
