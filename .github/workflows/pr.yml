@@ -25,23 +25,8 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run typecheck
-      - name: Strict TypeScript debt audit (informational)
-        if: matrix.node == 22
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          pnpm run typecheck:strict 2>&1 | tee strict-types.log
-      - name: Summarize strict diagnostics
-        if: always() && matrix.node == 22
-        run: |
-          if [ -f strict-types.log ]; then
-            echo "### Strict TypeScript diagnostics" >> "$GITHUB_STEP_SUMMARY"
-            echo "Total: $(grep -c 'error TS' strict-types.log || true)" >> "$GITHUB_STEP_SUMMARY"
-            echo '~~~text' >> "$GITHUB_STEP_SUMMARY"
-            grep 'error TS' strict-types.log | sed -E 's/\([0-9]+,[0-9]+\).*//' | sort | uniq -c | sort -nr | head -40 >> "$GITHUB_STEP_SUMMARY" || true
-            echo '~~~' >> "$GITHUB_STEP_SUMMARY"
-          fi
+      - name: Strict TypeScript validation
+        run: pnpm run typecheck
       - run: pnpm run test:coverage
       - run: pnpm run test:types
       - run: pnpm run test:package

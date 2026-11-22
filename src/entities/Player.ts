@@ -96,10 +96,8 @@ export class Player {
 
         if (config.current) {
             this.current = TrackCodec.restore(config.current);
-            if ((config.current as any).position) {
-                this.current.position = (config.current as any).position;
-                this.lastPosition = this.current.position;
-            }
+            // TrackCodec restores the explicit or embedded position, including zero.
+            this.lastPosition = this.current.getInfo().position;
         }
 
         if (config.queue && Array.isArray(config.queue)) {

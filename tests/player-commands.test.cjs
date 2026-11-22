@@ -197,3 +197,28 @@ for (const withPrevious of [false, true]) {
     assert.deepEqual(saved.queue.map(track => track.encoded), [next.encoded]);
   });
 }
+
+test('restored player uses the stored metadata position for its health checkpoint', async t => {
+  const {manager,node}=createPlayer(t);
+  const {Player,TrackCodec}=require('../dist');
+  const record=TrackCodec.serialize(createTrack('restored-position'));
+  record.info.position=42000;
+  const restored=new Player(manager,node,{guildId:'323456789012345678',voiceChannelId:'223456789012345678',current:record});
+  t.after(()=>restored.stopHealthCheck());
+  restored.stopHealthCheck();
+  assert.equal(restored.current.getInfo().position,42000);
+  assert.equal(restored.lastPosition,42000);
+});
+
+test('an explicit zero position overrides embedded restored metadata', async t => {
+  const {manager,node}=createPlayer(t);
+  const {Player,TrackCodec}=require('../dist');
+  const record=TrackCodec.serialize(createTrack('restored-zero'));
+  record.info.position=42000;
+  record.position=0;
+  const restored=new Player(manager,node,{guildId:'323456789012345678',voiceChannelId:'223456789012345678',current:record});
+  t.after(()=>restored.stopHealthCheck());
+  restored.stopHealthCheck();
+  assert.equal(restored.current.getInfo().position,0);
+  assert.equal(restored.lastPosition,0);
+});

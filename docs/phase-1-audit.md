@@ -4,8 +4,8 @@ Status: in progress. CI success validates the existing test suite; it is not a p
 
 ## Quality gates
 
-- `pnpm run typecheck` — normal build type validation.
-- `pnpm run typecheck:strict` — full-source strict TypeScript audit. This is a diagnostic command until existing compiler debt has been measured and eliminated. Do not treat its presence as strict compliance.
+- `pnpm run typecheck` — mandatory strict full-source TypeScript validation on Node.js 22 and 24. The compiler configuration enables `strict: true` for all source files; there are no per-module exclusions.
+- `pnpm run typecheck:strict` — retained explicit strict audit command for consumers and maintainers.
 - `pnpm run test:types` — strict compilation of consumer-facing API contracts.
 - `pnpm run test:coverage` — regression tests and coverage.
 - `pnpm run test:backends` — local backend protocol integration.
@@ -27,8 +27,8 @@ Runtime dependency: consola 3.4.2. Lockfile resolves TypeScript 5.9.3, @types/no
 
 ## Remaining exit criteria
 
-1. Green CI for all stabilization commits on supported Node versions.
-2. Record and reduce strict compiler diagnostics by subsystem; enable strict only when the full build passes.
+1. Require green CI for the current stabilization baseline on supported Node versions; historical failed runs remain visible.
+2. Verify the new mandatory strict build on both Node.js versions. Baseline diagnostics decreased from 88 to 44, 14 and 1 before strict enforcement. The final zero-error result must be confirmed by CI.
 3. Audit ownership and protocol boundaries, event subscriptions and shutdown, backend-specific state, and storage concurrency.
 4. Document public API compatibility and explicit feature constraints for both backends.
 5. Distinguish local protocol fixtures from live Discord audio integration and verify real-node scenarios separately before claiming production readiness.
