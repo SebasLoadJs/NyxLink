@@ -51,3 +51,42 @@ test('invalid streaming requests fail before HTTP without marking the server una
   assert.deepEqual(calls,[]);
   assert.equal(node.backend.featureStatus('loadstream'),'unknown');
 });
+
+
+test('opt-in PCM trim requests position zero and returns exactly the requested tail',async t=>{
+  const {node,calls}=await setup(t);
+  const response=await node.rest.loadStream({encodedTrack:'local-test-audio',format:'raw',position:0},
+    {seekMode:'pcm-trim'});
+  const chunks=[];
+  for await(const chunk of response.stream) chunks.push(Buffer.from(chunk));
+  assert.deepEqual(Buffer.concat(chunks),Buffer.from([1,2,3,4,5,6]));
+  assert.deepEqual(calls[0].body,{encodedTrack:'local-test-audio',format:'raw',position:0});
+});
+
+test('optional PCM seek rejects WAV output and excess offsets before HTTP',async t=>{
+  const {node,calls}=await setup(t);
+  await assert.rejects(node.rest.loadStream({encodedTrack:'x',format:'wav',position:500},{seekMode:'pcm-trim'}),TypeError);
+  for(const position of [0.5,30001]) {
+    await assert.rejects(node.rest.loadStream({encodedTrack:'x',format:'raw',position},{seekMode:'pcm-trim'}),RangeError);
+  }
+  await assert.rejects(node.rest.loadStream({encodedTrack:'x',position:500},{seekMode:'unknown'}),TypeError);
+  assert.equal(calls.length,0);
+});
+
+test('client PCM trim does not pretend a too-short server stream was valid',async t=>{
+  const {node,calls}=await setup(t);
+  const response=await node.rest.loadStream({encodedTrack:'x',format:'raw',position:1},{seekMode:'pcm-trim'});
+  const drain=async()=>{for await(const chunk of response.stream){}};
+  await assert.rejects(drain(),{code:'PCM_SEEK_BEYOND_SOURCE'});
+  assert.equal(calls[0].body.position,0);
+  assert.equal(calls[0].body.format,'raw');
+});
+
+test('Node.loadDirectStream forwards opt-in client seek options',async t=>{
+  const {node,calls}=await setup(t);
+  const response=await node.loadDirectStream('encoded',100,0,undefined,{seekMode:'pcm-trim'});
+  for await(const _ of response.stream){}
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].body.position,0);
+  assert.equal(calls[0].body.format,'raw');
+});
