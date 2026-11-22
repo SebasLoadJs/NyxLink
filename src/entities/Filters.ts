@@ -51,8 +51,8 @@ export class Filters implements IFilters {
         },
         "pop": {
             equalizer: [
-                { band: 0, gain: 0.65 }, { band: 1, gain: 0.45 }, { band: 2, gain: -0.45 },
-                { band: 3, gain: -0.65 }, { band: 4, gain: -0.35 }, { band: 5, gain: 0.45 },
+                { band: 0, gain: 0.65 }, { band: 1, gain: 0.45 }, { band: 2, gain: -0.25 },
+                { band: 3, gain: -0.25 }, { band: 4, gain: -0.25 }, { band: 5, gain: 0.45 },
                 { band: 6, gain: 0.55 }, { band: 7, gain: 0.6 }, { band: 8, gain: 0.6 },
                 { band: 9, gain: 0.6 }, { band: 10, gain: 0 }, { band: 11, gain: 0 },
                 { band: 12, gain: 0 }, { band: 13, gain: 0 }, { band: 14, gain: 0 }
@@ -61,8 +61,8 @@ export class Filters implements IFilters {
         "treblebass": {
             equalizer: [
                 { band: 0, gain: 0.6 }, { band: 1, gain: 0.67 }, { band: 2, gain: 0.67 },
-                { band: 3, gain: 0 }, { band: 4, gain: -0.5 }, { band: 5, gain: 0.15 },
-                { band: 6, gain: -0.45 }, { band: 7, gain: 0.23 }, { band: 8, gain: 0.35 },
+                { band: 3, gain: 0 }, { band: 4, gain: -0.25 }, { band: 5, gain: 0.15 },
+                { band: 6, gain: -0.25 }, { band: 7, gain: 0.23 }, { band: 8, gain: 0.35 },
                 { band: 9, gain: 0.45 }, { band: 10, gain: 0.55 }, { band: 11, gain: 0.6 },
                 { band: 12, gain: 0.55 }, { band: 13, gain: 0 }, { band: 14, gain: 0 }
             ]
@@ -108,7 +108,7 @@ export class Filters implements IFilters {
         const globalFilters = this.player.manager.options.customFilters || {};
         for (const [name, value] of Object.entries(globalFilters)) {
             const filter = typeof value === "string" ? this.parseString(value) : value;
-            this.customDefinitions.set(name, filter);
+            this.customDefinitions.set(name, structuredClone(filter));
         }
         this.player.manager.emit("debug", `Moonlink.js > Filters >> Loaded ${this.customDefinitions.size} global custom filters.`);
     }
@@ -132,7 +132,7 @@ export class Filters implements IFilters {
     public set(name: string, value: string | IFilters): this {
         validate(name, n => typeof n === "string" && n.length > 0, "Filter name must be a non-empty string.");
         const filter = typeof value === "string" ? this.parseString(value) : value;
-        this.customDefinitions.set(name, filter);
+        this.customDefinitions.set(name, structuredClone(filter));
         this.player.manager.emit("debug", `Moonlink.js > Filters >> Custom filter "${name}" defined.`);
         return this;
     }
@@ -216,70 +216,70 @@ export class Filters implements IFilters {
     }
 
     private exists(name: string): boolean {
-        return name in Filters.BUILTIN_FILTERS || this.customDefinitions.has(name);
+        return Object.prototype.hasOwnProperty.call(Filters.BUILTIN_FILTERS, name) || this.customDefinitions.has(name);
     }
 
     private getFilter(name: string): IFilters | undefined {
-        return Filters.BUILTIN_FILTERS[name] || this.customDefinitions.get(name);
+        return Object.prototype.hasOwnProperty.call(Filters.BUILTIN_FILTERS, name) ? Filters.BUILTIN_FILTERS[name] : this.customDefinitions.get(name);
     }
 
     public setVolume(volume: number): this {
-        validate(volume, v => typeof v === "number" && !isNaN(v), "Volume must be a number.");
-        this.volume = Math.max(0, Math.min(volume, 1000));
+        validate(volume, v => typeof v === "number" && Number.isFinite(v), "Filter volume must be finite.");
+        this.volume = Math.max(0, Math.min(volume, 5));
         this._updateFilters();
         return this;
     }
 
     public setEqualizer(bands: IEqualizerBand[]): this {
-        this.equalizer = bands;
+        this.equalizer = this.normalizeBands(bands);
         this._updateFilters();
         return this;
     }
 
     public setKaraoke(karaoke?: IKaraoke): this {
-        this.karaoke = karaoke;
+        this.karaoke = karaoke === undefined ? undefined : structuredClone(karaoke);
         this._updateFilters();
         return this;
     }
 
     public setTimescale(timescale?: ITimescale): this {
-        this.timescale = timescale;
+        this.timescale = timescale === undefined ? undefined : structuredClone(timescale);
         this._updateFilters();
         return this;
     }
 
     public setTremolo(tremolo?: ITremolo): this {
-        this.tremolo = tremolo;
+        this.tremolo = tremolo === undefined ? undefined : structuredClone(tremolo);
         this._updateFilters();
         return this;
     }
 
     public setVibrato(vibrato?: IVibrato): this {
-        this.vibrato = vibrato;
+        this.vibrato = vibrato === undefined ? undefined : structuredClone(vibrato);
         this._updateFilters();
         return this;
     }
 
     public setRotation(rotation?: IRotation): this {
-        this.rotation = rotation;
+        this.rotation = rotation === undefined ? undefined : structuredClone(rotation);
         this._updateFilters();
         return this;
     }
     
     public setDistortion(distortion?: IDistortion): this {
-        this.distortion = distortion;
+        this.distortion = distortion === undefined ? undefined : structuredClone(distortion);
         this._updateFilters();
         return this;
     }
 
     public setChannelMix(channelMix?: IChannelMix): this {
-        this.channelMix = channelMix;
+        this.channelMix = channelMix === undefined ? undefined : structuredClone(channelMix);
         this._updateFilters();
         return this;
     }
 
     public setLowPass(lowPass?: ILowPass): this {
-        this.lowPass = lowPass;
+        this.lowPass = lowPass === undefined ? undefined : structuredClone(lowPass);
         this._updateFilters();
         return this;
     }
@@ -287,7 +287,7 @@ export class Filters implements IFilters {
     /** NodeLink-only filter. See https://github.com/PerformanC/NodeLink */
     public setEcho(echo?: IEcho): this {
         this.assertNodeLinkFeature("echo");
-        this.echo = echo;
+        this.echo = echo === undefined ? undefined : structuredClone(echo);
         this._updateFilters();
         return this;
     }
@@ -295,7 +295,7 @@ export class Filters implements IFilters {
     /** NodeLink-only filter. See https://github.com/PerformanC/NodeLink */
     public setChorus(chorus?: IChorus): this {
         this.assertNodeLinkFeature("chorus");
-        this.chorus = chorus;
+        this.chorus = chorus === undefined ? undefined : structuredClone(chorus);
         this._updateFilters();
         return this;
     }
@@ -303,7 +303,7 @@ export class Filters implements IFilters {
     /** NodeLink-only filter. See https://github.com/PerformanC/NodeLink */
     public setCompressor(compressor?: ICompressor): this {
         this.assertNodeLinkFeature("compressor");
-        this.compressor = compressor;
+        this.compressor = compressor === undefined ? undefined : structuredClone(compressor);
         this._updateFilters();
         return this;
     }
@@ -311,7 +311,7 @@ export class Filters implements IFilters {
     /** NodeLink-only filter. See https://github.com/PerformanC/NodeLink */
     public setHighPass(highpass?: IHighPass): this {
         this.assertNodeLinkFeature("highpass");
-        this.highpass = highpass;
+        this.highpass = highpass === undefined ? undefined : structuredClone(highpass);
         this._updateFilters();
         return this;
     }
@@ -319,7 +319,7 @@ export class Filters implements IFilters {
     /** NodeLink-only filter. See https://github.com/PerformanC/NodeLink */
     public setPhaser(phaser?: IPhaser): this {
         this.assertNodeLinkFeature("phaser");
-        this.phaser = phaser;
+        this.phaser = phaser === undefined ? undefined : structuredClone(phaser);
         this._updateFilters();
         return this;
     }
@@ -327,12 +327,13 @@ export class Filters implements IFilters {
     /** NodeLink-only filter. See https://github.com/PerformanC/NodeLink */
     public setSpatial(spatial?: ISpatial): this {
         this.assertNodeLinkFeature("spatial");
-        this.spatial = spatial;
+        this.spatial = spatial === undefined ? undefined : structuredClone(spatial);
         this._updateFilters();
         return this;
     }
 
     public setSpeed(speed: number): this {
+        validate(speed, v => Number.isFinite(v) && v >= 0, "Speed must be a finite nonnegative number.");
         if (!this.timescale) this.timescale = {};
         this.timescale.speed = speed;
         this._updateFilters();
@@ -340,6 +341,7 @@ export class Filters implements IFilters {
     }
 
     public setPitch(pitch: number): this {
+        validate(pitch, v => Number.isFinite(v) && v >= 0, "Pitch must be a finite nonnegative number.");
         if (!this.timescale) this.timescale = {};
         this.timescale.pitch = pitch;
         this._updateFilters();
@@ -347,7 +349,7 @@ export class Filters implements IFilters {
     }
 
     public remove(filterName: string): this {
-        if (Filters.BUILTIN_FILTERS[filterName] || this.customDefinitions.has(filterName)) {
+        if (this.exists(filterName)) {
              // It's a preset/custom filter toggle
              return this.disable(filterName);
         }
@@ -376,7 +378,7 @@ export class Filters implements IFilters {
     }
 
     public setPluginFilters(filters: Record<string, any>): this {
-        this.pluginFilters = filters;
+        this.pluginFilters = structuredClone(filters);
         this._updateFilters();
         return this;
     }
@@ -412,10 +414,6 @@ export class Filters implements IFilters {
     public toPayload(): IFilters {
         let payload: IFilters = {};
 
-        if (!this.player.node.isNodeLink && (this.echo || this.chorus || this.compressor || this.highpass || this.phaser || this.spatial)) {
-            throw nodeLinkOnlyError("filters");
-        }
-
         for (const name of this.activeFilters) {
             const filter = this.getFilter(name);
             if (filter) {
@@ -449,19 +447,40 @@ export class Filters implements IFilters {
             }
         }
 
-        return payload;
+        // Validate the effective payload, including fields originating from presets.
+        if (!this.player.node.isNodeLink && (payload.echo || payload.chorus || payload.compressor || payload.highpass || payload.phaser || payload.spatial)) {
+            throw nodeLinkOnlyError("filters");
+        }
+        if (payload.equalizer !== undefined) payload.equalizer = this.normalizeBands(payload.equalizer);
+        if (payload.volume !== undefined && (!Number.isFinite(payload.volume) || payload.volume < 0 || payload.volume > 5)) {
+            throw new RangeError("Filter volume must be between 0 and 5");
+        }
+        for (const value of Object.values(payload.timescale ?? {})) {
+            if (typeof value !== "number" || !Number.isFinite(value) || value < 0) throw new RangeError("Invalid timescale value");
+        }
+        return structuredClone(payload);
+    }
+
+    private normalizeBands(bands: IEqualizerBand[]): IEqualizerBand[] {
+        if (!Array.isArray(bands)) throw new TypeError("Equalizer must be an array");
+        const unique = new Map<number, IEqualizerBand>();
+        for (const item of bands) {
+            if (!item || !Number.isInteger(item.band) || item.band < 0 || item.band > 14 ||
+                !Number.isFinite(item.gain) || item.gain < -0.25 || item.gain > 1) {
+                throw new RangeError("Invalid equalizer band or gain");
+            }
+            unique.set(item.band, { band: item.band, gain: item.gain });
+        }
+        return [...unique.values()].sort((a, b) => a.band - b.band);
     }
 
     public async apply(): Promise<Player> {
         const payload = this.toPayload();
 
-        this.player.manager.emit("debug", `Moonlink.js > Filters >> Applying filters: ${JSON.stringify(payload)}`);
-        this.player.manager.emit("filtersUpdate", this.player, this);
+        this.player.manager.emit("debug", "NyxLink > Filters > Applying filters");
         const updatedPlayer = await this.player.updatePlayer({ filters: payload });
-        
-        if (updatedPlayer) {
-            this.player.volume = updatedPlayer.volume;
-        }
+        if (updatedPlayer == null) throw new Error("Backend did not acknowledge filters");
+        if (!this.player.destroyed) this.player.manager.emit("filtersUpdate", this.player, this);
         
         return this.player;
     }
@@ -469,10 +488,11 @@ export class Filters implements IFilters {
     private mergeFilters(base: IFilters, addon: IFilters): IFilters {
         const merged = { ...base };
         
-        for (const key in addon) {
+        for (const key of Object.keys(addon)) {
+            if (["__proto__", "constructor", "prototype"].includes(key)) continue;
             if (addon[key] !== undefined) {
                 if (key === "equalizer" && base.equalizer) {
-                    merged.equalizer = [...base.equalizer, ...addon.equalizer];
+                    merged.equalizer = this.normalizeBands([...base.equalizer, ...addon.equalizer]);
                 } else {
                     merged[key] = addon[key];
                 }
@@ -495,12 +515,12 @@ export class Filters implements IFilters {
             switch(name.toLowerCase()) {
                 case "bass": {
                     const gain = this.parseGain(value);
-                    filters.equalizer = Array.from({ length: 6 }, (_, i) => ({ band: i, gain }));
+                    filters.equalizer = [...(filters.equalizer ?? []), ...Array.from({ length: 6 }, (_, i) => ({ band: i, gain }))];
                     break;
                 }
                 case "treble": {
                     const gain = this.parseGain(value);
-                    filters.equalizer = Array.from({ length: 6 }, (_, i) => ({ band: i + 7, gain }));
+                    filters.equalizer = [...(filters.equalizer ?? []), ...Array.from({ length: 6 }, (_, i) => ({ band: i + 7, gain }))];
                     break;
                 }
                 case "vibrato": {
@@ -585,6 +605,7 @@ export class Filters implements IFilters {
                     break;
                 }
                 default: {
+                    if (["__proto__", "constructor", "prototype"].includes(name)) throw new TypeError("Invalid plugin filter name");
                     if (!filters.pluginFilters) filters.pluginFilters = {};
                     filters.pluginFilters[name] = value || true;
                     break;
