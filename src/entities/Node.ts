@@ -1,3 +1,4 @@
+import type { LyricsRequestOptions, SourceHealthResponse } from '../backends/NodeLinkContracts';
 import { NodeFailover } from "../nodes/NodeFailover";
 import { BackendDetector } from "../backends/BackendDetector";
 import type { BackendAdapter } from "../backends/BackendAdapter";
@@ -318,14 +319,18 @@ export class Node {
   /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
   public async loadLyrics(
     track: string | ITrack | Track | { encoded?: string },
-    lang?: string
+    options?: string | LyricsRequestOptions
   ): Promise<NodeLinkResponse<ILyricsData | Record<string, any>> | null> {
     const encoded =
       typeof track === "string" ? track : track?.encoded;
     if (!encoded) {
       throw new Error("loadLyrics requires an encoded track string or object with an encoded field.");
     }
-    return this.rest.loadLyrics(encoded, lang);
+    return this.rest.loadLyrics(encoded, options);
+  }
+
+  public getSourceHealth(): Promise<SourceHealthResponse> {
+    return this.rest.getSourceHealth();
   }
 
   /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */

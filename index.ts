@@ -9,6 +9,7 @@ export { CapabilityRegistry } from './src/backends/CapabilityRegistry';
 export type { CapabilityDescription, CapabilityEvidence } from './src/backends/CapabilityRegistry';
 export type { BackendInventoryEntry } from './src/backends/BackendInventory';
 export { ProtocolResponseError } from './src/backends/ProtocolValidation';
+export type { LyricsRequestOptions, SourceHealthStatus, SourceHealthEntry, SourceHealthResponse } from './src/backends/NodeLinkContracts';
 export type { ExtensionOperation, ExtensionRoute, ExtensionRouteParameters } from './src/backends/ExtensionRoutes';
 export type { CommonPlayerUpdate, NodeLinkPlayerUpdate, PlayerUpdatePayload, PlayerTrackUpdate, PlayerVoiceUpdate, PlayerUpdateAcknowledgement, SessionUpdateResponse } from './src/backends/ProtocolContracts';
 export { BackendDetector } from './src/backends/BackendDetector';

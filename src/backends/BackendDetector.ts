@@ -40,6 +40,8 @@ export class BackendDetector {
                 capabilities.add(`plugin:${key}`);
             }
         }
+        // Presence of the flag advertises the diagnostic endpoint, even when monitoring is disabled.
+        if (nodeLink && typeof object(data.sourceHealth)?.enabled === 'boolean') capabilities.add('source-health');
         const metadata = [...plugins.values()];
         return nodeLink ? new NodeLinkAdapter(version, capabilities, metadata) : new LavalinkAdapter(version, capabilities, metadata);
     }

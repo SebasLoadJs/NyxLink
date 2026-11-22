@@ -1,3 +1,4 @@
+import { lyricsParameters, validateSourceHealth, type LyricsRequestOptions, type SourceHealthResponse } from '../backends/NodeLinkContracts';
 import type http from "node:http";
 import { validateLoadResponse, validateTrackResponse, validatePlayerRead, validatePlayerAcknowledgement, validateSessionResponse, ProtocolResponseError } from "../backends/ProtocolValidation";
 import { HttpError } from "../errors/HttpError";
@@ -83,7 +84,7 @@ export class Rest {
             : resolveExtensionRoute(this.node.isNodeLink ? 'nodelink' : 'unknown', operation, parameters);
     }
 
-    private async featureRequest<T = any>(operation: ExtensionOperation, params: ExtensionRouteParameters, options: http.RequestOptions & { body?: any }): Promise<T> {
+    private async featureRequest<T = any>(operation: ExtensionOperation, params: ExtensionRouteParameters, options: http.RequestOptions & { body?: any }, validate?: (response: unknown) => void): Promise<T> {
         const route = this.extensionRoute(operation, params);
         const feature = route.feature;
         this.node.assertFeature(feature);
@@ -98,6 +99,7 @@ export class Rest {
             catch (error) { this.featureError(feature, error, backend, current); }
         });
         if (result === undefined) throw new Error('Backend did not acknowledge feature request');
+        validate?.(result);
         if (current()) backend?.recordFeature(feature, 'available');
         return result;
     }
@@ -360,18 +362,22 @@ export class Rest {
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
-    public async loadLyrics(encodedTrack: string, lang?: string): Promise<NodeLinkResponse<ILyricsData | Record<string, any>> | null> {
+    /** Source-specific lyrics or captions, preserving the legacy language string. */
+    public async loadLyrics(encodedTrack: string, options?: string | LyricsRequestOptions): Promise<NodeLinkResponse<ILyricsData | Record<string, any>> | null> {
         this.node.assertFeature("lyrics");
 
-        const params = new URLSearchParams();
-        params.append("encodedTrack", encodedTrack);
-        if (lang) params.append("lang", lang);
+        const params = lyricsParameters(encodedTrack, options);
 
         const res = await this.featureRequest<ILyricsResponse>("lyrics", { query: params }, {
             headers: this.authHeaders
         });
 
         return res ? normalizeNodeLinkResponse(res, res.loadType) : null;
+    }
+
+    /** Monitoring may be disabled even when the diagnostic endpoint is available. */
+    public async getSourceHealth(): Promise<SourceHealthResponse> {
+        return this.featureRequest<SourceHealthResponse>('source-health', {}, { headers: this.authHeaders }, validateSourceHealth);
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */

@@ -41,3 +41,7 @@ Existing NodeLink REST extensions now resolve through an explicit operation cata
 ## 2.6 Player and session responses
 
 Full player reads validate guild identity, minimum playback state and non-null track metadata. Update acknowledgements retain support for partial object responses but reject malformed known fields and cross-guild identity. Session updates validate the resume configuration; Node only reports resume enabled after confirmation. Raw plugin extension response schemas still need feature-specific validation. The checked compatibility matrix is in [backend-compatibility.md](backend-compatibility.md).
+
+## Phase 2 acceptance
+
+Accepted at 872c4a7194660318f46e1df3f9b83ab5f273b923: [558 regression tests and strict compile](https://github.com/SebasLoadJs/NyxLink/actions/runs/44991175803), [26 protocol integration tests plus extension lab](https://github.com/SebasLoadJs/NyxLink/actions/runs/44991175805), endurance and CodeQL all passed. The compatibility matrix records the pinned tested server baseline. Phase 3 may begin; live Discord audio, broader provider/plugin validation and longer soak remain release gates. Feature-specific validation continues with each extension.

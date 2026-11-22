@@ -142,3 +142,10 @@ const invalidShared: import('../../dist').CommonPlayerUpdate = {nextTrack:null};
 // @ts-expect-error Position must be numeric.
 player.updatePlayer({position:'1000'});
 void [sharedUpdate,extensionUpdate,sessionUpdate,invalidShared];
+
+const healthResponse: Promise<import('../../dist').SourceHealthResponse> = node.getSourceHealth();
+node.loadLyrics(track, { type: 'onlyCaptions', source: 'youtube', lang: 'es' });
+node.loadLyrics(track, 'es');
+// @ts-expect-error Unsupported lyrics mode.
+node.loadLyrics(track, { type: 'audio' });
+void healthResponse;
