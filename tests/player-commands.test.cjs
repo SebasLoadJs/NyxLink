@@ -174,3 +174,26 @@ test('play does not serialize arbitrary options or private track data into debug
   assert.equal(requests[0].payload.track.userData.privateValue, 'private-track-data-sentinel');
   assert.ok(!messages.join('\n').includes('private-track-data-sentinel'));
 });
+
+
+for (const withPrevious of [false, true]) {
+  test(`rejected playback restores persistent playback state (previous=${withPrevious})`, async t => {
+    const { manager, node, player } = createPlayer(t);
+    const previous = withPrevious ? createTrack('previous') : null;
+    const next = createTrack('rejected');
+    player.current = previous;
+    player.playing = false;
+    player.paused = withPrevious;
+    node.rest.updatePlayer = async () => { throw new Error('play rejected'); };
+    assert.equal(await player.play({ track: next }), false);
+    assert.equal(player.current, previous);
+    assert.equal(player.playing, false);
+    assert.equal(player.paused, withPrevious);
+    assert.deepEqual(player.queue.tracks, [next]);
+    const saved = await manager.database.get(`players.${player.guildId}`);
+    assert.equal(saved.current?.encoded ?? null, previous?.encoded ?? null);
+    assert.equal(saved.playing, false);
+    assert.equal(saved.paused, withPrevious);
+    assert.deepEqual(saved.queue.map(track => track.encoded), [next.encoded]);
+  });
+}

@@ -533,7 +533,10 @@ export class Player {
             this.playing = oldPlaying;
             this.paused = oldPaused;
             this.current = previousTrack;
-            this.queue.unshift(nextTrack);
+            this.updateData("current", previousTrack ? TrackCodec.serialize(previousTrack) : null);
+            this.updateData("playing", oldPlaying);
+            this.updateData("paused", oldPaused);
+            this.queue.unshift(queuedTrack);
             return false;
         }
 
