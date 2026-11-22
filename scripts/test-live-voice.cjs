@@ -1,6 +1,7 @@
 const { setTimeout: delay } = require('node:timers/promises');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
 
 const snowflake = value => typeof value === 'string' && /^\d{17,20}$/.test(value);
 const address = value => {
@@ -50,19 +51,56 @@ function validateConfiguration(env, argv) {
 }
 
 function event(manager, name, matches, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      manager.removeListener(name, handler);
-      reject(new Error('Timed out waiting for ' + name));
-    }, timeoutMs);
-    const handler = (...args) => {
-      if (!matches(...args)) return;
+  let cancel;
+  const promise = new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (error, args) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       manager.removeListener(name, handler);
-      resolve(args);
+      if (error) reject(error);
+      else resolve(args);
     };
+    const handler = (...args) => {
+      try {
+        if (matches(...args)) finish(null, args);
+      } catch (error) {
+        finish(error);
+      }
+    };
+    const timer = setTimeout(() => finish(new Error('Timed out waiting for ' + name)), timeoutMs);
     manager.on(name, handler);
+    cancel = () => finish(new Error('Cancelled waiting for ' + name));
   });
+  // Login can fail before the caller awaits this promise. Do not create an
+  // unhandled rejection while retaining the original rejection for the caller.
+  void promise.catch(() => {});
+  return { promise, cancel };
+}
+
+function errorCode(error) {
+  // Never persist or log third-party error messages: they can contain
+  // credentials, remote URLs, bearer headers, or encoded audio tracks.
+  if (error instanceof TypeError) return 'TYPE_ERROR';
+  if (error instanceof RangeError) return 'RANGE_ERROR';
+  if (error instanceof SyntaxError) return 'SYNTAX_ERROR';
+  return 'OPERATION_ERROR';
+}
+
+async function writePrivateReport(target, report) {
+  const folder = path.dirname(target);
+  await fs.mkdir(folder, { recursive: true });
+  const temporary = path.join(folder, '.' + path.basename(target) + '.' + randomUUID() + '.tmp');
+  try {
+    // Create privately first and replace the final report atomically. Writing with
+    // mode 0600 alone would not correct permissions on an existing report.
+    await fs.writeFile(temporary, JSON.stringify(report, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
+    await fs.rename(temporary, target);
+  } catch (error) {
+    await fs.rm(temporary, { force: true }).catch(() => {});
+    throw error;
+  }
 }
 
 async function run(config) {
@@ -83,13 +121,8 @@ async function run(config) {
     events
   };
   let player;
-  const redact = error => {
-    let message = error instanceof Error ? error.message : String(error);
-    for (const secret of [config.token, config.node.password]) {
-      if (secret.length >= 4) message = message.replaceAll(secret, '[REDACTED]');
-    }
-    return message;
-  };
+  let readyWait;
+  let stage = 'initialization';
   manager.on('trackStart', (p, track) => {
     if (p.guildId === config.guildId) record('trackStart', { track: track.encoded === report.firstEncoded ? 'A' :
       track.encoded === report.secondEncoded ? 'B' : 'unexpected' });
@@ -98,15 +131,18 @@ async function run(config) {
     if (p.guildId === config.guildId) record('trackEnd', { reason, track: track.encoded === report.firstEncoded ? 'A' :
       track.encoded === report.secondEncoded ? 'B' : 'unexpected' });
   });
-  manager.on('nodeError', (_node, error) => record('nodeError', { error: redact(error) }));
+  manager.on('nodeError', (_node, error) => record('nodeError', { errorCode: errorCode(error) }));
   manager.use(new Connectors.DiscordJs(), client);
   try {
-    const ready = event(manager, 'nodeReady', n => n.identifier === config.node.identifier, 45000);
+    readyWait = event(manager, 'nodeReady', n => n.identifier === config.node.identifier, 45000);
+    stage = 'discord-login';
     await client.login(config.token);
-    const [node] = await ready;
+    stage = 'node-ready';
+    const [node] = await readyWait.promise;
     if (node.backend?.kind !== 'nodelink') throw new Error('Expected NodeLink backend');
     record('nodeReady', { version: node.backend.version });
     const tracks = [];
+    stage = 'track-resolution';
     for (const url of config.urls) {
       const result = await manager.search({ query: url, node: node.identifier });
       const track = result.tracks?.[0];
@@ -120,14 +156,18 @@ async function run(config) {
     player = manager.players.create({
       guildId: config.guildId, voiceChannelId: config.channelId, autoPlay: false
     });
+    stage = 'voice-connect';
     await player.connect();
     record('gatewayVoiceReady');
+    stage = 'transition-configuration';
     await player.setCrossfade({ enabled: true, mode: 'smart', duration: config.crossfadeMs, curve: 'sinusoidal' });
     player.setQueuePreload({ enabled: true, leadMs: Math.min(35000, tracks[0].getInfo().length) });
     player.queue.add(tracks);
+    stage = 'playback-start';
     const played = await player.play();
     if (!played) throw new Error('Backend did not accept initial playback');
     // Do not trust REST acknowledgement as evidence of voice audio.
+    stage = 'handoff-observation';
     const expires = Date.now() + Math.min(240000, tracks[0].getInfo().length + 45000);
     while (Date.now() < expires) {
       const starts = events.filter(e => e.type === 'trackStart').map(e => e.track);
@@ -145,8 +185,11 @@ async function run(config) {
     record('protocolSequencePassed');
   } catch (error) {
     report.success = false;
-    report.error = redact(error);
+    report.errorCode = errorCode(error);
+    report.failureStage = stage;
   } finally {
+    // Cancel a pending nodeReady listener if Discord login failed or shutdown began.
+    readyWait?.cancel();
     // Never persist bearer tokens, server URLs or encoded tracks to disk.
     delete report.firstEncoded;
     delete report.secondEncoded;
@@ -154,11 +197,10 @@ async function run(config) {
     try { await manager.shutdown(); } catch {}
     client.destroy();
     const target = path.resolve('.runtime/live-voice/report.json');
-    await fs.mkdir(path.dirname(target), { recursive: true });
-    await fs.writeFile(target, JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
+    await writePrivateReport(target, report);
     console.log(JSON.stringify({ report: target, protocolPassed: report.success,
       crossfadeEventObserved: report.crossfadeEventObserved ?? false,
-      audioMeasured: false, error: report.error }));
+      audioMeasured: false, errorCode: report.errorCode, failureStage: report.failureStage }));
   }
   if (!report.success) process.exitCode = 1;
 }
@@ -167,7 +209,7 @@ if (require.main === module) {
   try {
     const config = validateConfiguration(process.env, process.argv.slice(2));
     void run(config).catch(error => {
-      console.error('Live voice test failed: ' + (error instanceof Error ? error.message : String(error)));
+      console.error('Live voice test failed: ' + errorCode(error));
       process.exitCode = 1;
     });
   } catch (error) {
@@ -176,4 +218,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { validateConfiguration };
+module.exports = { validateConfiguration, errorCode, event, writePrivateReport };
