@@ -25,6 +25,7 @@ test('NodeLink endpoint support is learned from responses without confusing a mi
   node.port = server.address().port;
   node.rest.getInfoWithHeaders = async () => ({ data: { version: { semver: '3.10.0' }, isNodelink: true }, headers: {} });
   await node.open();
+  node.sessionId = 'fixture-session';
   await assert.rejects(node.rest.getMixLayers('123456789012345678'), error => {
     assert.equal(error.name, 'HttpError');
     assert.equal(error.statusCode, 404);

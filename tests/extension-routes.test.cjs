@@ -36,5 +36,7 @@ test('REST uses catalog method and encoded route on the actual transport',async 
   await rest.updateMixLayerVolume(player.guildId,'layer/one',42);
   assert.deepEqual(requests,[{url:'/v4/sessions/session/players/'+player.guildId+'/mix/layer%2Fone',method:'PATCH',body:'{"volume":42}'}]);
   await assert.rejects(rest.removeMixLayer(player.guildId,'..'),TypeError);
+  node.sessionId='';
+  await assert.rejects(rest.getMixLayers(player.guildId),TypeError);
   assert.equal(requests.length,1);
 });

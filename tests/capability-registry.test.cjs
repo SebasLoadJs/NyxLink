@@ -63,6 +63,7 @@ for(const status of [200,501]){
     node.port=server.address().port;
     const info={version:{semver:'3.10.0'},isNodelink:true};
     node.backend=BackendDetector.detect(info); node.isNodeLink=true;
+    node.sessionId='fixture-session';
     const request=node.rest.getMixLayers('123456789012345678');
     const result=status===200?request:assert.rejects(request,{code:'FEATURE_UNAVAILABLE'});
     await entered.promise;
