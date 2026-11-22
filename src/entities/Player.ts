@@ -376,6 +376,7 @@ export class Player {
     }
 
     public async connect({ selfDeaf, selfMute }: { selfDeaf?: boolean; selfMute?: boolean } = {}): Promise<this> {
+        this.node.cancelVoiceReconnect?.(this);
         const connectStack = new Error().stack?.split("\n").slice(2, 8).join("\n");
         this.manager.emit("debug", `Moonlink.js > Player#connect -> Connect requested for guild ${this.guildId}. Stack: ${connectStack || "unavailable"}`);
         this.set("userInitiatedConnect", true);
@@ -386,6 +387,7 @@ export class Player {
     }
 
     public async disconnect(): Promise<this> {
+        this.node.cancelVoiceReconnect?.(this);
         const disconnectStack = new Error().stack?.split("\n").slice(2, 8).join("\n");
         this.manager.emit("debug", `Moonlink.js > Player#disconnect -> Disconnect requested for guild ${this.guildId}. Stack: ${disconnectStack || "unavailable"}`);
         this.set("userInitiatedConnect", false);
@@ -1016,6 +1018,7 @@ export class Player {
         }
         playbackGuard(this).invalidate();
         this.destroyed = true;
+        this.node.cancelVoiceReconnect?.(this);
         this.destructionPromise = this.commands.enqueue(() => this.destroyPlayback(reason));
         this.voice.destroy();
         this.stopHealthCheck();
@@ -1169,6 +1172,7 @@ export class Player {
         const targetNode = typeof node === "string" ? this.manager.nodes.nodes.get(node) : node;
         if (this.destroyed || !targetNode || !NodeSelector.matches(targetNode, this.nodeSelection) || targetNode.identifier === this.node.identifier) return false;
 
+        this.node.cancelVoiceReconnect?.(this);
         const ticket = playbackGuard(this).invalidate();
         return this.commands.enqueue(() => migratePlayer(this, targetNode, ticket));
     }
@@ -1185,6 +1189,7 @@ export class Player {
             return this;
         }
 
+        this.node.cancelVoiceReconnect?.(this);
         const oldChannel = this.voiceChannelId;
         this.voiceChannelId = voiceChannelId;
         this.updateData("voiceChannelId", this.voiceChannelId);

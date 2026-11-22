@@ -12,6 +12,7 @@ import { resumeSessionPlayers } from '../nodes/SessionRecovery';
 import { retryDelay, retryJitter } from '../nodes/RetryDelay';
 import { IManagerNodeConfig, INodeStats, ITrack, ILyricsData, IFilters } from "../typings/Interfaces";
 import type { Manager } from "../core/Manager";
+import type { Player } from "./Player";
 import { Rest } from "./Rest";
 import {
   Structure,
@@ -231,6 +232,7 @@ export class Node {
   private authenticationFailed = false;
   private connecting = false;
   private readyTimeout?: NodeJS.Timeout;
+  private readonly voiceReconnectTimers = new Map<Player, NodeJS.Timeout>();
   private readonly readyTimeoutMs: number;
   public url: string;
   public rest: Rest;
@@ -614,6 +616,7 @@ export class Node {
 
   protected async close(event: { code; reason: string }): Promise<void> {
     if (this.destroyed) return;
+    this.clearVoiceReconnects();
     if (this.readyTimeout) clearTimeout(this.readyTimeout);
     this.readyTimeout = undefined;
     const { code, reason } = event;
@@ -1401,10 +1404,22 @@ export class Node {
     this.manager.emit("lyricsNotFound", player, payload);
   }
 
+  /** @internal Cancel delayed recovery work when a player changes lifecycle. */
+  public cancelVoiceReconnect(player: Player): void {
+    const timer = this.voiceReconnectTimers.get(player);
+    if (timer !== undefined) clearTimeout(timer);
+    this.voiceReconnectTimers.delete(player);
+  }
+
+  private clearVoiceReconnects(): void {
+    for (const timer of this.voiceReconnectTimers.values()) clearTimeout(timer);
+    this.voiceReconnectTimers.clear();
+  }
+
   private async handleWebSocketClosed(player: any, payload: WebSocketClosedEvent): Promise<void> {
     const { code, reason, byRemote } = payload;
-    
-    if (player.destroyed) return;
+
+    if (this.destroyed || player.destroyed || player.node !== this) return;
     if (player.get("voiceCloseRecoveryInProgress")) {
         this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Voice-close recovery already in progress for player ${player.guildId}, skipping event.`);
         return;
@@ -1491,6 +1506,7 @@ export class Node {
         return;
     }
 
+    if (this.voiceReconnectTimers.has(player)) return;
     const reconnectAttempts = (player.get("wsReconnectAttempts") || 0) + 1;
     const maxReconnectAttempts = voiceOptions.maxReconnectAttempts ?? 5;
 
@@ -1507,33 +1523,39 @@ export class Node {
     const reconnectDelay = voiceOptions.reconnectDelay ?? 5000;
     this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed -> Reconnect scheduled in ${reconnectDelay}ms for player ${player.guildId}.`);
 
-    setTimeout(async () => {
-        if (player.destroyed || !player.get("userInitiatedConnect")) {
-            this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Reconnect cancelled for player ${player.guildId}. (Destroyed or not user-initiated)`);
-            return;
-        }
-
-        try {
-            if (player.playing && player.current) {
-                this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed -> Attempting player restart for ${player.guildId}.`);
-                await player.restart();
-            } else {
-                this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed -> Reconnecting voice for idle player ${player.guildId}.`);
-                await player.connect();
+    const guard = playbackGuard(player);
+    const ticket = guard.ticket;
+    const active = () => !this.destroyed && !player.destroyed && player.node === this &&
+        guard.isCurrent(ticket) && Boolean(player.get("userInitiatedConnect"));
+    const timer = setTimeout(() => {
+        this.voiceReconnectTimers.delete(player);
+        if (!active() || player.get("voiceCloseRecoveryInProgress")) return;
+        const recover = async () => {
+            player.set("voiceCloseRecoveryInProgress", true);
+            try {
+                if (player.playing && player.current) {
+                    if (!await player.restart({ destroyOnFailure: false })) throw new Error("Player restart was not acknowledged");
+                } else {
+                    await player.connect();
+                }
+                if (!active()) return;
+                this.manager.emit("debug", `NyxLink > Node > Voice recovery finished for player ${player.guildId}.`);
+                player.set("wsReconnectAttempts", 0);
+            } catch (error) {
+                if (!active()) return;
+                this.manager.emit("debug", `NyxLink > Node > Reconnect attempt ${reconnectAttempts} failed: ${(error as Error).message}`);
+                if (reconnectAttempts >= maxReconnectAttempts) {
+                    this.manager.emit("socketClosed", player, code, reason, byRemote, payload);
+                    if (active()) await player.destroy("All reconnect attempts exhausted");
+                }
+            } finally {
+                player.set("voiceCloseRecoveryInProgress", false);
             }
-
-            this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Voice recovery finished for player ${player.guildId}.`);
-            player.set("wsReconnectAttempts", 0);
-        } catch (error) {
-            this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Reconnect attempt ${reconnectAttempts} failed for player ${player.guildId}. Error: ${error.message}.`);
-            
-            if (reconnectAttempts >= maxReconnectAttempts) {
-                this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> All reconnect attempts exhausted for player ${player.guildId}.`);
-                this.manager.emit("socketClosed", player, code, reason, byRemote, payload);
-                await player.destroy("All reconnect attempts exhausted");
-            }
-        }
+        };
+        void recover().catch(error => this.manager.emit("nodeError", this, error as Error));
     }, reconnectDelay);
+    timer.unref?.();
+    this.voiceReconnectTimers.set(player, timer);
   }
 
   public async updateRecommendations(player: any, track: Track = player.current): Promise<void> {
@@ -1571,6 +1593,7 @@ export class Node {
     if (this.destroyed) return;
     this.destroyed = true;
     this.connected = false;
+    this.clearVoiceReconnects();
     if (this.readyTimeout) clearTimeout(this.readyTimeout);
     this.readyTimeout = undefined;
     if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
