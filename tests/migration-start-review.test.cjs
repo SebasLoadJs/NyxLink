@@ -144,3 +144,20 @@ test('a migration resume event observes committed ownership', async t => {
   assert.equal(await player.transferNode(target),true);
   assert.deepEqual(await Promise.all(owners),[target.identifier]);
 });
+
+
+test('removing a registered target during migration prevents committing its ownership', async t=>{
+  const {manager,node:source,player,target}=migration(t);
+  const {deferred}=require('./helpers/player.cjs');
+  const entered=deferred(), release=deferred();
+  target.rest.updatePlayer=async (_guild,payload)=>{
+    if(payload.voice){entered.resolve();await release.promise;}
+    return payload;
+  };
+  const moving=player.transferNode(target);
+  await entered.promise;
+  manager.nodes.nodes.delete(target.identifier);
+  release.resolve();
+  assert.equal(await moving,false);
+  assert.equal(player.node,source);
+});

@@ -16,9 +16,15 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
     const source = player.node;
     const guard = playbackGuard(player);
     const attempts = playbackAttempt(player);
+    // Directly constructed nodes and players are supported by the public API.
+    // If an object is registered, however, it must keep that exact registry identity.
+    const registeredTarget = player.manager.nodes.nodes.get(target.identifier);
+    const registeredPlayer = player.manager.players.get(player.guildId);
     const active = () => !player.destroyed && !player.manager.destroyed && target.manager === player.manager &&
-        player.manager.nodes.nodes.get(target.identifier) === target &&
-        player.manager.players.get(player.guildId) === player && guard.isCurrent(ticket) && NodeSelector.matches(target, player.nodeSelection);
+        (!registeredTarget || registeredTarget === target) && (!registeredPlayer || registeredPlayer === player) &&
+        player.manager.nodes.nodes.get(target.identifier) === registeredTarget &&
+        player.manager.players.get(player.guildId) === registeredPlayer &&
+        guard.isCurrent(ticket) && NodeSelector.matches(target, player.nodeSelection);
     const report = (status: 'in-progress' | 'recovered' | 'failed' | 'cancelled', reason?: string) => {
         player.manager.emit('playerNodeFailover', player, {
             source: source.identifier, target: target.identifier, status, positionMs: player.current?.position, reason,
