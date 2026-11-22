@@ -4,6 +4,7 @@ import { FeatureUnavailableError } from "../errors/FeatureUnavailableError";
 import { makeRequest, makeStreamRequest, normalizeNodeLinkResponse, type NodeLinkResponse, type ResponseWithHeaders, nodeLinkOnlyError } from "../Util";
 import type { IChapter, IFilters, ILyricsData, ILyricsResponse, IMeaningResponse, INodeConnectionStatus } from "../typings/Interfaces";
 import { Node } from "./Node";
+import type { Player } from "./Player";
 import { IRESTLoadTracks, IRESTGetLyrics, IRESTGetPlayers, ITrack, INodeStats, IRoutePlannerStatus } from "../typings/Interfaces";
 import { playbackGuard } from '../players/PlaybackGuard';
 
@@ -24,7 +25,7 @@ export class Rest {
     private readonly authHeaders: Record<string, string>;
     private readonly jsonHeaders: Record<string, string>;
     private readonly userAgentHeaders: Record<string, string>;
-    private sessionRecoveryInProgress: boolean = false;
+    private readonly sessionRecoveries = new WeakSet<Player>();
 
     constructor(node: Node) {
         this.node = node;
@@ -45,25 +46,30 @@ export class Rest {
         return `http${this.node.secure ? "s" : ""}://${this.node.host}:${this.node.port}`;
     }
 
-    private async triggerPlayerRecovery(player: any): Promise<void> {
-        if (player.destroyed) return;
-        
+    private async triggerPlayerRecovery(player: Player): Promise<void> {
+        if (player.destroyed || this.node.destroyed || player.node !== this.node) return;
+
         player.stuckDetectionCount = 0;
         player.silentDetectionCount = 0;
-        
+        const guard = playbackGuard(player);
+        let ticket = guard.ticket;
+        const active = () => !player.destroyed && !this.node.destroyed &&
+            player.node === this.node && this.node.manager.players.get(player.guildId) === player &&
+            guard.isCurrent(ticket);
         try {
             const recovering = player.softRestart("Session expired (404)");
-            const ticket = playbackGuard(player).ticket;
+            ticket = guard.ticket;
             const recovered = await recovering;
-            if (player.destroyed || !playbackGuard(player).isCurrent(ticket)) return;
+            if (!active()) return;
             if (recovered) {
                 this.node.manager.emit("playerRecoverySuccess", player);
             } else {
                 await player.destroy("Session expired and recovery failed");
             }
-        } catch (e) {
-            this.node.manager.emit("debug", `Moonlink.js > Rest >> Recovery error: ${(e as Error).message}`);
-            await player.destroy("Session recovery error");
+        } catch (error) {
+            if (!active()) return;
+            this.node.manager.emit("debug", `NyxLink > Rest > Recovery error: ${(error as Error).message}`);
+            if (active()) await player.destroy("Session recovery error");
         }
     }
 
@@ -110,7 +116,10 @@ export class Rest {
         if (noReplace) {
             params.append("noReplace", "true");
         }
-        
+        const owner = this.node.manager.players.get(guildId);
+        const intent = owner ? playbackGuard(owner).ticket : undefined;
+        const session = this.node.sessionId;
+
         try {
             const res = await this.node.circuit.run(() => makeRequest<any>(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}?${params.toString()}`, {
                 method: "PATCH",
@@ -120,19 +129,14 @@ export class Rest {
             }, undefined, 0));
             return res || null;
         } catch (error) {
-            const err = error as Error;
-            if (err.message.includes('status 404')) {
-                this.node.manager.emit("debug", `Moonlink.js > Rest >> updatePlayer 404 for guild ${guildId}, triggering recovery.`);
-                
-                const player = this.node.manager.players.get(guildId);
-                if (player && !player.destroyed) {
-                    if (!this.sessionRecoveryInProgress) {
-                        this.sessionRecoveryInProgress = true;
-                        void this.triggerPlayerRecovery(player)
-                            .catch(error => this.node.manager.emit("debug", `Moonlink.js > Rest >> Recovery failed: ${error.message}`))
-                            .finally(() => { this.sessionRecoveryInProgress = false; });
-                    }
-                }
+            if (error instanceof HttpError && error.statusCode === 404 &&
+                owner && !owner.destroyed && !this.node.destroyed && owner.node === this.node &&
+                this.node.manager.players.get(guildId) === owner && this.node.sessionId === session &&
+                playbackGuard(owner).isCurrent(intent!) && !this.sessionRecoveries.has(owner)) {
+                this.sessionRecoveries.add(owner);
+                void this.triggerPlayerRecovery(owner)
+                    .catch(error => this.node.manager.emit("debug", `NyxLink > Rest > Recovery failed: ${(error as Error).message}`))
+                    .finally(() => { this.sessionRecoveries.delete(owner); });
             }
             throw error;
         }
