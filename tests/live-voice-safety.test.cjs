@@ -5,7 +5,7 @@ const { EventEmitter } = require('node:events');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
-const { validateConfiguration, redactDiagnostic, event, writePrivateReport } = require('../scripts/test-live-voice.cjs');
+const { validateConfiguration, errorCode, event, writePrivateReport } = require('../scripts/test-live-voice.cjs');
 
 function config(){
  return {
@@ -45,19 +45,19 @@ test('missing credentials are reported by variable name only',()=>{
  });
 });
 
-test('live voice diagnostics redact credentials, controlled audio URLs and encoded tracks',()=>{
- const env=config();
- const settings=validateConfiguration(env,['--armed']);
- const encodedUrl=encodeURIComponent(env.NYXLINK_LIVE_TRACK_A);
- const leaked = [settings.token,settings.node.password,...settings.urls,
-   encodedUrl,'encoded-track-private'].join(' | ');
- const output=redactDiagnostic(new Error(leaked),settings,['encoded-track-private']);
- for (const sensitive of [settings.token,settings.node.password,...settings.urls,
-   encodedUrl,'encoded-track-private']) assert.equal(output.includes(sensitive),false);
- assert.ok(output.includes('[REDACTED]'));
- assert.equal(redactDiagnostic(new Error('redirected to https://other.example/token?secret=123'),
-   settings).includes('https://other.example'),false);
+test('live voice error codes cannot disclose third-party secrets',()=>{
+ const secret = [
+  'test-token-never-used', 'test-password-never-used',
+  'https://example.com/private.wav', 'encoded-track-private'
+ ].join(' : ');
+ for (const error of [new Error(secret),new TypeError(secret),new RangeError(secret),new SyntaxError(secret)]) {
+  const result=errorCode(error);
+  assert.ok(['OPERATION_ERROR','TYPE_ERROR','RANGE_ERROR','SYNTAX_ERROR'].includes(result));
+  assert.equal(result.includes(secret),false);
+ }
+ assert.equal(errorCode(new Error('sensitive provider URL: https://example.com')), 'OPERATION_ERROR');
 });
+
 
 test('node readiness waiter removes its listener immediately after cancellation',async()=>{
  const manager=new EventEmitter();
