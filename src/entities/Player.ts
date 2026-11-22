@@ -1,3 +1,4 @@
+import { preparePlayerUpdate, type PlayerUpdatePayload, type PlayerVoiceUpdate } from '../backends/ProtocolContracts';
 import { migratePlayer, migrationRestart, type RestartOptions } from "../players/PlayerMigration";
 import { PlayerCommandQueue } from "../players/PlayerCommandQueue";
 import { playbackGuard } from "../players/PlaybackGuard";
@@ -315,33 +316,13 @@ export class Player {
         throw new Error("Invalid track input. Provide a Track instance or encoded string.");
     }
 
-    private async sendPlayerUpdate(payload: Record<string, any>, noReplace?: boolean): Promise<any> {
-        const hasNodeLinkExtras = Boolean(
-            payload?.fading ||
-            payload?.nextTrack ||
-            payload?.track?.audioTrackId ||
-            payload?.loudnessNormalizer !== undefined ||
-            payload?.endTime !== undefined
-        );
-
-        if (!this.node.isNodeLink && hasNodeLinkExtras) {
-            throw nodeLinkOnlyError("updatePlayer extras");
-        }
-
-        const finalPayload = { ...payload };
-        if (payload.voice) {
-            const voicePayload = { ...payload.voice };
-            if (this.node.isNodeLink && (!voicePayload.sessionId || !voicePayload.token || !voicePayload.endpoint)) {
-                throw new Error("voice payload requires sessionId, token, and endpoint.");
-            }
-            if (!voicePayload.channelId && this.voiceChannelId) {
-                voicePayload.channelId = this.voiceChannelId;
-            }
-            finalPayload.voice = voicePayload;
-        }
+    private async sendPlayerUpdate(payload: PlayerUpdatePayload, noReplace?: boolean): Promise<any> {
+        const finalPayload = this.node.backend
+            ? this.node.backend.preparePlayerUpdate(payload, this.voiceChannelId)
+            : preparePlayerUpdate(this.node.isNodeLink ? 'nodelink' : 'unknown', payload, this.voiceChannelId);
 
         const attempts = playbackAttempt(this);
-        const attempt = typeof payload.track?.encoded === 'string' ? attempts.begin(this.node, payload.track, typeof payload.paused === 'boolean') : undefined;
+        const attempt = typeof payload.track?.encoded === 'string' ? attempts.begin(this.node, { ...payload.track, encoded: payload.track.encoded }, typeof payload.paused === 'boolean') : undefined;
         if (attempt) finalPayload.track = attempt.track;
         const preload = typeof payload.nextTrack?.encoded === 'string' || payload.nextTrack === null ? attempts.preload(this.node, payload.nextTrack) : undefined;
         if (preload) finalPayload.nextTrack = preload.track;
@@ -360,7 +341,7 @@ export class Player {
     }
 
     /** Sends a raw updatePlayer payload with NodeLink extras applied when supported. */
-    public async updatePlayer(payload: Record<string, any>, noReplace?: boolean): Promise<any> {
+    public async updatePlayer(payload: PlayerUpdatePayload, noReplace?: boolean): Promise<any> {
         return this.commands.enqueue(() => {
             if (this.destroyed) throw new Error("Cannot update a destroyed player");
             return this.sendPlayerUpdate(payload, noReplace);
@@ -368,7 +349,7 @@ export class Player {
     }
 
     /** Voice credentials complete connect(), which playback may already be awaiting. */
-    public async updateVoice(voice: Record<string, any>): Promise<any> {
+    public async updateVoice(voice: PlayerVoiceUpdate): Promise<any> {
         if (this.destroyed) throw new Error("Cannot update voice on a destroyed player");
         return this.sendPlayerUpdate({ voice }, true);
     }

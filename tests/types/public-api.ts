@@ -133,3 +133,12 @@ const refreshBackend: Promise<boolean> = node.refreshBackend();
 // @ts-expect-error Inventory entries never contain the node password.
 inventory[0].password;
 void [inventory, refreshBackend];
+
+const sharedUpdate: import('../../dist').CommonPlayerUpdate = {track:{encoded:'encoded'},endTime:120000,paused:false};
+const extensionUpdate: import('../../dist').NodeLinkPlayerUpdate = {nextTrack:null,loudnessNormalizer:false};
+const sessionUpdate: Promise<import('../../dist').SessionUpdateResponse | null> = node.rest.updateSession(true,60);
+// @ts-expect-error Common contracts do not include NodeLink-only preloading.
+const invalidShared: import('../../dist').CommonPlayerUpdate = {nextTrack:null};
+// @ts-expect-error Position must be numeric.
+player.updatePlayer({position:'1000'});
+void [sharedUpdate,extensionUpdate,sessionUpdate,invalidShared];

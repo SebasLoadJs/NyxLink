@@ -8,6 +8,7 @@ export type { BackendKind, BackendPlugin, CapabilityState } from './src/backends
 export { CapabilityRegistry } from './src/backends/CapabilityRegistry';
 export type { CapabilityDescription, CapabilityEvidence } from './src/backends/CapabilityRegistry';
 export type { BackendInventoryEntry } from './src/backends/BackendInventory';
+export type { CommonPlayerUpdate, NodeLinkPlayerUpdate, PlayerUpdatePayload, PlayerTrackUpdate, PlayerVoiceUpdate, SessionUpdateResponse } from './src/backends/ProtocolContracts';
 export { BackendDetector } from './src/backends/BackendDetector';
 export { LavalinkAdapter } from './src/backends/LavalinkAdapter';
 export { NodeLinkAdapter } from './src/backends/NodeLinkAdapter';

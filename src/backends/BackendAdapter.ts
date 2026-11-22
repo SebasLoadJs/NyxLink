@@ -1,4 +1,5 @@
 import { CapabilityRegistry, type CapabilityDescription, type CapabilityState } from './CapabilityRegistry';
+import { preparePlayerUpdate, type PlayerUpdatePayload } from './ProtocolContracts';
 export type { CapabilityState } from './CapabilityRegistry';
 export type BackendKind = 'lavalink' | 'nodelink';
 export type BackendPlugin = Readonly<{ name: string; version: string }>;
@@ -21,6 +22,10 @@ export abstract class BackendAdapter {
     public listFeatures(): CapabilityDescription[] { return this.registry.list(); }
     public getPlugin(name: string): BackendPlugin | undefined {
         return this.plugins.find(plugin => plugin.name.toLowerCase() === name.toLowerCase());
+    }
+
+    public preparePlayerUpdate(payload: PlayerUpdatePayload, channelId?: string): PlayerUpdatePayload {
+        return preparePlayerUpdate(this.kind, payload, channelId, feature => this.featureStatus(feature) === 'unavailable');
     }
 
     /** An endpoint response may refine support without guessing from a product name. */

@@ -25,3 +25,7 @@ NodeLink-specific new features and expanded Lavalink plugin integrations belong 
 ## 2.2 Connection-scoped inventory
 
 `Node.refreshBackend()` coalesces requests per connection and reports success or failure. A successful refresh replaces the adapter atomically and resets observed endpoint state; failed explicit refreshes preserve the previous successful inventory. Opening a new connection clears old advertised metadata before emitting its connected state. Disconnect and destruction invalidate pending refreshes. `manager.nodes.getBackendInventory()` returns detached entries, with source/filter/plugin evidence and timestamps when available, never including connection credentials or raw server information. Disconnected nodes expose no current capability claims. Old adapter references remain independent for diagnostics and track provenance.
+
+## 2.3 Shared player protocol contracts
+
+The public contracts distinguish common v4 player operations from NodeLink-only extensions. BackendAdapter.preparePlayerUpdate centralizes extension admission, including explicit null/false values. The legacy raw extension boundary retains additional plugin fields. Both Player and direct Rest callers use this policy. Lavalink's documented endTime field is common rather than NodeLink-only ([v4 Update Player](https://lavalink.dev/api/rest#update-player)). Session update responses have a typed contract. Further REST response validation and explicit endpoint routing remain separate increments.
