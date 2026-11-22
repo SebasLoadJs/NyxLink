@@ -51,7 +51,7 @@ test('live voice diagnostics redact credentials, controlled audio URLs and encod
  const output=redactDiagnostic(new Error(leaked),settings,['encoded-track-private']);
  for (const sensitive of [settings.token,settings.node.password,...settings.urls,
    encodedUrl,'encoded-track-private']) assert.equal(output.includes(sensitive),false);
- assert.match(output,/\\[REDACTED\\]/);
+ assert.ok(output.includes('[REDACTED]'));
  assert.equal(redactDiagnostic(new Error('redirected to https://other.example/token?secret=123'),
    settings).includes('https://other.example'),false);
 });
