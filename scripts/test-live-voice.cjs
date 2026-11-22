@@ -1,6 +1,7 @@
 const { setTimeout: delay } = require('node:timers/promises');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
 
 const snowflake = value => typeof value === 'string' && /^\d{17,20}$/.test(value);
 const address = value => {
@@ -90,6 +91,21 @@ function redactDiagnostic(error, config, extraSecrets = []) {
   return message.replace(/https?:\/\/[^\s<>"']+/gi, '[REDACTED_URL]');
 }
 
+async function writePrivateReport(target, report) {
+  const folder = path.dirname(target);
+  await fs.mkdir(folder, { recursive: true });
+  const temporary = path.join(folder, '.' + path.basename(target) + '.' + randomUUID() + '.tmp');
+  try {
+    // Create privately first and replace the final report atomically. Writing with
+    // mode 0600 alone would not correct permissions on an existing report.
+    await fs.writeFile(temporary, JSON.stringify(report, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
+    await fs.rename(temporary, target);
+  } catch (error) {
+    await fs.rm(temporary, { force: true }).catch(() => {});
+    throw error;
+  }
+}
+
 async function run(config) {
   const { Client, GatewayIntentBits } = require('discord.js');
   const { Manager, Connectors } = require('../dist');
@@ -176,8 +192,7 @@ async function run(config) {
     try { await manager.shutdown(); } catch {}
     client.destroy();
     const target = path.resolve('.runtime/live-voice/report.json');
-    await fs.mkdir(path.dirname(target), { recursive: true });
-    await fs.writeFile(target, JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
+    await writePrivateReport(target, report);
     console.log(JSON.stringify({ report: target, protocolPassed: report.success,
       crossfadeEventObserved: report.crossfadeEventObserved ?? false,
       audioMeasured: false, error: report.error }));
@@ -198,4 +213,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { validateConfiguration, redactDiagnostic, event };
+module.exports = { validateConfiguration, redactDiagnostic, event, writePrivateReport };
