@@ -10,6 +10,7 @@ export type { CapabilityDescription, CapabilityEvidence } from './src/backends/C
 export type { BackendInventoryEntry } from './src/backends/BackendInventory';
 export { ProtocolResponseError } from './src/backends/ProtocolValidation';
 export type { LyricsRequestOptions, SourceHealthStatus, SourceHealthEntry, SourceHealthResponse, SourceHealthEvent, SourceHealthSnapshotEvent, SourceHealthChangeEvent, CrossfadeOptions, QueuePreloadOptions } from './src/backends/NodeLinkContracts';
+export type { LavaLyricsData, LavaLyricsLine, LavaLyricsOptions } from './src/backends/LavaLyricsContracts';
 export type { ExtensionOperation, ExtensionRoute, ExtensionRouteParameters } from './src/backends/ExtensionRoutes';
 export type { CommonPlayerUpdate, NodeLinkPlayerUpdate, PlayerUpdatePayload, PlayerTrackUpdate, PlayerVoiceUpdate, PlayerUpdateAcknowledgement, SessionUpdateResponse } from './src/backends/ProtocolContracts';
 export { BackendDetector } from './src/backends/BackendDetector';
