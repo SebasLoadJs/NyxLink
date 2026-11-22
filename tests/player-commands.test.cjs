@@ -528,3 +528,14 @@ test('autoLeave still destroys an idle player after queueEnd', async t => {
   await node.handleQueueEnd(player, createTrack('finished'));
   assert.equal(player.destroyed, true);
 });
+
+test('stale queueEnd does not clear an already playing track', async t => {
+  const { node, player } = createPlayer(t);
+  const active = createTrack('active-after-queue-end');
+  player.current = active;
+  player.playing = true;
+  await node.handleQueueEnd(player, createTrack('old-finished'));
+  assert.equal(player.current, active);
+  assert.equal(player.playing, true);
+  assert.equal(player.destroyed, false);
+});
