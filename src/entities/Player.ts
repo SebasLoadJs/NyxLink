@@ -1071,6 +1071,7 @@ export class Player {
         if (this.destroyed) return false;
         this.manager.emit("debug", `Moonlink.js > Player#restart -> Restarting player for guild ${this.guildId}`);
         this.manager.emit("playerResuming", this);
+        if (this.destroyed || !guard.isCurrent(ticket)) return false;
 
         if (!this.voiceChannelId) {
             this.manager.emit("debug", `Moonlink.js > Player#restart >> Cannot restart player without a voiceChannelId for guild ${this.guildId}`);
@@ -1094,7 +1095,7 @@ export class Player {
 
             const currentLavalinkPos = lastState?.position ?? 0;
             const isResumedSync = this.node.resumed && this.playing && currentLavalinkPos > 0;
-            const isAlreadySync = isResumedSync || (lastState?.connected && Math.abs(currentLavalinkPos - (this.current.position ?? 0)) < 2000);
+            const isAlreadySync = !options[migrationRestart] && (isResumedSync || (lastState?.connected && Math.abs(currentLavalinkPos - (this.current.position ?? 0)) < 2000));
 
             if (isAlreadySync && this.playing) {
                 this.manager.emit("debug", `Moonlink.js > Player#restart >> Player already in sync for guild ${this.guildId}, skipping track restoration. (Resumed: ${this.node.resumed}, Sync: ${isAlreadySync})`);
@@ -1102,10 +1103,13 @@ export class Player {
                 return true;
             }
 
-            const resumePosition = Math.max(
-                typeof lastKnownPosition === "number" ? lastKnownPosition : 0,
-                currentLavalinkPos,
-                this.current.position ?? 0
+            // A migration must use the captured source position, not stale telemetry
+            // belonging to an older track or a seek before the transfer.
+            const observed = this.current.position ?? 0;
+            const resumePosition = options[migrationRestart] ? observed : Math.max(
+                Number.isFinite(lastKnownPosition) ? lastKnownPosition! : 0,
+                Number.isFinite(currentLavalinkPos) ? currentLavalinkPos : 0,
+                observed
             );
 
             this.manager.emit("debug", `Moonlink.js > Player#restart -> Restoring current track "${this.current.title}" for guild ${this.guildId} at ${resumePosition}ms. AlreadySync: ${isAlreadySync}`);
@@ -1156,7 +1160,7 @@ export class Player {
             return true;
         }
 
-        this.manager.emit("playerResumed", this);
+        if (!options[migrationRestart]) this.manager.emit("playerResumed", this);
         return true;
     }
 

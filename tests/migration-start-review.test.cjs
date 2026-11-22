@@ -108,3 +108,39 @@ test('a throwing switched-node listener cannot prevent cleanup of the committed 
   assert.equal(player.node, target);
   assert.equal(await manager.database.get(`players.${player.guildId}.node`), target.identifier);
 });
+
+
+test('migration restores the captured position rather than a stale higher position', async t => {
+  const {player,target} = migration(t);
+  player.set('lastKnownPosition', 150000);
+  let position;
+  target.rest.updatePlayer = async (_guild,payload) => {
+    if (payload.track?.encoded) position=payload.position;
+    return payload;
+  };
+  assert.equal(await player.transferNode(target),true);
+  assert.equal(position,45000);
+});
+
+test('a failed ownership commit must not announce a resumed player', async t => {
+  const {manager,player,target}=migration(t);
+  target.rest.updatePlayer=async (_guild,payload)=>payload;
+  const set=manager.database.set.bind(manager.database);
+  manager.database.set=async (key,value)=>{
+    if(key.endsWith('.node') && value===target.identifier) throw new Error('ownership rejected');
+    return set(key,value);
+  };
+  let resumed=0;
+  manager.on('playerResumed',()=>resumed++);
+  assert.equal(await player.transferNode(target),false);
+  assert.equal(resumed,0);
+});
+
+test('a migration resume event observes committed ownership', async t => {
+  const {manager,player,target}=migration(t);
+  target.rest.updatePlayer=async (_guild,payload)=>payload;
+  const owners=[];
+  manager.on('playerResumed',()=>owners.push(manager.database.get(`players.${player.guildId}.node`)));
+  assert.equal(await player.transferNode(target),true);
+  assert.deepEqual(await Promise.all(owners),[target.identifier]);
+});

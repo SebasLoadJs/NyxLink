@@ -362,3 +362,17 @@ test('a zero timestamp is not mistaken for missing statistics age', () => {
   const node=audioNode('old',{statsReceivedAt:0});
   assert.equal(NodeHealthMonitor.inspect(node,{maxStatsAgeMs:100},101).state,'unknown');
 });
+
+
+test('an aborted half-open probe releases the slot without extending the cooldown', async t=>{
+  clock(t);
+  const breaker=new NodeCircuitBreaker({failureThreshold:1,cooldownMs:100});
+  await fail(breaker);
+  t.mock.timers.tick(100);
+  const aborted=Object.assign(new Error('cancelled'),{name:'AbortError',code:'ABORT_ERR'});
+  await fail(breaker,aborted);
+  assert.equal(breaker.state,'open');
+  assert.equal(breaker.retryAt,100100);
+  assert.equal(await breaker.run(async()=> 'healthy'),'healthy');
+  assert.equal(breaker.state,'closed');
+});

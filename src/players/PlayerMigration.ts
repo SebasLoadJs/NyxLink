@@ -16,7 +16,9 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
     const source = player.node;
     const guard = playbackGuard(player);
     const attempts = playbackAttempt(player);
-    const active = () => !player.destroyed && guard.isCurrent(ticket) && NodeSelector.matches(target, player.nodeSelection);
+    const active = () => !player.destroyed && !player.manager.destroyed && target.manager === player.manager &&
+        player.manager.nodes.nodes.get(target.identifier) === target &&
+        player.manager.players.get(player.guildId) === player && guard.isCurrent(ticket) && NodeSelector.matches(target, player.nodeSelection);
     const report = (status: 'in-progress' | 'recovered' | 'failed' | 'cancelled', reason?: string) => {
         player.manager.emit('playerNodeFailover', player, {
             source: source.identifier, target: target.identifier, status, positionMs: player.current?.position, reason,
@@ -102,6 +104,9 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
         const reason = await cleanup(source);
         player.manager.emit('playerSwitchedNode', player, source, target);
         report('recovered', reason);
+        if (original && !player.destroyed && guard.isCurrent(ticket) && player.node === target) {
+            player.manager.emit('playerResumed', player);
+        }
         return true;
     } catch (error) {
         if (committed) throw error;
