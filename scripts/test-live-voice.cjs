@@ -50,19 +50,44 @@ function validateConfiguration(env, argv) {
 }
 
 function event(manager, name, matches, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      manager.removeListener(name, handler);
-      reject(new Error('Timed out waiting for ' + name));
-    }, timeoutMs);
-    const handler = (...args) => {
-      if (!matches(...args)) return;
+  let cancel;
+  const promise = new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (error, args) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       manager.removeListener(name, handler);
-      resolve(args);
+      if (error) reject(error);
+      else resolve(args);
     };
+    const handler = (...args) => {
+      try {
+        if (matches(...args)) finish(null, args);
+      } catch (error) {
+        finish(error);
+      }
+    };
+    const timer = setTimeout(() => finish(new Error('Timed out waiting for ' + name)), timeoutMs);
     manager.on(name, handler);
+    cancel = () => finish(new Error('Cancelled waiting for ' + name));
   });
+  // Login can fail before the caller awaits this promise. Do not create an
+  // unhandled rejection while retaining the original rejection for the caller.
+  void promise.catch(() => {});
+  return { promise, cancel };
+}
+
+function redactDiagnostic(error, config, extraSecrets = []) {
+  let message = error instanceof Error ? error.message : String(error);
+  for (const secret of [config.token, config.node.password, ...config.urls, ...extraSecrets]) {
+    if (typeof secret !== 'string' || secret.length < 4) continue;
+    for (const variant of new Set([secret, encodeURIComponent(secret)])) {
+      message = message.replaceAll(variant, '[REDACTED]');
+    }
+  }
+  // Third-party HTTP exceptions can also include redirect or proxy URLs.
+  return message.replace(/https?:\/\/[^\s<>"']+/gi, '[REDACTED_URL]');
 }
 
 async function run(config) {
@@ -83,13 +108,8 @@ async function run(config) {
     events
   };
   let player;
-  const redact = error => {
-    let message = error instanceof Error ? error.message : String(error);
-    for (const secret of [config.token, config.node.password]) {
-      if (secret.length >= 4) message = message.replaceAll(secret, '[REDACTED]');
-    }
-    return message;
-  };
+  let readyWait;
+  const redact = error => redactDiagnostic(error, config, [report.firstEncoded, report.secondEncoded]);
   manager.on('trackStart', (p, track) => {
     if (p.guildId === config.guildId) record('trackStart', { track: track.encoded === report.firstEncoded ? 'A' :
       track.encoded === report.secondEncoded ? 'B' : 'unexpected' });
@@ -101,9 +121,9 @@ async function run(config) {
   manager.on('nodeError', (_node, error) => record('nodeError', { error: redact(error) }));
   manager.use(new Connectors.DiscordJs(), client);
   try {
-    const ready = event(manager, 'nodeReady', n => n.identifier === config.node.identifier, 45000);
+    readyWait = event(manager, 'nodeReady', n => n.identifier === config.node.identifier, 45000);
     await client.login(config.token);
-    const [node] = await ready;
+    const [node] = await readyWait.promise;
     if (node.backend?.kind !== 'nodelink') throw new Error('Expected NodeLink backend');
     record('nodeReady', { version: node.backend.version });
     const tracks = [];
@@ -147,6 +167,8 @@ async function run(config) {
     report.success = false;
     report.error = redact(error);
   } finally {
+    // Cancel a pending nodeReady listener if Discord login failed or shutdown began.
+    readyWait?.cancel();
     // Never persist bearer tokens, server URLs or encoded tracks to disk.
     delete report.firstEncoded;
     delete report.secondEncoded;
@@ -167,7 +189,7 @@ if (require.main === module) {
   try {
     const config = validateConfiguration(process.env, process.argv.slice(2));
     void run(config).catch(error => {
-      console.error('Live voice test failed: ' + (error instanceof Error ? error.message : String(error)));
+      console.error('Live voice test failed: ' + redactDiagnostic(error, config));
       process.exitCode = 1;
     });
   } catch (error) {
@@ -176,4 +198,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { validateConfiguration };
+module.exports = { validateConfiguration, redactDiagnostic, event };
