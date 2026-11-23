@@ -54,3 +54,40 @@ test('a recovered player is not reported as orphaned after node disconnect', asy
   assert.equal(player.node, destination);
   assert.equal(player.destroyed, false);
 });
+
+test('duplicate close notifications run only one failover and one disconnect event', async t => {
+  const { manager, node } = createPlayer(t);
+  const originalMove = NodeFailover.move;
+  let signalStarted;
+  let releaseMove;
+  const started = new Promise(resolve => { signalStarted = resolve; });
+  const release = new Promise(resolve => { releaseMove = resolve; });
+  let moveCalls = 0;
+  NodeFailover.move = async () => {
+    moveCalls++;
+    signalStarted();
+    await release;
+    return { status: 'cancelled', attempts: 0 };
+  };
+  t.after(() => { NodeFailover.move = originalMove; });
+  manager.options.node = {
+    ...manager.options.node,
+    autoMovePlayers: true,
+    failover: { preserveOnFailure: true },
+  };
+  node.retryAmount = 0;
+  node.reconnectAttempts = 0;
+  let disconnectEvents = 0;
+  manager.on('nodeDisconnect', () => { disconnectEvents++; });
+
+  const first = node.close({ code: 1006, reason: 'first-close' });
+  try {
+    await started;
+    await node.close({ code: 1006, reason: 'duplicate-close' });
+  } finally {
+    releaseMove();
+  }
+  await first;
+  assert.equal(moveCalls, 1);
+  assert.equal(disconnectEvents, 1);
+});
