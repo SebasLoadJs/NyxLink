@@ -228,3 +228,34 @@ test('crossfade lab does not accept duplicate starts or unrelated crossfading ev
   assert.equal(evaluateCrossfadeEvents([...wrongTrack, { type: 'trackStart', track: 'B' }], 0).success, false);
   assert.throws(() => evaluateCrossfadeEvents({}, 0), TypeError);
 });
+
+test('generated TypeScript output must not invalidate a clean source revision', async t => {
+  if (spawnSync('git', ['--version'], { encoding: 'utf8' }).status !== 0) {
+    t.skip('Git binary unavailable');
+    return;
+  }
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'nyxlink-build-attribution-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const git = (...args) => {
+    const result = spawnSync('git', ['-C', directory, ...args], { encoding: 'utf8', timeout: 10000 });
+    assert.equal(result.status, 0, result.stderr || result.error?.message);
+    return result.stdout.trim();
+  };
+  git('init', '-q');
+  await fs.mkdir(path.join(directory, 'dist'));
+  await fs.writeFile(path.join(directory, 'index.ts'), 'export const value = 1;\n');
+  await fs.writeFile(path.join(directory, 'dist', 'index.js'), 'exports.value = 0;\n');
+  git('add', '.');
+  git('-c', 'user.name=NyxLink Test', '-c', 'user.email=test@example.invalid',
+    'commit', '-qm', 'fixture');
+  const revision = git('rev-parse', 'HEAD');
+  assert.equal(sourceRevision(directory), revision);
+
+  // The tracked output is intentionally behind the TypeScript and changes
+  // whenever the acceptance harness recompiles it.
+  await fs.writeFile(path.join(directory, 'dist', 'index.js'), 'exports.value = 1;\n');
+  await fs.writeFile(path.join(directory, 'dist', 'new-output.js'), 'module.exports = true;\n');
+  assert.equal(sourceRevision(directory), revision);
+  await fs.writeFile(path.join(directory, 'index.ts'), 'export const value = 2;\n');
+  assert.equal(sourceRevision(directory), null, 'modified source must invalidate revision evidence');
+});
