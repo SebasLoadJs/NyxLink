@@ -48,7 +48,11 @@ async function main() {
     assert.deepEqual(actual.dependencies, manifest.dependencies);
     const license = await fs.readFile(path.join(installed, 'LICENSE'));
     assert.deepEqual(license, await fs.readFile(path.join(root, 'LICENSE')));
-    checks.push('identity, runtime dependencies and license bytes');
+    const attribution = await fs.readFile(path.join(installed, 'NOTICE.md'), 'utf8');
+    assert.equal(attribution, await fs.readFile(path.join(root, 'NOTICE.md'), 'utf8'));
+    assert.match(attribution, /Moonlink\.js/);
+    assert.match(attribution, /Ecliptia\/moonlink\.js/);
+    checks.push('identity, runtime dependencies, license and upstream attribution bytes');
     const specifier = JSON.stringify(manifest.name);
     const setup = `const assert = require('node:assert/strict'); const api = require(${specifier});
       for (const name of ${JSON.stringify(baseline)}) assert.ok(name in api, name);
