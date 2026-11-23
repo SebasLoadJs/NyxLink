@@ -46,7 +46,8 @@ function validateConfiguration(env, argv) {
       secure: env.NYXLINK_NODE_SECURE === 'true'
     },
     urls: [env.NYXLINK_LIVE_TRACK_A, env.NYXLINK_LIVE_TRACK_B],
-    crossfadeMs
+    crossfadeMs,
+    commandSmoke: argv.includes('--commands')
   };
 }
 
@@ -159,6 +160,24 @@ async function run(config) {
     stage = 'voice-connect';
     await player.connect();
     record('gatewayVoiceReady');
+    if (config.commandSmoke) {
+      stage = 'command-smoke';
+      const { verifyCommandSequence } = require('./live-voice-commands.cjs');
+      report.commandChecks = await verifyCommandSequence(player, node, tracks);
+      stage = 'command-event-observation';
+      const expires = Date.now() + 20000;
+      while (Date.now() < expires) {
+        const starts = events.filter(e => e.type === 'trackStart').map(e => e.track);
+        if (starts.includes('B')) break;
+        await delay(150);
+      }
+      const starts = events.filter(e => e.type === 'trackStart').map(e => e.track);
+      report.observed = starts.includes('A') && starts.includes('B') &&
+        starts.indexOf('A') < starts.indexOf('B');
+      report.success = report.observed && report.commandChecks.length === 6;
+      if (!report.success) throw new Error('Live command sequence did not produce ordered track events');
+      record('commandSequencePassed');
+    } else {
     stage = 'transition-configuration';
     await player.setCrossfade({ enabled: true, mode: 'smart', duration: config.crossfadeMs, curve: 'sinusoidal' });
     player.setQueuePreload({ enabled: true, leadMs: Math.min(35000, tracks[0].getInfo().length) });
@@ -183,6 +202,7 @@ async function run(config) {
     report.success = report.observed && report.remainingQueue === 0;
     if (!report.success) throw new Error('Two ordered TrackStart events and an empty queue were not observed');
     record('protocolSequencePassed');
+    }
   } catch (error) {
     report.success = false;
     report.errorCode = errorCode(error);
