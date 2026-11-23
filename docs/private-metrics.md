@@ -31,7 +31,7 @@ Clients must include the header Authorization: Bearer **your-secret**. Only exac
 | GET /health | Service health boolean | All application/Discord IDs |
 | GET /nodes | Opaque 16-char SHA-256 node keys; backend family, readiness, draining and counts | Hostnames, ports, passwords, Discord guild IDs, sessions, tracks |
 | GET /players/summary | Aggregate total/playing/paused counts | Guild, user, voice and track information |
-| GET /versions | NyxLink version and known connected backend families | Raw node identifiers, remote server metadata |
+| GET /versions | NyxLink version and connected backend versions when safely formatted, keyed by opaque node hash | Raw node identifiers, unvalidated remote metadata or credentials |
 | GET /metrics | Prometheus plaintext gauges with fixed metric names | Dynamic labels, IDs and credentials |
 
 Unauthenticated requests return 401. Other methods return 405 after authentication. No query-string selectors or playback-control endpoints are supported. The server does not maintain request history, metrics by user, stream audio, or expose filesystem access. The response disables caching and framing.
