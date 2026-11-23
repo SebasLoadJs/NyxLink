@@ -56,6 +56,7 @@ These APIs only describe **client and tested protocol behavior**; they do not gu
 - Added a controlled Discord voice disconnect/reconnect acceptance mode on both backends. It verifies a new gateway voice handshake, confirms the active track in REST and explicitly exercises player recovery; it does not simulate a network partition.
 - Kept the NodeLink-specific crossfade acceptance mode separate. Unrecognized backends are rejected, and Lavalink is not advertised as implementing NodeLink crossfade.
 - Bounded status polling even when the REST request stalls, and sanitized backend version and track-end metadata in local reports.
+- Bounded live Discord login, track loading, voice connection, command execution and teardown even when a backend/gateway promise never settles; these failure-timeout checks do not imply audible acceptance.
 - **No audible Discord output has been independently certified** by this harness or automated CI.
 
 ### Distribution
