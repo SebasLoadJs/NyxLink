@@ -760,7 +760,11 @@ export class Node {
         const destinations = new Map<Node, Player[]>();
         orphanedPlayers.forEach((player, index) => {
           const result = transfers[index];
-          if (result.status === 'recovered' && result.node) {
+          // A recovery result is only authoritative while the player actually
+          // belongs to that live destination; ownership may change meanwhile.
+          if (result.status === 'recovered' && result.node && !player.destroyed &&
+              player.node === result.node && result.node !== this &&
+              result.node.connected && !result.node.destroyed) {
             const group = destinations.get(result.node) ?? [];
             group.push(player);
             destinations.set(result.node, group);
@@ -769,8 +773,8 @@ export class Node {
         for (const [target, players] of destinations) this.manager.emit('playersMoved', players, this, target);
         // A cancelled recovery is not a successful transfer. Keep any player
         // still owned by the disconnected node eligible for resume/cleanup.
-        orphanedPlayers = orphanedPlayers.filter((player, index) =>
-          !player.destroyed && player.node === this && transfers[index].status !== 'recovered');
+        orphanedPlayers = orphanedPlayers.filter(player =>
+          !player.destroyed && player.node === this);
         moved = orphanedPlayers.length === 0;
     }
 
