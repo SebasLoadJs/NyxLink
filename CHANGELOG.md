@@ -13,6 +13,9 @@ This changelog describes the unreleased NyxLink 5.3 development line and its ver
 ### Playback and reliability
 
 - Hardened play/stop/seek/skip, position acknowledgements, queue and autoplay transitions against stale events and concurrent user commands.
+- Made `back()` transactional: previous history and the outgoing queue slot are committed only after backend acknowledgement; failed/aborted back attempts restore the original history and queue state.
+- Made positional `skip(index)` restore the selected entry to its original queue position on backend failure or a cancelled playback intent.
+- Tightened recommendation seed validation for YouTube/YouTube Music and prevented failed or stale autoplay requests from deleting independently queued manual tracks.
 - Added rollback- and intent-aware player migration, bounded failover, candidate selection, health monitoring and explicit node maintenance (`drain`/`eject`).
 - Added cancellation safeguards for late backend responses, worker failures, voice disconnects, crossfading/gapless transitions and mixed-node recovery.
 - Introduced node-identity-scoped session storage and safe fallback for unambiguous legacy endpoint-only resume records.
