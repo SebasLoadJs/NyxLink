@@ -1,0 +1,57 @@
+# Changelog
+
+This changelog describes the unreleased NyxLink 5.3 development line and its verified scope. **No GitHub `v5.3.0` tag or npm `5.3.0` stable package has been published.** Changes may still be refined before the release candidate.
+
+## [Unreleased — v5.3]
+
+### Architecture and public API
+
+- Introduced a multi-backend client architecture with explicit Lavalink v4 and NodeLink adapters, capability discovery, connection-scoped inventories, selection constraints and backend-specific contracts.
+- Added stronger REST/WebSocket response validation and extension routing that rejects unsupported operations rather than silently sending incompatible payloads.
+- Extended playback snapshots, track encoding/resolution, storage contracts and public TypeScript declarations for CommonJS and ESM consumers.
+
+### Playback and reliability
+
+- Hardened play/stop/seek/skip, position acknowledgements, queue and autoplay transitions against stale events and concurrent user commands.
+- Added rollback- and intent-aware player migration, bounded failover, candidate selection, health monitoring and explicit node maintenance (`drain`/`eject`).
+- Added cancellation safeguards for late backend responses, worker failures, voice disconnects, crossfading/gapless transitions and mixed-node recovery.
+- Introduced node-identity-scoped session storage and safe fallback for unambiguous legacy endpoint-only resume records.
+
+### NodeLink integration
+
+- Added validated source-health REST responses and real-time events; optional source-aware node selection.
+- Added per-player crossfade settings, queue-preload scheduling and recognized nonterminal gapless/crossfade transitions.
+- Added supported low-level NodeLink extension routes: stream and format handling, lyrics/captions, groups, SponsorBlock and remote mix operations.
+- Introduced a pinned modern NodeLink integration profile alongside the existing baseline.
+
+These APIs only describe **client and tested protocol behavior**; they do not guarantee audible crossfade, AutoMix quality, every provider, or Discord voice playback without additional real-world tests.
+
+### Lavalink integration
+
+- Added capability-gated support for the separately installed LavaLyrics and SponsorBlock plugins, with schema validation and immutable JAR checksums in the integration laboratory.
+- Preserved normal Lavalink v4 compatibility when optional plugins are absent.
+
+### Logging and security
+
+- Added opt-in Consola-based logging with system-status and failover reporting. Logging remains silent by default.
+- Added basic redaction of known secret fields and authorization tokens; reinforced transport/authentication handling, failure boundaries and test-laboratory security.
+- Enabled strict compilation on Node.js 22/24, regression/contract tests, backend integration, CodeQL and endurance validation in GitHub Actions.
+
+### Distribution
+
+- Added npm channel policy validation: `dev` for development builds, `next` for release candidates and `latest` for stable SemVer versions.
+- Added isolated package-consumer validation for CommonJS, ESM, TypeScript and Discord.js integration.
+- Added release acceptance criteria and migration guidance.
+
+### Remaining release blockers
+
+- All validation jobs must pass on the **same final candidate commit**; previously passed historical runs are not sufficient.
+- Controlled real Discord voice and audible playback/reconnect testing has not been certified.
+- Final dependency/license review, candidate `npm pack` verification, release notes and npm publication require explicit acceptance.
+- Stable version number, branch and tag must only be finalized after these checks.
+
+See [release-5.3-plan.md](docs/release-5.3-plan.md), [backend-compatibility.md](docs/backend-compatibility.md), [live-voice-verification.md](docs/live-voice-verification.md) and [migration guide](docs/migrating-from-moonlink.md).
+
+## Previous stable line
+
+The repository's stable source branch is `v5.2`. This changelog does not reconstruct or replace its upstream release history; consult that branch's Git history and release records for exact historical changes.
