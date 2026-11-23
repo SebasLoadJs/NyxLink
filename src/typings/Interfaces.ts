@@ -153,7 +153,7 @@ export interface IManagerOptionsConfig {
     playerHealth?: IPlayerHealthOptions;
     trackPartial?: TPartialTrackProperties[];
     database?: {
-        type: 'memory' | 'local';
+        type: 'memory' | 'local' | 'external';
         adapter?: StorageAdapter;
         options?: any;
     };
