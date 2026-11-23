@@ -5,7 +5,7 @@ const { EventEmitter } = require('node:events');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
-const { validateConfiguration, errorCode, event, writePrivateReport, safeBackendVersion, safeTrackEndReason } = require('../scripts/test-live-voice.cjs');
+const { validateConfiguration, errorCode, event, writePrivateReport, reportPath, safeBackendVersion, safeTrackEndReason } = require('../scripts/test-live-voice.cjs');
 
 function config(){
  return {
@@ -129,4 +129,21 @@ test('live voice reports whitelist backend version and track-end reason', () => 
   assert.equal(safeTrackEndReason('crossfading'), 'crossfading');
   assert.equal(safeTrackEndReason('finished'), 'finished');
   assert.equal(safeTrackEndReason('malicious URL https://internal.test/secret'), 'unrecognized');
+});
+
+test('each authorized live voice run receives its own private evidence file', () => {
+  const date = new Date('2026-11-23T20:00:00.000Z');
+  const first = '11111111-1111-4111-8111-111111111111';
+  const second = '22222222-2222-4222-8222-222222222222';
+  const crossfade = reportPath({ backend: 'nodelink' }, date, first);
+  const commands = reportPath({ backend: 'nodelink', commandSmoke: true }, date, first);
+  const reconnect = reportPath({ backend: 'lavalink', reconnectSmoke: true }, date, first);
+  assert.ok(crossfade.endsWith('nodelink-crossfade-2026-11-23T20-00-00.000Z-' + first + '.json'));
+  assert.ok(commands.endsWith('nodelink-commands-2026-11-23T20-00-00.000Z-' + first + '.json'));
+  assert.ok(reconnect.endsWith('lavalink-reconnect-2026-11-23T20-00-00.000Z-' + first + '.json'));
+  assert.notEqual(reportPath({ backend: 'nodelink', commandSmoke: true }, date, second), commands);
+  assert.throws(() => reportPath({ backend: '../secrets' }, date, first), TypeError);
+  assert.throws(() => reportPath({ backend: 'nodelink' }, new Date('bad'), first), TypeError);
+  assert.throws(() => reportPath({ backend: 'nodelink' }, date, '../../escape'), TypeError);
+  assert.doesNotMatch(crossfade + commands + reconnect, /password|Bearer|token/);
 });
