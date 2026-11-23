@@ -274,9 +274,18 @@ export class Queue {
         if (this.manager.options.queue?.allowDuplicates === false ||
             (maxSize !== "unlimited" && count > maxSize - this.tracks.length) || count > 100_000) return false;
         const trackToDuplicate = this.tracks[index];
+        // A queue item represents one playback attempt. Reusing the same Track
+        // instance would share mutable position, retry state and user metadata
+        // across separate plays of the same recording.
         const duplicatedTracks: Track[] = [];
-        for (let i = 0; i < count; i++) {
-            duplicatedTracks.push(trackToDuplicate);
+        try {
+            for (let i = 0; i < count; i++) {
+                duplicatedTracks.push(trackToDuplicate.clone());
+            }
+        } catch {
+            // Malformed or unserializable track metadata must not leave a
+            // partially duplicated queue or emit a misleading queue event.
+            return false;
         }
 
         // Avoid the engine argument limit for large, explicitly unlimited queues.
