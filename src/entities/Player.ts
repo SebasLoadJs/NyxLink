@@ -513,8 +513,15 @@ export class Player {
             return false;
         }
 
-        try { nextTrack = await TrackResolver.resolve(nextTrack, this.node); }
-        catch (error) {
+        // Resolve and normalize before consuming a queue entry. Plugins can
+        // return malformed track data or throw in custom property getters;
+        // neither failure may remove the user's pending song.
+        let selectedPlaybackTrack: Track;
+        try {
+            nextTrack = await TrackResolver.resolve(nextTrack, this.node);
+            selectedPlaybackTrack = nextTrack instanceof Track ? nextTrack :
+                new Track(nextTrack, undefined, undefined, this.manager.options.trackPartial ?? []);
+        } catch (error) {
             this.manager.emit('debug', `NyxLink > TrackResolver > ${error instanceof Error ? error.message : String(error)}`);
             return false;
         }
@@ -523,8 +530,6 @@ export class Player {
         onInjectedQueueChange?.(false);
 
         const oldTrackTitle = this.current?.title ?? "null";
-        const selectedPlaybackTrack = nextTrack instanceof Track ? nextTrack :
-            new Track(nextTrack, undefined, undefined, this.manager.options.trackPartial ?? []);
         const positionBeforePlayback = selectedPlaybackTrack.position;
         this.current = selectedPlaybackTrack;
         this.current.position = finalOptions.position || 0;
