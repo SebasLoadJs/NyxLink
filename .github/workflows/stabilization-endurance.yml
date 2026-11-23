@@ -3,6 +3,11 @@ name: Extended stabilization endurance
 on:
   push:
     branches: [dev]
+    # Tag pushes bypass path filters in GitHub Actions: every immutable RC
+    # and stable release must rerun the full 600-second backend endurance.
+    tags:
+      - 'v5.3.0-rc.*'
+      - 'v5.3.0'
     paths:
       - 'docs/phase-1-audit.md'
       - 'docs/release-5.3-plan.md'
