@@ -277,3 +277,96 @@ test('permanent disconnect cleans other guilds even if one player destroy throws
   assert.match(errors[0].message, /database unavailable/);
   assert.equal(source.destroyed, true);
 });
+
+test('old disconnect cannot destroy a node reconnected during orphan cleanup', async t => {
+  const { manager, node, player } = createPlayer(t);
+  const { NodeState } = require('../dist/src/typings/types.js');
+  manager.options.node = {
+    ...manager.options.node,
+    autoMovePlayers: false,
+    failover: { preserveOnFailure: false },
+  };
+  node.retryAmount = 0;
+  node.reconnectAttempts = 0;
+  let enteredResolve;
+  let releaseResolve;
+  const entered = new Promise(resolve => { enteredResolve = resolve; });
+  const release = new Promise(resolve => { releaseResolve = resolve; });
+  player.destroy = async () => {
+    enteredResolve();
+    await release;
+  };
+
+  const closing = node.close({ code: 1006, reason: 'old-close-cleanup' });
+  try {
+    await entered;
+    // The original callback is still waiting on guild cleanup.
+    node.connected = true;
+    node.state = NodeState.READY;
+  } finally {
+    releaseResolve();
+  }
+  await closing;
+  assert.equal(node.destroyed, false);
+  assert.equal(node.connected, true);
+  assert.equal(node.state, NodeState.READY);
+});
+
+test('throwing disconnect and orphan observers do not block node cleanup', async t => {
+  const { manager, node, player } = createPlayer(t);
+  manager.options.node = {
+    ...manager.options.node,
+    autoMovePlayers: false,
+    failover: { preserveOnFailure: true },
+  };
+  node.retryAmount = 0;
+  node.reconnectAttempts = 0;
+  const errors = [];
+  const events = [];
+  manager.on('nodeError', (_node, error) => errors.push(error.message));
+  manager.on('nodeDisconnect', () => {
+    events.push('disconnect');
+    throw new Error('disconnect subscriber failed');
+  });
+  manager.on('playersOrphaned', players => {
+    events.push('orphaned');
+    assert.deepEqual(players, [player]);
+    throw new Error('orphan subscriber failed');
+  });
+
+  await node.close({ code: 1006, reason: 'subscribers-throw' });
+  assert.equal(node.destroyed, true);
+  assert.deepEqual(events, ['disconnect', 'orphaned']);
+  assert.deepEqual(errors, ['disconnect subscriber failed', 'orphan subscriber failed']);
+});
+
+test('throwing playersMoved subscriber cannot abort node closure', async t => {
+  const { manager, node: source, player } = createPlayer(t);
+  const { Node } = require('../dist');
+  const { NodeState } = require('../dist/src/typings/types.js');
+  const destination = new Node(manager, {
+    identifier: 'observer-throw-destination',
+    host: '127.0.0.1', port: 2888, password: 'test-only',
+  });
+  destination.connected = true;
+  destination.state = NodeState.READY;
+  manager.nodes.nodes.set(destination.identifier, destination);
+  t.after(async () => { await destination.destroy(); });
+  const move = NodeFailover.move;
+  NodeFailover.move = async () => {
+    player.node = destination;
+    return { status: 'recovered', attempts: 1, node: destination };
+  };
+  t.after(() => { NodeFailover.move = move; });
+  manager.options.node = { ...manager.options.node, autoMovePlayers: true };
+  source.retryAmount = 0;
+  source.reconnectAttempts = 0;
+  const errors = [];
+  manager.on('nodeError', (_node, error) => errors.push(error.message));
+  manager.on('playersMoved', () => { throw new Error('move subscriber failed'); });
+
+  await source.close({ code: 1006, reason: 'move-subscriber-throws' });
+  assert.equal(source.destroyed, true);
+  assert.equal(player.node, destination);
+  assert.deepEqual(errors, ['move subscriber failed']);
+});
