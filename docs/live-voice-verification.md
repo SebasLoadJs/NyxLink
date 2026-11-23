@@ -89,12 +89,14 @@ node scripts/test-live-voice.cjs --armed --reconnect
 NYXLINK_LIVE_BACKEND=lavalink node scripts/test-live-voice.cjs --armed --reconnect
 ```
 
-The reconnect mode starts controlled track A, verifies the backend has
-the correct track, deliberately leaves the voice channel, reconnects via
-Discord, calls the player's recovery operation without destroying it,
-and confirms the backend reports a connected session with track A.
-Five checkpoints are recorded in `reconnectChecks`, not raw session IDs,
-gateway voice credentials or track encodings.
+The reconnect mode requires **both controlled tracks to last at least
+45 seconds**, so a short fixture does not finish during the handshake.
+It starts track A, verifies the backend has the correct track, deliberately
+leaves the voice channel, reconnects via Discord, calls the player's
+recovery operation without destroying it, and confirms the backend reports
+a connected session with track A. Five checkpoints are recorded in
+`reconnectChecks`, not raw session IDs, gateway voice credentials or
+track encodings.
 
 **It is not a network-partition or audible-recovery certification.** The
 test does not forcibly kill the gateway, unplug a NodeLink/Lavalink node or
