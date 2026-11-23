@@ -233,3 +233,38 @@ test('rollback still cleans target if best-effort persistence diagnostics throw'
   assert.equal(player.node, source);
   assert.equal(targetCleanups, 1);
 });
+
+test('observer exceptions after commit do not undo an acknowledged migration', async t => {
+  const { manager, node: source, player } = createPlayer(t);
+  const target = attachDestination(t, manager);
+  const current = createTrack('committed-despite-observer');
+  player.current = current;
+  player.playing = true;
+  player.restart = async () => true;
+  let sourceCleanups = 0;
+  let targetCleanups = 0;
+  source.rest.destroyPlayer = async () => { sourceCleanups++; };
+  target.rest.destroyPlayer = async () => { targetCleanups++; };
+  const observed = [];
+  manager.on('playerSwitchedNode', () => {
+    observed.push('switched');
+    throw new Error('switched observer failed');
+  });
+  manager.on('playerNodeFailover', (_player, status) => {
+    observed.push(status.status);
+    if (status.status === 'recovered') throw new Error('recovered observer failed');
+  });
+  manager.on('playerResumed', () => {
+    observed.push('resumed');
+    throw new Error('resumed observer failed');
+  });
+
+  assert.equal(await player.transferNode(target), true);
+  assert.equal(player.node, target);
+  assert.equal(player.current, current);
+  assert.equal(sourceCleanups, 1);
+  assert.equal(targetCleanups, 0);
+  assert.deepEqual(observed, ['in-progress', 'switched', 'recovered', 'resumed']);
+  const saved = await manager.database.get(`players.${player.guildId}`);
+  assert.equal(saved.node, target.identifier);
+});
