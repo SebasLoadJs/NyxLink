@@ -68,6 +68,16 @@ test('lost lease prevents REST, gateway and snapshot writes by the old Player', 
   assert.equal(a.activity.updates.length, 0);
   await assert.rejects(a.manager.database.set('players.' + GUILD + '.paused', true), /lease/);
   await assert.rejects(player.connect(), /lease/);
+  // The extension router is intercepted so these assertions fail before
+  // opening any real HTTP connection to a NodeLink/Lavalink server.
+  a.node.rest.extensionRoute = () => ({
+    method: 'PATCH', feature: 'mix:update', path: '/should-not-be-sent', transport: 'json',
+  });
+  await assert.rejects(a.node.rest.featureRequest('mix:update', {
+    guildId: GUILD, mixId: 'layer',
+  }, { headers: {} }), /lease/);
+  await assert.rejects(a.node.rest.lavalinkSponsorBlockRequest('PUT', GUILD, ['sponsor']), /lease/);
+  assert.equal(a.activity.deletions.length, 0);
   await player.destroy('stale process cleanup');
   await a.manager.database.flush();
   const after = await b.manager.database.get('players.' + GUILD);
