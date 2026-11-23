@@ -398,6 +398,15 @@ async function shutdown() {
 
 Llama a esta función desde el cierre de tu aplicación. `manager.shutdown()` es idempotente y libera los recursos de NyxLink; el cliente Discord pertenece a tu bot.
 
+## Guías para migración y versiones
+
+- [Migrar de Moonlink a NyxLink](docs/migrating-from-moonlink.md) — imports, cambios de comportamiento, sesiones, backends y rollback
+- [Cambios previstos para v5.3](CHANGELOG.md) — funcionalidades implementadas y limitaciones aún pendientes de verificar
+- [Plan de aceptación de v5.3](docs/release-5.3-plan.md) — fases, pruebas y condiciones necesarias antes de la publicación estable
+- [Prueba de voz real](docs/live-voice-verification.md) — validación manual de reproducción audible y crossfade
+
+La rama `dev` es de desarrollo. Una versión estable no debe anunciarse hasta aprobar la suite completa, el paquete instalable y las comprobaciones de audio real.
+
 ## Desarrollo
 
 ```sh
