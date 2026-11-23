@@ -33,7 +33,12 @@ test('leased PlayerManager requires async createOwned and excludes competing Man
   assert.equal(a.manager.players.get(GUILD), player);
   assert.ok(a.manager.guildOwnership.localLease(GUILD).fencingToken > 0);
   await assert.rejects(b.manager.players.createOwned(b.options), /another process/);
-  assert.throws(() => b.manager.send(GUILD, { op: 4 }), /lease/);
+  // The public Manager.send callback remains caller-owned. Player voice
+  // operations are the guarded gateway surface.
+  const { Player } = require('../../dist');
+  const unowned = new Player(b.manager, b.node, b.options);
+  unowned.stopHealthCheck();
+  await assert.rejects(unowned.connect(), /lease/);
   await player.pause();
   assert.equal(a.activity.updates.length, 1);
   assert.equal(b.activity.updates.length, 0);
@@ -59,7 +64,7 @@ test('lost lease prevents REST, gateway and snapshot writes by the old Player', 
   await assert.rejects(player.pause(), /lease/);
   assert.equal(a.activity.updates.length, 0);
   await assert.rejects(a.manager.database.set('players.' + GUILD + '.paused', true), /lease/);
-  assert.throws(() => a.manager.send(GUILD, { op: 4 }), /lease/);
+  await assert.rejects(player.connect(), /lease/);
   await player.destroy('stale process cleanup');
   await a.manager.database.flush();
   const after = await b.manager.database.get('players.' + GUILD);
@@ -114,7 +119,10 @@ test('separate Node.js processes cannot both create the same guild player', asyn
   const parent = await ownedManager(client, namespace);
   t.after(async () => parent.manager.shutdown());
   await assert.rejects(parent.manager.players.createOwned(parent.options), /another process/);
-  assert.throws(() => parent.manager.send(GUILD, { op: 4 }), /lease/);
+  const { Player } = require('../../dist');
+  const unowned = new Player(parent.manager, parent.node, parent.options);
+  unowned.stopHealthCheck();
+  await assert.rejects(unowned.connect(), /lease/);
 
   child.send({ event: 'release' });
   const [released] = await once(child, 'message', { signal: AbortSignal.timeout(12000) });
