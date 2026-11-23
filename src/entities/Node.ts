@@ -799,7 +799,16 @@ export class Node {
         if (!moved && orphanedPlayers.length > 0) {
             this.manager.emit("debug", `Moonlink.js > Node >> Node disconnected permanently. Destroying ${orphanedPlayers.length} players.`);
             if (!this.manager.options.node?.failover?.preserveOnFailure) {
-              for (const player of orphanedPlayers) await player.destroy("Node disconnected permanently");
+              for (const player of orphanedPlayers) {
+                try {
+                  await player.destroy("Node disconnected permanently");
+                } catch (error) {
+                  // A failing guild storage/voice cleanup must not prevent
+                  // other orphaned guilds or this node from being cleaned up.
+                  const failure = error instanceof Error ? error : new Error(String(error));
+                  try { this.manager.emit("nodeError", this, failure); } catch { /* observer failure */ }
+                }
+              }
             }
             this.manager.emit("playersOrphaned", orphanedPlayers, this);
         }
