@@ -312,3 +312,83 @@ test('a user stop still prevents a newly queued track from starting after an obs
   assert.deepEqual(player.queue.tracks, [manual]);
   assert.equal(playbackRequests(requests).length, 0);
 });
+
+test('a manually queued identical Track survives an obsolete autoplay acknowledgement', async t => {
+  const { node, player, requests } = createPlayer(t);
+  const previous = createTrack('previous');
+  const candidate = createTrack('recommended');
+  player.current = previous;
+  player.recommendations = [candidate];
+
+  const entered = deferred();
+  const pending = deferred();
+  const update = node.rest.updatePlayer;
+  let first = true;
+  node.rest.updatePlayer = async (...args) => {
+    if (!first) return update(...args);
+    first = false;
+    entered.resolve();
+    await pending.promise;
+    return { guildId: args[0], ...args[1] };
+  };
+
+  const autoplay = node.handleAutoPlay(player, previous);
+  await entered.promise;
+  player.queue.add(candidate);
+  const stopped = player.stop(); // invalidates the in-flight automatic intent
+  pending.resolve();
+  assert.equal(await autoplay, false);
+  await stopped;
+
+  assert.deepEqual(player.queue.tracks, [candidate]);
+  assert.equal(player.current, null);
+  assert.equal(playbackRequests(requests).length, 0);
+});
+
+test('a failed autoplay REST request removes its rollback but keeps a manual identical Track', async t => {
+  const { node, player } = createPlayer(t);
+  const previous = createTrack('previous');
+  const candidate = createTrack('recommended');
+  player.current = previous;
+  player.recommendations = [candidate];
+
+  const entered = deferred();
+  const pending = deferred();
+  node.rest.updatePlayer = async () => {
+    entered.resolve();
+    await pending.promise;
+    return null; // no successful backend acknowledgement
+  };
+
+  const autoplay = node.handleAutoPlay(player, previous);
+  await entered.promise;
+  player.queue.add(candidate);
+  pending.resolve();
+  assert.equal(await autoplay, false);
+  assert.deepEqual(player.queue.tracks, [candidate]);
+  assert.equal(player.current, previous);
+});
+
+test('a manual queue entry wins while an automatic command is waiting for its turn', async t => {
+  const { node, player, requests } = createPlayer(t);
+  const previous = createTrack('previous');
+  const manual = createTrack('manual');
+  player.current = previous;
+  player.recommendations = [createTrack('recommended')];
+
+  const entered = deferred();
+  const pending = deferred();
+  const blocker = player.commands.enqueue(async () => {
+    entered.resolve();
+    await pending.promise;
+  });
+  await entered.promise;
+  const autoplay = node.handleAutoPlay(player, previous);
+  player.queue.add(manual);
+  pending.resolve();
+  await blocker;
+
+  assert.equal(await autoplay, false);
+  assert.deepEqual(player.queue.tracks, [manual]);
+  assert.equal(playbackRequests(requests).length, 0);
+});
