@@ -159,3 +159,33 @@ test('source revision is a canonical Git SHA or explicitly unavailable', () => {
     assert.equal(revision, result.stdout.trim());
   }
 });
+
+test('source revision rejects modified and untracked source in a disposable Git repository', async t => {
+  if (spawnSync('git', ['--version'], { encoding: 'utf8' }).status !== 0) {
+    t.skip('Git binary unavailable');
+    return;
+  }
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'nyxlink-evidence-git-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const git = (...args) => {
+    const result = spawnSync('git', ['-C', directory, ...args], {
+      encoding: 'utf8', timeout: 10000,
+    });
+    assert.equal(result.status, 0, result.stderr || result.error?.message);
+    return result.stdout.trim();
+  };
+  git('init', '-q');
+  const tracked = path.join(directory, 'music.js');
+  await fs.writeFile(tracked, 'module.exports = 1;\n');
+  git('add', 'music.js');
+  git('-c', 'user.name=NyxLink Test', '-c', 'user.email=test@example.invalid',
+    'commit', '-qm', 'fixture');
+  const expected = git('rev-parse', 'HEAD');
+  assert.equal(sourceRevision(directory), expected);
+  await fs.writeFile(tracked, 'module.exports = 2;\n');
+  assert.equal(sourceRevision(directory), null, 'modified tracked code is not immutable');
+  git('restore', 'music.js');
+  assert.equal(sourceRevision(directory), expected);
+  await fs.writeFile(path.join(directory, 'untracked.js'), 'module.exports = 3;\n');
+  assert.equal(sourceRevision(directory), null, 'untracked source is not immutable');
+});
