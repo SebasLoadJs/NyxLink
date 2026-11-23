@@ -46,10 +46,18 @@ These APIs only describe **client and tested protocol behavior**; they do not gu
 - Added Redis 7 integration tests in Node.js 22/24, including cross-process owner transfer, delayed command handling, out-of-order join/leave and replay expiration.
 - Redis and IPC checks do not replace an authenticated gateway transport or provide end-to-end fencing for commands already accepted by Discord.
 
+### Live voice acceptance harness
+
+- Added a separately armed live Discord command smoke for NodeLink and Lavalink v4: play, backend-confirmed track A, pause/resume, volume, seek, skip and backend-confirmed track B.
+- Kept the NodeLink-specific crossfade acceptance mode separate. Unrecognized backends are rejected, and Lavalink is not advertised as implementing NodeLink crossfade.
+- Bounded status polling even when the REST request stalls, and sanitized backend version and track-end metadata in local reports.
+- **No audible Discord output has been independently certified** by this harness or automated CI.
+
 ### Distribution
 
 - Added npm channel policy validation: `dev` for development builds, `next` for release candidates and `latest` for stable SemVer versions.
-- Added isolated package-consumer validation for CommonJS, ESM, TypeScript and Discord.js integration.
+- Added isolated package-consumer validation for CommonJS, ESM, TypeScript and Discord.js integration, including optional Redis, IPC and private metrics exports.
+- Added the derivative `NOTICE.md` to the npm artifact with explicit Moonlink.js origin and a package-integrity check; legal sign-off remains pending.
 - Added release acceptance criteria and migration guidance.
 
 ### Remaining release blockers
