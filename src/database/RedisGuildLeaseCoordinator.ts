@@ -80,7 +80,8 @@ export class RedisGuildLeaseCoordinator {
   public acquire(guildId: string): Promise<RedisGuildLease | null> {
     if (this.closed) return Promise.reject(new Error('Guild lease coordinator is closed'));
     const [lock, counter] = this.keys(guildId);
-    if (this.active.has(guildId)) return Promise.resolve(null);
+    // Redis is authoritative: a locally remembered lease may have expired.
+    // The atomic EVAL prevents acquiring a second owner while it is still live.
     const operation = this.client.sendCommand(['EVAL', ACQUIRE, '2', lock, counter, this.secret, String(this.ttlMs)])
       .then(async value => {
         if (value === 0) return null;
@@ -122,7 +123,9 @@ export class RedisGuildLeaseCoordinator {
   public async isCurrent(lease: RedisGuildLease): Promise<boolean> {
     if (this.closed || !this.ownsHandle(lease)) return false;
     const [key] = this.keys(lease.guildId);
-    return Number(await this.client.sendCommand(['EVAL', CHECK, '1', key, this.expected(lease)])) === 1;
+    const current = Number(await this.client.sendCommand(['EVAL', CHECK, '1', key, this.expected(lease)])) === 1;
+    if (!current && this.ownsHandle(lease)) this.active.delete(lease.guildId);
+    return current;
   }
 
   public async release(lease: RedisGuildLease): Promise<boolean> {
