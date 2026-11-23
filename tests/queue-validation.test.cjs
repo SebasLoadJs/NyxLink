@@ -179,3 +179,31 @@ test('custom track that throws during serialization cannot partially insert', as
   assert.deepEqual(q.tracks, []);
   assert.equal(adds, 0);
 });
+
+test('circular metadata never enters a batch whose queue snapshot cannot persist', async t => {
+  const { player, manager } = createPlayer(t);
+  const queue = player.queue;
+  const first = createTrack('valid-before-circular');
+  queue.add(first);
+  let events = 0;
+  manager.on('queueAdd', () => events++);
+  const accepted = createTrack('valid-after-circular');
+  const cyclic = createTrack('metadata-circular');
+  cyclic.userData.circular = cyclic.userData;
+
+  assert.throws(() => queue.add([accepted, cyclic]), /playable Track/);
+  assert.throws(() => queue.insert(0, [accepted, cyclic]), /playable Track/);
+  assert.throws(() => queue.unshift(cyclic), /playable Track/);
+  assert.equal(queue.replace(0, cyclic), false);
+  assert.deepEqual(queue.tracks, [first]);
+  assert.equal(events, 0);
+});
+
+test('serializable nested user metadata is accepted and persisted', async t => {
+  const { player, manager } = createPlayer(t);
+  const nested = createTrack('nested-serializable');
+  nested.userData.profile = { tags: ['song', 'safe'], score: 2 };
+  player.queue.add(nested);
+  const record = await manager.database.get(`players.${player.guildId}`);
+  assert.deepEqual(record.queue[0].userData.profile, nested.userData.profile);
+});
