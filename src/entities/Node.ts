@@ -756,7 +756,17 @@ export class Node {
     let moved = false;
 
     if (orphanedPlayers.length > 0 && this.manager.options.node?.autoMovePlayers) {
-        const transfers = await Promise.all(orphanedPlayers.map(player => NodeFailover.move(player, this)));
+        const transfers = await Promise.all(orphanedPlayers.map(async player => {
+          try {
+            return await NodeFailover.move(player, this);
+          } catch (error) {
+            // One failed recovery must not abort disconnection handling for
+            // every other guild or skip the reconnect/orphan policy.
+            const failure = error instanceof Error ? error : new Error(String(error));
+            this.manager.emit("nodeError", this, failure);
+            return { status: 'failed' as const, attempts: 0 };
+          }
+        }));
         const destinations = new Map<Node, Player[]>();
         orphanedPlayers.forEach((player, index) => {
           const result = transfers[index];
