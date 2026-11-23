@@ -239,3 +239,41 @@ test('one rejected failover does not block recovery of other guilds', async t =>
   assert.equal(errors.length, 1);
   assert.match(errors[0].message, /simulated failover exception/);
 });
+
+test('permanent disconnect cleans other guilds even if one player destroy throws', async t => {
+  const { manager, node: source, player: first } = createPlayer(t);
+  const { Player } = require('../dist');
+  const second = new Player(manager, source, {
+    guildId: '123456789012345679',
+    voiceChannelId: '223456789012345679',
+    autoPlay: false,
+  });
+  second.stopHealthCheck();
+  manager.players.players.set(second.guildId, second);
+  t.after(() => second.stopHealthCheck());
+  manager.options.node = {
+    ...manager.options.node,
+    autoMovePlayers: false,
+    failover: { preserveOnFailure: false },
+  };
+  source.retryAmount = 0;
+  source.reconnectAttempts = 0;
+  const destroyed = [];
+  const orphaned = [];
+  const errors = [];
+  first.destroy = async () => {
+    destroyed.push('first');
+    throw new Error('first guild database unavailable');
+  };
+  second.destroy = async () => { destroyed.push('second'); };
+  manager.on('nodeError', (_node, error) => errors.push(error));
+  manager.on('playersOrphaned', players => orphaned.push(...players));
+
+  await source.close({ code: 1006, reason: 'permanent-disconnect' });
+
+  assert.deepEqual(destroyed, ['first', 'second']);
+  assert.deepEqual(orphaned, [first, second]);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0].message, /database unavailable/);
+  assert.equal(source.destroyed, true);
+});
