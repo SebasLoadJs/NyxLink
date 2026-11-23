@@ -434,15 +434,15 @@ export class Player {
         });
     }
 
-    private async playNext(options: { track?: Track; encoded?: string, requester?: any, position?: number, noReplace?: boolean, audioTrackId?: string } | Track, ticket: number, allowed = () => true, onAutomaticQueueChange?: (queued: boolean) => void): Promise<boolean> {
+    private async playNext(options: { track?: Track; encoded?: string, requester?: any, position?: number, noReplace?: boolean, audioTrackId?: string } | Track, ticket: number, allowed = () => true, onInjectedQueueChange?: (queued: boolean) => void): Promise<boolean> {
         try {
-            return await this.applyPlayback(options, ticket, allowed, onAutomaticQueueChange);
+            return await this.applyPlayback(options, ticket, allowed, onInjectedQueueChange);
         } finally {
             playbackAttempt(this).retain(ticket);
         }
     }
 
-    private async applyPlayback(options: { track?: Track; encoded?: string, requester?: any, position?: number, noReplace?: boolean, audioTrackId?: string } | Track, ticket: number, allowed: () => boolean, onAutomaticQueueChange?: (queued: boolean) => void): Promise<boolean> {
+    private async applyPlayback(options: { track?: Track; encoded?: string, requester?: any, position?: number, noReplace?: boolean, audioTrackId?: string } | Track, ticket: number, allowed: () => boolean, onInjectedQueueChange?: (queued: boolean) => void): Promise<boolean> {
         const guard = playbackGuard(this);
         if (this.destroyed || !guard.isCurrent(ticket) || !allowed()) return false;
         this.recommendations = [];
@@ -492,7 +492,7 @@ export class Player {
 
         if (track) {
             this.queue.unshift(track);
-            onAutomaticQueueChange?.(true);
+            onInjectedQueueChange?.(true);
             this.manager.emit("debug", `Moonlink.js > Player#play >> Added track "${track.title}" to front of queue for guild ${this.guildId}`);
         }
 
@@ -517,7 +517,7 @@ export class Player {
         }
         if (this.destroyed || !guard.isCurrent(ticket) || !allowed() || this.queue.first !== queuedTrack) return false;
         this.queue.shift();
-        onAutomaticQueueChange?.(false);
+        onInjectedQueueChange?.(false);
 
         const oldTrackTitle = this.current?.title ?? "null";
         this.current = nextTrack instanceof Track ? nextTrack : new Track(nextTrack, undefined, undefined, this.manager.options.trackPartial ?? []);
@@ -572,7 +572,7 @@ export class Player {
             this.updateData("playing", oldPlaying);
             this.updateData("paused", oldPaused);
             this.queue.unshift(queuedTrack);
-            onAutomaticQueueChange?.(true);
+            onInjectedQueueChange?.(true);
             return false;
         }
 
@@ -1427,40 +1427,45 @@ export class Player {
     }
 
     public async back(): Promise<boolean> {
-        if (this.previous.length === 0) {
-            this.manager.emit("debug", `Moonlink.js > Player#back >> No previous tracks available for guild ${this.guildId}`);
-            return false;
-        }
+        if (this.destroyed || this.previous.length === 0) return false;
+        const guard = playbackGuard(this);
+        const ticket = guard.invalidate();
+        return this.commands.enqueue(async () => {
+            if (this.destroyed || !guard.isCurrent(ticket)) return false;
+            const lastTrack = this.previous.at(-1);
+            if (!lastTrack) return false;
+            const outgoing = this.current;
+            const priorBackFlag = this.get<boolean>("isBackPlay") ?? false;
+            let injectedTrackQueued = false;
+            let played = false;
 
-        const lastTrack = this.previous.pop();
-        if (!lastTrack) {
-            this.manager.emit("debug", `Moonlink.js > Player#back >> Popped an invalid track from history for guild ${this.guildId}`);
-            return false;
-        }
+            // Do not consume history or change the current track before the
+            // backend acknowledges playback. The command queue also prevents
+            // two overlapping back() calls from corrupting the same history.
+            this.set("isBackPlay", true);
+            try {
+                played = await this.playNext({ track: lastTrack, position: 0 }, ticket, () => true,
+                    queued => { injectedTrackQueued = queued; });
+                if (!played || !guard.isCurrent(ticket) || this.destroyed) return false;
 
-        this.manager.emit("debug", `Moonlink.js > Player#back -> Going back to previous track "${lastTrack.title}" for guild ${this.guildId}`);
-
-        if (this.current) {
-            this.queue.unshift(this.current);
-            this.manager.emit("debug", `Moonlink.js > Player#back >> Pushed current track "${this.current.title}" to the front of the queue.`);
-        }
-
-        this.current = lastTrack;
-        this.set("isBackPlay", true);
-
-        const played = await this.play({
-            track: this.current,
-            position: 0
+                const index = this.previous.lastIndexOf(lastTrack);
+                if (index >= 0) {
+                    this.previous.splice(index, 1);
+                    this.updateData("previous", this.previous.map(track => TrackCodec.serialize(track)));
+                }
+                if (outgoing) this.queue.unshift(outgoing);
+                this.manager.emit("playerTriggeredBack", this, lastTrack);
+                return true;
+            } finally {
+                // Failed playNext may have requeued its injected track. Remove
+                // only that unconsumed insertion; keep the user's queue intact.
+                if (injectedTrackQueued) {
+                    const index = this.queue.tracks.indexOf(lastTrack);
+                    if (index >= 0) this.queue.remove(index);
+                }
+                if (!played) this.set("isBackPlay", priorBackFlag);
+            }
         });
-
-        if (played) {
-            this.manager.emit("playerTriggeredBack", this, lastTrack);
-            this.manager.emit("debug", `Moonlink.js > Player#back >> Successfully went back for guild ${this.guildId}`);
-        } else {
-            this.manager.emit("debug", `Moonlink.js > Player#back >> Failed to play previous track for guild ${this.guildId}.`);
-        }
-
-        return played;
     }
 
 }
