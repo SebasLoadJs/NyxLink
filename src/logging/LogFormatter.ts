@@ -18,10 +18,18 @@ export function ansi(text: string, code: number, enabled: boolean): string {
   return enabled ? `\x1b[${code}m${text}\x1b[0m` : text;
 }
 
+/** Best-effort defense for credentials embedded in legacy debug messages. */
+export function redactSecrets(value: string): string {
+  return value
+    .replace(/\bBearer\s+[A-Za-z0-9._~+\/=-]+/gi, 'Bearer [REDACTED]')
+    .replace(/((?:["']?)(?:authorization|password|passwd|passphrase|api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|client[_-]?secret|token)(?:["']?)\s*[:=]\s*["']?)([^"'\s,}\]&]+)/gi, '$1[REDACTED]');
+}
+
 export function formatValue(value: unknown): string {
-  if (value instanceof Error) return value.stack || value.message;
-  if (typeof value === 'string') return value;
-  return inspect(value, { depth: 5, colors: false, compact: true, breakLength: 110 });
+  const raw = value instanceof Error ? (value.stack || value.message) :
+    typeof value === 'string' ? value :
+    inspect(value, { depth: 5, colors: false, compact: true, breakLength: 110 });
+  return redactSecrets(raw);
 }
 
 export function formatArgs(args: unknown[]): string {
