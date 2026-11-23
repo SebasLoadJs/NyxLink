@@ -103,21 +103,28 @@ test('separate Node.js processes cannot both create the same guild player', asyn
   });
   let stderr = '';
   child.stderr.on('data', chunk => { stderr += chunk.toString(); });
-  t.after(() => { if (child.exitCode === null) child.kill(); });
+  let client;
+  let parent;
+  t.after(async () => {
+    try {
+      if (parent) await parent.manager.shutdown();
+      if (client) {
+        const helper = new RedisStorage({ client, namespace });
+        await helper.init({});
+        await helper.clear();
+        await helper.shutdown();
+      }
+    } finally {
+      if (client) await client.close();
+      if (child.exitCode === null) child.kill();
+    }
+  });
   const [message] = await once(child, 'message', { signal: AbortSignal.timeout(12000) });
   assert.equal(message.event, 'acquired', stderr || JSON.stringify(message));
   const childToken = message.fencingToken;
 
-  const client = await connectRedis();
-  t.after(async () => {
-    const helper = new RedisStorage({ client, namespace });
-    await helper.init({});
-    await helper.clear();
-    await helper.shutdown();
-    await client.close();
-  });
-  const parent = await ownedManager(client, namespace);
-  t.after(async () => parent.manager.shutdown());
+  client = await connectRedis();
+  parent = await ownedManager(client, namespace);
   await assert.rejects(parent.manager.players.createOwned(parent.options), /another process/);
   const { Player } = require('../../dist');
   const unowned = new Player(parent.manager, parent.node, parent.options);
