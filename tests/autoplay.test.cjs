@@ -401,3 +401,46 @@ test('a manual queue entry wins while an automatic command is waiting for its tu
   assert.deepEqual(player.queue.tracks, [manual]);
   assert.equal(playbackRequests(requests).length, 0);
 });
+
+test('track loop replays via acknowledged playback state and restarts its position', async t => {
+  const { node, player, requests } = createPlayer(t);
+  const current = createTrack('track-loop-replay');
+  current.position = 35000;
+  player.current = current;
+  player.playing = true;
+  player.loop = 'track';
+  const queued = createTrack('track-loop-remaining');
+  player.queue.add(queued);
+
+  await node.handleTrackEnd(player, { reason: 'finished', track: current.toJSON() });
+
+  assert.equal(player.playing, true);
+  assert.equal(player.paused, false);
+  assert.equal(player.current.encoded, current.encoded);
+  assert.equal(player.current.position, 0);
+  assert.equal(current.position, 35000);
+  assert.deepEqual(player.queue.tracks, [queued]);
+  assert.deepEqual(player.previous, []);
+  assert.deepEqual(playbackRequests(requests).map(({ payload }) => payload.track.encoded),
+    [current.encoded]);
+});
+
+test('rejected track-loop replay preserves queued manual music and does not emit success', async t => {
+  const { node, player } = createPlayer(t);
+  const current = createTrack('track-loop-failed');
+  current.position = 34000;
+  const next = createTrack('track-loop-manual');
+  player.current = current;
+  player.playing = true;
+  player.loop = 'track';
+  player.queue.add(next);
+  node.rest.updatePlayer = async () => null;
+
+  await node.handleTrackEnd(player, { reason: 'finished', track: current.toJSON() });
+
+  assert.equal(player.playing, false);
+  assert.equal(player.current, current);
+  assert.equal(current.position, 34000);
+  assert.deepEqual(player.queue.tracks, [next]);
+  assert.deepEqual(player.previous, []);
+});
