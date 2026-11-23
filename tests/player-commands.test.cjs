@@ -673,3 +673,81 @@ test('rejected recommendation playback still allows autoLeave', async t => {
   });
   assert.equal(player.destroyed, true);
 });
+
+test('back preserves history and queue when the backend rejects playback', async t => {
+  const { manager, node, player } = createPlayer(t);
+  const original = createTrack('current');
+  const prior = createTrack('previous');
+  const queued = createTrack('queued');
+  player.current = original;
+  player.playing = true;
+  player.previous.push(prior);
+  player.queue.add(queued);
+  node.rest.updatePlayer = async () => null;
+  const notified = [];
+  manager.on('playerTriggeredBack', (...args) => notified.push(args));
+
+  assert.equal(await player.back(), false);
+  assert.equal(player.current, original);
+  assert.equal(player.playing, true);
+  assert.deepEqual(player.previous, [prior]);
+  assert.deepEqual(player.queue.tracks, [queued]);
+  assert.equal(player.get('isBackPlay'), false);
+  assert.deepEqual(notified, []);
+});
+
+test('back commits history only after the backend acknowledges a previous track', async t => {
+  const { manager, node, player, requests } = createPlayer(t);
+  const original = createTrack('current');
+  const prior = createTrack('previous');
+  const queued = createTrack('queued');
+  player.current = original;
+  player.playing = true;
+  player.previous.push(prior);
+  player.queue.add(queued);
+  const notified = [];
+  manager.on('playerTriggeredBack', (...args) => notified.push(args));
+
+  assert.equal(await player.back(), true);
+  assert.equal(player.current, prior);
+  assert.deepEqual(player.previous, []);
+  assert.deepEqual(player.queue.tracks, [original, queued]);
+  assert.equal(player.get('isBackPlay'), false);
+  assert.deepEqual(notified, [[player, prior]]);
+  assert.deepEqual(requests.filter(r => r.payload.track?.encoded).map(r => r.payload.track.encoded),
+    [prior.encoded]);
+});
+
+test('a stop during back acknowledgement cannot consume history or enqueue old playback', async t => {
+  const { node, player } = createPlayer(t);
+  const original = createTrack('current');
+  const prior = createTrack('previous');
+  const queued = createTrack('queued');
+  player.current = original;
+  player.playing = true;
+  player.previous.push(prior);
+  player.queue.add(queued);
+  const entered = deferred();
+  const release = deferred();
+  const sent = [];
+  node.rest.updatePlayer = async (_guild, payload) => {
+    sent.push(payload);
+    if (payload.track?.encoded === prior.encoded) {
+      entered.resolve();
+      await release.promise;
+    }
+    return payload;
+  };
+
+  const returning = player.back();
+  await entered.promise;
+  const stopping = player.stop();
+  release.resolve();
+  assert.equal(await returning, false);
+  await stopping;
+  assert.equal(player.current, null);
+  assert.equal(player.playing, false);
+  assert.deepEqual(player.previous, [prior]);
+  assert.deepEqual(player.queue.tracks, [queued]);
+  assert.deepEqual(sent.map(p => p.track?.encoded), [prior.encoded, null]);
+});
