@@ -16,7 +16,7 @@ function make(backend, mode, suffix = '2026-11-23T20-00-00.000Z') {
     report: {
       scope: 'opt-in real Discord gateway and voice integration',
       backend, mode, sourceRevision: revision, success: true, observed: true,
-      audioMeasured: false, operatorListeningRequired: true,
+      buildValidated: true, audioMeasured: false, operatorListeningRequired: true,
       commandChecks: mode === 'commands' ? commandChecks : undefined,
       reconnectChecks: mode === 'reconnect' ? reconnectChecks : undefined,
       remainingQueue: mode === 'crossfade' ? 0 : undefined,
@@ -110,4 +110,11 @@ test('out-of-order or duplicate track starts invalidate crossfade evidence', () 
   const duplicate = all();
   duplicate[2].report.events.push({ type: 'trackStart', track: 'B' });
   assert.equal(inspectReports(revision, duplicate).modes['nodelink:crossfade'], 'failed');
+});
+
+test('a report without a verified fresh build cannot certify voice protocols', () => {
+  const entries = all();
+  delete entries[0].report.buildValidated;
+  assert.equal(inspectReports(revision, entries).modes['nodelink:commands'], 'failed');
+  assert.equal(inspectReports(revision, entries).protocolEvidenceComplete, false);
 });
