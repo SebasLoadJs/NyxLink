@@ -27,8 +27,13 @@ export class AutoPlayManager {
         const selected = candidates[Math.floor(Math.random() * candidates.length)];
         if (!selected) return false;
 
-        const playing = player.playAutoPlay(selected, ticket, automaticTicket);
-        const accepted = await playing;
+        let accepted = false;
+        try {
+            accepted = await player.playAutoPlay(selected, ticket, automaticTicket);
+        } catch (error) {
+            // Unexpected backend/queue failures must not interrupt TrackEnd.
+            player.manager.emit('debug', `NyxLink > AutoPlay > Recommendation playback failed for guild ${player.guildId}: ${error instanceof Error ? error.message : String(error)}`);
+        }
         if (!accepted || !active()) {
             // A rejected recommendation must not become a later queued user request.
             const index = player.queue.tracks.indexOf(selected);
