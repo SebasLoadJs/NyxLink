@@ -127,3 +127,57 @@ test('reconnected node is not destroyed by an earlier pending close', async t =>
   assert.equal(node.destroyed, false);
   assert.equal(destroyedEvents, 0);
 });
+
+test('false recovered result cannot hide a player still on disconnected source', async t => {
+  const { manager, node, player } = createPlayer(t);
+  const originalMove = NodeFailover.move;
+  NodeFailover.move = async () => ({
+    status: 'recovered', attempts: 1, node,
+  });
+  t.after(() => { NodeFailover.move = originalMove; });
+  manager.options.node = {
+    ...manager.options.node,
+    autoMovePlayers: true,
+    failover: { preserveOnFailure: true },
+  };
+  node.retryAmount = 0;
+  node.reconnectAttempts = 0;
+  const orphaned = [];
+  const moved = [];
+  manager.on('playersOrphaned', players => orphaned.push(...players));
+  manager.on('playersMoved', players => moved.push(...players));
+
+  await node.close({ code: 1006, reason: 'incorrect-recovered-result' });
+
+  assert.deepEqual(orphaned, [player]);
+  assert.deepEqual(moved, []);
+  assert.equal(player.node, node);
+  assert.equal(player.destroyed, false);
+});
+
+test('recovered result targeting an unconnected node is not reported as moved', async t => {
+  const { manager, node: source, player } = createPlayer(t);
+  const { Node } = require('../dist');
+  const destination = new Node(manager, {
+    identifier: 'disconnected-target', host: '127.0.0.1', port: 2666, password: 'test-only',
+  });
+  destination.connected = false;
+  manager.nodes.nodes.set(destination.identifier, destination);
+  t.after(async () => { await destination.destroy(); });
+  const originalMove = NodeFailover.move;
+  NodeFailover.move = async () => {
+    player.node = destination;
+    return { status: 'recovered', attempts: 1, node: destination };
+  };
+  t.after(() => { NodeFailover.move = originalMove; });
+  manager.options.node = { ...manager.options.node, autoMovePlayers: true };
+  source.retryAmount = 0;
+  source.reconnectAttempts = 0;
+  const moved = [];
+  manager.on('playersMoved', players => moved.push(...players));
+
+  await source.close({ code: 1006, reason: 'destination-not-connected' });
+
+  assert.deepEqual(moved, []);
+  assert.equal(player.node, destination);
+});
