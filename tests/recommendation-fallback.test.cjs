@@ -75,3 +75,34 @@ test('autoplay uses hidden source identifiers of partial tracks and excludes dup
   assert.equal(calls[0].query,'https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDdQw4w9WgXcQ');
   assert.deepEqual(player.recommendations,[fresh]);
 });
+
+test('direct YouTube seed rejects malformed identifiers before searching', async () => {
+  const { node, player, calls } = fixture([]);
+  await RecommendationResolver.update(node, player, {
+    ...youtube, identifier: 'bad&id=evil',
+  });
+  assert.equal(calls.length, 0);
+  assert.deepEqual(player.recommendations, []);
+});
+
+test('direct YouTube Music seed rejects malformed identifiers before searching', async () => {
+  const { node, player, calls } = fixture([]);
+  await RecommendationResolver.update(node, player, {
+    sourceName: 'youtubemusic', identifier: 'bad?list=evil',
+  });
+  assert.equal(calls.length, 0);
+  assert.deepEqual(player.recommendations, []);
+});
+
+test('direct YouTube Music seed accepts valid identifiers', async () => {
+  const { node, player, calls } = fixture([
+    { loadType: 'playlist', tracks: [recommendation] },
+  ]);
+  await RecommendationResolver.update(node, player, {
+    sourceName: 'youtubemusic', identifier: youtube.identifier,
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].query,
+    `https://music.youtube.com/watch?v=${youtube.identifier}&list=RD${youtube.identifier}`);
+  assert.deepEqual(player.recommendations, [recommendation]);
+});
