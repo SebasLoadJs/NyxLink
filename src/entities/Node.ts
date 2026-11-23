@@ -1388,12 +1388,14 @@ export class Node {
     // the bounded retry policy above; otherwise track/queue loop can replay a
     // permanently unavailable source forever, even after retries are exhausted.
     if (reason === "finished" && player.loop === "track" && player.current) {
-      this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> Player ${player.guildId} is in track loop mode. Replaying track: ${player.current.title}.`);
-      await player.updatePlayer({
-        track: { encoded: player.current.encoded },
-        position: 0,
-      });
-      return;
+      this.manager.emit("debug", `NyxLink > Node#handleTrackEnd >> Replaying looped track for player ${player.guildId}.`);
+      // A raw backend PATCH bypasses replay's acknowledged state transition:
+      // after TrackEnd the local player would remain stopped and retain its
+      // old position. Reuse the normal, history-safe replay command instead.
+      if (await player.replay()) return;
+      // Rejected replay must not strand the remaining manual queue. It can
+      // still advance normally below, without repeating the failed track.
+      if (!playbackGuard(player).isCurrent(intent) || player.destroyed) return;
     }
 
     if (reason === "finished" && player.loop === "queue" && player.current) {
