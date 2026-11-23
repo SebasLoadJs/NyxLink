@@ -12,7 +12,7 @@ const manual = workflow('npm-publish.yml');
 test('both release tag types trigger an immutable package gate', () => {
   assert.match(release, /tags:\s*\n\s*- 'v5\.3\.0-rc\.\*'\s*\n\s*- 'v5\.3\.0'/);
   assert.match(release, /release:check-tag/);
-  assert.match(release, /check-npm-registry\\.cjs --report-only/);
+  assert.match(release, /check-npm-registry\.cjs --report-only/);
   assert.match(release, /pnpm run test:package/);
   assert.match(release, /pnpm run pack:check/);
   assert.match(release, /pnpm run test:coverage/);
