@@ -91,8 +91,11 @@ pnpm run release:check-voice-evidence
 ```
 
 The command checks the five separate NodeLink and Lavalink modes, backend
-acknowledgements, report structure and exact local Git revision. It rejects
-missing, malformed, failed, stale or superseded reports. Its output always
+acknowledgements, report structure and exact local Git revision. The NodeLink
+crossfade report also must contain a `crossfading` transition event, not
+only two track-start events; this still does not demonstrate that two audio
+streams were actually audible at once. It rejects missing, malformed, failed,
+stale or superseded reports. Its output always
 sets `releaseApproved: false` and `humanListeningRequired: true`: even five
 `protocol-pass` reports **do not** prove that anyone heard audio. The
 second human observer and release reviewer must separately sign off before
