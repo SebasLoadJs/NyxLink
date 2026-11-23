@@ -120,12 +120,16 @@ export class PrivateMetricsServer {
         };
     }
 
+    private nodeKey(identifier: string): string {
+        return createHash('sha256').update(identifier).digest('hex').slice(0, 16);
+    }
+
     private nodeEntries(): PrivateMetricsNode[] {
         const players = [...this.manager.players.players.values()].filter(player => !player.destroyed);
         return [...this.manager.nodes.nodes.values()].map(node => {
             const owned = players.filter(player => player.node === node);
             return {
-                key: createHash('sha256').update(node.identifier).digest('hex').slice(0, 16),
+                key: this.nodeKey(node.identifier),
                 backend: node.connected && !node.destroyed ? (node.backend?.kind ?? 'unknown') : 'unknown',
                 state: NodeState[node.state] ?? 'unknown',
                 ready: node.connected && !node.destroyed && node.state === NodeState.READY,
@@ -180,9 +184,17 @@ export class PrivateMetricsServer {
             case '/versions':
                 this.send(response, 200, JSON.stringify({
                     nyxlink: version,
-                    backends: [...new Set([...this.manager.nodes.nodes.values()]
-                        .filter(node => node.connected && !node.destroyed && node.backend)
-                        .map(node => node.backend!.kind))].sort(),
+                    nodes: [...this.manager.nodes.nodes.values()].filter(node =>
+                        node.connected && !node.destroyed && node.backend).map(node => {
+                        const rawVersion = node.backend!.version;
+                        return {
+                            key: this.nodeKey(node.identifier),
+                            backend: node.backend!.kind,
+                            version: typeof rawVersion === 'string' && rawVersion.length <= 80 &&
+                                /^(?:v)?[0-9]+(?:\.[0-9]+){1,3}(?:[-+][0-9A-Za-z.-]+)?$/.test(rawVersion)
+                                ? rawVersion : null,
+                        };
+                    }),
                 }));
                 return;
             case '/metrics': {
