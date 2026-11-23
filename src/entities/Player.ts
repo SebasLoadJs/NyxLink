@@ -420,7 +420,10 @@ export class Player {
             const markAutomaticQueue = (queued: boolean) => { automaticTrackQueued = queued; };
             try {
                 return await this.playNext({ track }, ticket,
-                    () => this.autoPlay && playbackGuard(this).isAutoCurrent(automaticTicket),
+                    () => this.autoPlay && playbackGuard(this).isAutoCurrent(automaticTicket) &&
+                        (automaticTrackQueued
+                            ? this.queue.size === 1 && this.queue.first === track
+                            : this.queue.size === 0),
                     markAutomaticQueue);
             } finally {
                 // Remove only an insertion owned by this automatic attempt.
