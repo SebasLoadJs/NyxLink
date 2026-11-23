@@ -59,11 +59,11 @@ Connection auth and TLS belong in the application environment.
   persistence/replication policy is configured accordingly.
 - Redis data includes player snapshot metadata and may be sensitive. Treat
   Redis access as privileged and encrypt traffic outside trusted loopback.
-- The adapter does not install a message bus, select shard owners, transfer
-  Discord gateways, or prevent **two bots simultaneously creating voice
-  sessions for the same guild**. CAS protects saved data, not the live voice
-  session. Shard/cluster orchestration still needs coordinated guild routing
-  and a documented ownership/lease protocol.
+- Storage by itself does not install a message bus, select shard owners or
+  transfer Discord gateways. The optional `GuildOwnership` and IPC fencing
+  modules below coordinate owners, but they cannot prevent every in-flight
+  external voice command during a network partition. Shard orchestration
+  still must route gateway commands and obey the fencing protocol.
 - Different processes should share a namespace **only when the entire
   deployment is intentionally coordinated**. Do not share a namespace between
   independent bots or test/prod environments.
@@ -99,19 +99,21 @@ if (lease) {
 await leases.close(); // does not disconnect the caller's Redis client
 ~~~
 
-**Critical limitation:** this lease does not automatically hook into
-\`PlayerManager\`, the Discord gateway or NodeLink/Lavalink commands. A lease
-alone cannot stop a previously issued voice command after expiry or a network
-partition: downstream consumers must validate the fencing token or the
-application must safely stop work on renewal failure. In particular, it does
-**not** certify exactly-one-audible-session behavior across shards.
+**Critical limitation:** a standalone `RedisGuildLeaseCoordinator` does not
+automatically hook into PlayerManager, the Discord gateway or Lavalink/NodeLink
+commands. Opt in with `manager.useGuildLeases(...)` to enable the managed
+Player/Voice/REST guards and heartbeat described below. The separate IPC router
+can check outgoing Discord voice commands at the receiving shard, but a lease
+cannot stop previously issued external commands after expiry or a network
+partition. **Exactly-one-audible-session behavior is not certified.**
 
 A worker must periodically renew a lease (for example every TTL/3 with a
 jitter-aware policy), stop on failure, and release during orderly shutdown.
-There is no automatic heartbeat timer. Lease counters persist by design to
-preserve fencing monotonicity; do not clear their Redis namespace during
-production. Applications should use a single Redis persistence/HA strategy
-appropriate to these safety requirements.
+The standalone coordinator has no heartbeat; `GuildOwnership` enables a
+managed heartbeat when explicitly configured. Lease counters persist by
+design to preserve fencing monotonicity; do not clear their namespace during
+production. Applications should use Redis persistence/HA settings appropriate
+to these safety requirements.
 
 The live Redis tests in \`tests/integration/redis-guild-lease.test.cjs\`
 verify exclusivity, expiry, monotonically increasing tokens, stale release
