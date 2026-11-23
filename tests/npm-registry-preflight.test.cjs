@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { inspectRegistry, fetchRegistry } = require('../scripts/check-npm-registry.cjs');
+const { inspectRegistry, fetchRegistry, parseArguments } = require('../scripts/check-npm-registry.cjs');
 
 const fixture = (version, channel) => ({
   name: 'nyxlink',
@@ -63,4 +63,15 @@ test('fetchRegistry only reads the fixed public npm registry endpoint', async ()
 
 test('fetchRegistry rejects non-successful responses instead of assuming availability', async () => {
   await assert.rejects(fetchRegistry(async () => ({ ok: false, status: 500 })), /HTTP 500/);
+});
+
+test('tag reruns use an explicit informational mode, while prepublish remains blocking', () => {
+  assert.deepEqual(parseArguments([]), { reportOnly: false });
+  assert.deepEqual(parseArguments(['--report-only']), { reportOnly: true });
+  assert.throws(() => parseArguments(['--report-only', '--unknown']), /Usage/);
+  assert.throws(() => parseArguments(['--write']), /Usage/);
+  assert.throws(() => parseArguments(null), TypeError);
+  const occupied = inspectRegistry(fixture('0.1.0-dev.2', 'dev'), registry);
+  assert.equal(occupied.versionAlreadyPublished, true);
+  assert.equal(occupied.publicationApproved, false);
 });
