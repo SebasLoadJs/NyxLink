@@ -22,6 +22,7 @@ This changelog describes the unreleased NyxLink 5.3 development line and its ver
 - Verified serialized queue metadata before accepting a new item, rejecting circular structures instead of silently persisting a partial or unusable queue snapshot.
 - Prevented infinite replay of failed sources with `loop=track` and `loop=queue`: only a normally `finished` track is eligible for looping; `loadFailed` now obeys bounded retries and otherwise advances or ends the queue.
 - Queue-loop now clones a finished track before re-enqueuing it, preserving history position and user metadata independently of the next iteration.
+- Track-loop end handling now uses `Player.replay()` instead of a raw backend PATCH, so successful loop restarts update in-memory playing and position state after acknowledgement without appending duplicate history. Rejected restarts do not consume manually queued songs.
 - Reworked `replay()` to use an independent track instance: rejected or cancelled restarts preserve the original playback position, successful restarts do not duplicate history, and immediately queued `seek()` commands retain their intended target.
 - Tightened recommendation seed validation for YouTube/YouTube Music and prevented failed or stale autoplay requests from deleting independently queued manual tracks.
 - Yielded in-flight autoplay recommendations when a listener queues music during asynchronous source resolution, including when the manually queued item is the same Track instance as the automatic candidate.
