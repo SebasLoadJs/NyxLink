@@ -520,7 +520,10 @@ export class Player {
         onInjectedQueueChange?.(false);
 
         const oldTrackTitle = this.current?.title ?? "null";
-        this.current = nextTrack instanceof Track ? nextTrack : new Track(nextTrack, undefined, undefined, this.manager.options.trackPartial ?? []);
+        const selectedPlaybackTrack = nextTrack instanceof Track ? nextTrack :
+            new Track(nextTrack, undefined, undefined, this.manager.options.trackPartial ?? []);
+        const positionBeforePlayback = selectedPlaybackTrack.position;
+        this.current = selectedPlaybackTrack;
         this.current.position = finalOptions.position || 0;
         this.updateData("current", TrackCodec.serialize(this.current));
         this.manager.emit("debug", `Moonlink.js > Player#play >> Player state changed: current track: ${oldTrackTitle} -> ${this.current.title}`);
@@ -567,6 +570,9 @@ export class Player {
             this.manager.emit("debug", `Moonlink.js > Player#play >> CRITICAL: Failed to send play request for guild ${this.guildId}. Reverting state. Error: ${(e as Error).message}`);
             this.playing = oldPlaying;
             this.paused = oldPaused;
+            // A failed backend acknowledgement must not overwrite the same
+            // Track object that callers may still hold or that is requeued.
+            selectedPlaybackTrack.position = positionBeforePlayback;
             this.current = previousTrack;
             this.updateData("current", previousTrack ? TrackCodec.serialize(previousTrack) : null);
             this.updateData("playing", oldPlaying);
