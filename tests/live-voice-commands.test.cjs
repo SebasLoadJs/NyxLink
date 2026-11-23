@@ -59,3 +59,25 @@ test('backend polling detects missing acknowledgements within a bounded interval
   const { node, player } = fixture();
   await assert.rejects(waitForSnapshot(node.rest, player.guildId, () => false, 'pause', 25), /did not confirm pause/);
 });
+
+test('snapshot polling has a hard deadline even if the REST request never settles', async () => {
+  const rest = { getPlayer: async () => new Promise(() => {}) };
+  const started = Date.now();
+  await assert.rejects(waitForSnapshot(rest, '123456789012345678', () => true, 'hung backend', 45),
+    /did not confirm hung backend/);
+  assert.ok(Date.now() - started < 500, 'polling exceeded its bounded deadline');
+});
+
+test('snapshot polling rejects invalid timeout policies', async () => {
+  const { node, player } = fixture();
+  for (const value of [0, -1, 1.2, Number.NaN, 60001]) {
+    await assert.rejects(waitForSnapshot(node.rest, player.guildId, () => true, 'invalid', value), TypeError);
+  }
+});
+
+test('snapshot polling survives transient null responses then confirms a valid backend snapshot', async () => {
+  let count = 0;
+  const rest = { getPlayer: async () => ++count < 3 ? null : { paused: true } };
+  await waitForSnapshot(rest, '123456789012345678', row => row.paused === true, 'pause', 900);
+  assert.equal(count, 3);
+});
