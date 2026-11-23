@@ -20,7 +20,7 @@ A Git tag and an npm version are **separate artifacts**. Publishing the package,
 - Run the extended backend endurance gate for **at least 600 seconds** and preserve the report for the exact candidate revision. A 30-second smoke is not sufficient.
 - Run preliminary **authorized real Discord voice** acceptance before promoting the RC: NodeLink `--commands`, `--reconnect`, and crossfade `--armed`; Lavalink `--commands` and `--reconnect`. A second participant must check audibility, overlap, correct volume and dropouts. Follow [live-voice-verification.md](live-voice-verification.md). Do not commit tokens, fixture URLs or private reports.
 - Finish [license-attribution-review.md](license-attribution-review.md), including source-level Moonlink attribution and assets; resolve legal questions with qualified review where necessary.
-- Confirm real npm ownership/write permission for package `nyxlink` and availability of the intended version in the public registry; check GitHub tag and Release permissions.
+- Confirm real npm ownership/write permission for package `nyxlink` and availability of the intended version in the public registry; check GitHub tag and Release permissions. The existing package listing is not proof that the current operator is an authorized publisher. Use `pnpm run release:check-registry` for a **read-only** exact-version collision check before creating a tag and again before manual publication. The command always reports `npmPublishPermissionVerified: false` and `publicationApproved: false` because only actual npm account access and explicit approval can establish those facts.
 - Obtain explicit authorization for the **candidate** publication, separately from authorization for the **stable** publication.
 
 Record the final candidate SHA, individual Actions URLs, image digests, duration of the endurance run, location of private voice reports, and reviewer decisions in private release evidence. Do not mark an unobserved voice test as passed.
@@ -34,6 +34,7 @@ On a clean `dev` checkout, after freezing the candidate:
 1. Set `package.json.version` to `5.3.0-rc.1` and `publishConfig.tag` to `next`. Update the lockfile if package metadata change requires it.
 2. Run the complete mandatory suite in [release-5.3-plan.md](release-5.3-plan.md), including real backend and 600-second tests, against **the new version commit**. Confirm package `version` is reflected in the compiled public API.
 3. Inspect a clean `npm pack --dry-run` and `pnpm run test:package` report; verify `LICENSE`, `NOTICE.md` and absence of secrets.
+   - Run `pnpm run release:check-registry` with the RC manifest. It must report `versionAlreadyPublished: false`; if the intended version is already present, do not attempt to overwrite it. This is not an npm ownership or authorization check.
 4. Only when the candidate SHA is approved, create an **annotated** Git tag `v5.3.0-rc.1` pointing to that exact commit; do not move the tag later.
 5. On the tagged checkout, validate its exact release ref:
 
