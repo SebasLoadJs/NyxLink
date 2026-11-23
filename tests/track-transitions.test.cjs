@@ -86,7 +86,8 @@ test('100 duplicate finished events replay a looped attempt only once', async t 
     node.handleTrackEnd(player, { reason: 'finished', track: structuredClone(eventTrack) })));
 
   assert.equal(playbackRequests(requests).length, 2, 'one initial play plus one loop replay');
-  assert.equal(player.current, current);
+  assert.equal(player.current.encoded, current.encoded);
+  assert.notEqual(player.current, current, 'loop replay must own independent mutable Track state');
   assert.equal(player.queue.size, 0);
 });
 
@@ -106,7 +107,8 @@ test('legitimate loop iterations remain playable after each new TrackStart', asy
   }
 
   assert.equal(playbackRequests(requests).length, 4);
-  assert.equal(player.current, current);
+  assert.equal(player.current.encoded, current.encoded);
+  assert.notEqual(player.current, current);
   assert.equal(player.playing, true);
 });
 
@@ -348,7 +350,9 @@ test('rollback after a failed play does not revive an older loop marker', async 
   await node.handleTrackEnd(player, { reason: 'finished', track: oldData });
   const acceptedData = echoedTrack(current, playbackRequests(requests).at(-1));
   await node.handleTrackStart(player, { track: acceptedData });
-  current.position = 45000;
+  const activeLoopTrack = player.current;
+  assert.notEqual(activeLoopTrack, current);
+  activeLoopTrack.position = 45000;
   player.paused = true;
   const rejected = createTrack('rejected');
   let rejectedData;
@@ -362,7 +366,7 @@ test('rollback after a failed play does not revive an older loop marker', async 
     return original(guildId, payload, noReplace);
   };
   assert.equal(await player.play({ track: rejected }), false);
-  assert.equal(player.current, current);
+  assert.equal(player.current, activeLoopTrack);
   const before = playbackRequests(requests).length;
 
   await node.handleTrackEnd(player, { reason: 'finished', track: oldData });
@@ -370,8 +374,9 @@ test('rollback after a failed play does not revive an older loop marker', async 
   await node.handleTrackStart(player, { track: rejectedData });
 
   assert.equal(playbackRequests(requests).length, before);
-  assert.equal(player.current, current);
-  assert.equal(current.position, 45000);
+  assert.equal(player.current, activeLoopTrack);
+  assert.equal(activeLoopTrack.position, 45000);
+  assert.equal(current.position, 0, 'earlier iteration must not change with later seeks');
   assert.equal(player.paused, true);
   await node.handleTrackEnd(player, { reason: 'finished', track: acceptedData });
   assert.equal(playbackRequests(requests).length, before + 1);
