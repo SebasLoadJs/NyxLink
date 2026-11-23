@@ -18,6 +18,14 @@ The OSL v3.0 includes preservation of existing source-level attribution
 notices and obligations relating to derivative source and distribution.
 This checklist is an engineering record, **not a legal conclusion**.
 
+## Verified upstream comparison — 2026-11-23
+
+The license text in [Moonlink.js upstream](https://github.com/Ecliptia/moonlink.js/blob/main/LICENSE) and [NyxLink](https://github.com/SebasLoadJs/NyxLink/blob/dev/LICENSE) has the **same Git blob SHA**: `cee9c3cff349671ef36ff601176679e452f3e5a5`. This verifies byte-identical OSL-3.0 license files, not full derivative-work or distribution compliance.
+
+The upstream default-branch `package.json` identifies the package as `moonlink.js`, version `5.2.0`, with OSL 3.0 metadata. The NyxLink package name and `OSL-3.0` identifier differ in spelling only at the metadata level. NyxLink's `NOTICE.md` explicitly credits Moonlink and references the upstream source; an upstream root `NOTICE.md` was not present at the checked path. This absence **does not** imply that all source-level notices or contributor rights have been reviewed.
+
+Remaining unknowns: provenance and distribution rights for `assets/nyxlink_banner.png`, other incorporated assets and any copied external snippets; upstream notices outside the checked paths; npm package ownership and legal approval. None has been marked cleared.
+
 ## Automatic checks for every release candidate
 
 - Install the **packed tarball**, not the local working tree.
