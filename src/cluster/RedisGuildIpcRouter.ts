@@ -15,9 +15,11 @@ export interface GuildVoiceGatewayPacket {
 
 /** Serializable command passed over an application-owned authenticated IPC channel. */
 export interface FencedGuildVoiceEnvelope {
-    readonly protocol: 'nyxlink/guild-voice/1';
+    readonly protocol: 'nyxlink/guild-voice/2';
     readonly guildId: string;
     readonly fencingToken: number;
+    /** Redis-issued monotonic sequence per guild. */
+    readonly sequence: number;
     readonly commandId: string;
     readonly packet: GuildVoiceGatewayPacket;
 }
@@ -31,14 +33,25 @@ export interface RedisGuildIpcOptions {
     dedupeTtlMs?: number;
 }
 
+// A durable last-seen sequence prevents older commands from executing
+// after a newer voice state was accepted, even after replay keys expire.
+const ALLOCATE_SEQUENCE = [
+    "local active = redis.call('GET', KEYS[1])",
+    "if not active or string.match(active, ':(%d+)$') ~= ARGV[1] then return 0 end",
+    "return redis.call('INCR', KEYS[2])",
+].join('\n');
+
 const FENCE_AND_DEDUPE = [
     "local active = redis.call('GET', KEYS[1])",
-    "if not active then return 0 end",
-    "local generation = string.match(active, ':(%d+)$')",
-    "if generation ~= ARGV[1] then return 0 end",
+    "if not active or string.match(active, ':(%d+)$') ~= ARGV[1] then return 0 end",
+    "if redis.call('EXISTS', KEYS[2]) == 1 then return 2 end",
+    "local previous = tonumber(redis.call('GET', KEYS[3]) or '0')",
+    "local next = tonumber(ARGV[3])",
+    "if next <= previous then return 0 end",
     "local stored = redis.call('SET', KEYS[2], '1', 'NX', 'PX', ARGV[2])",
-    "if stored then return 1 end",
-    "return 2",
+    "if not stored then return 2 end",
+    "redis.call('SET', KEYS[3], ARGV[3])",
+    "return 1",
 ].join('\n');
 
 const snowflake = /^\d{17,20}$/;
@@ -76,7 +89,7 @@ function validateVoicePacket(guildId: string, packet: unknown): GuildVoiceGatewa
  *
  * Sender obtains a fresh lease-backed envelope via prepare(); the receiver
  * calls dispatch() immediately before forwarding to its actual shard gateway.
- * Redis atomically validates generation and deduplicates a commandId.
+ * Redis validates the generation, sequence order and commandId atomically.
  *
  * This does not authenticate messages: users MUST secure their IPC transport.
  * Redis validation before an external gateway send is not a distributed
@@ -115,10 +128,22 @@ export class RedisGuildIpcRouter {
         await ownership.assertCurrent(guildId);
         const lease = ownership.localLease(guildId);
         if (!lease) throw new Error('IPC sender no longer owns the guild');
+        const leaseKey = this.prefix + 'guild-lease.' + guildId;
+        const sequenceKey = this.prefix + 'guild-ipc-sequence.' + guildId;
+        // The sender may lose ownership between the initial check and here.
+        const sequence = Number(await this.client.sendCommand([
+            'EVAL', ALLOCATE_SEQUENCE, '2', leaseKey, sequenceKey,
+            String(lease.fencingToken),
+        ]));
+        if (sequence === 0) throw new Error('Guild lease changed while preparing IPC command');
+        if (!Number.isSafeInteger(sequence) || sequence <= 0) {
+            throw new Error('Invalid Redis guild IPC sequence');
+        }
         return {
-            protocol: 'nyxlink/guild-voice/1',
+            protocol: 'nyxlink/guild-voice/2',
             guildId,
             fencingToken: lease.fencingToken,
+            sequence,
             commandId: randomUUID(),
             packet: data,
         };
@@ -133,20 +158,23 @@ export class RedisGuildIpcRouter {
         }
         if (typeof deliver !== 'function') throw new TypeError('IPC delivery callback is required');
         const entry = message as Record<string, unknown>;
-        if (entry.protocol !== 'nyxlink/guild-voice/1' ||
+        if (entry.protocol !== 'nyxlink/guild-voice/2' ||
             typeof entry.guildId !== 'string' || !snowflake.test(entry.guildId) ||
             typeof entry.commandId !== 'string' || !uuid.test(entry.commandId) ||
             typeof entry.fencingToken !== 'number' || !Number.isSafeInteger(entry.fencingToken) ||
-            entry.fencingToken <= 0 || Object.keys(entry).some(key =>
-                !['protocol', 'guildId', 'commandId', 'fencingToken', 'packet'].includes(key))) {
+            entry.fencingToken <= 0 || typeof entry.sequence !== 'number' ||
+            !Number.isSafeInteger(entry.sequence) || entry.sequence <= 0 ||
+            Object.keys(entry).some(key =>
+                !['protocol', 'guildId', 'commandId', 'fencingToken', 'sequence', 'packet'].includes(key))) {
             throw new TypeError('Invalid IPC command envelope');
         }
         const packet = validateVoicePacket(entry.guildId, entry.packet);
         const leaseKey = this.prefix + 'guild-lease.' + entry.guildId;
         const replayKey = this.prefix + 'guild-ipc.' + entry.guildId + '.' + entry.commandId;
+        const lastKey = this.prefix + 'guild-ipc-last.' + entry.guildId;
         const result = Number(await this.client.sendCommand([
-            'EVAL', FENCE_AND_DEDUPE, '2', leaseKey, replayKey,
-            String(entry.fencingToken), String(this.dedupeTtlMs),
+            'EVAL', FENCE_AND_DEDUPE, '3', leaseKey, replayKey, lastKey,
+            String(entry.fencingToken), String(this.dedupeTtlMs), String(entry.sequence),
         ]));
         if (result === 0) return 'stale';
         if (result === 2) return 'duplicate';
