@@ -129,7 +129,7 @@ async function run(config) {
       track.encoded === report.secondEncoded ? 'B' : 'unexpected' });
   });
   manager.on('trackEnd', (p, track, reason) => {
-    if (p.guildId === config.guildId) record('trackEnd', { reason, track: track.encoded === report.firstEncoded ? 'A' :
+    if (p.guildId === config.guildId) record('trackEnd', { reason: typeof reason === 'string' && /^(?:finished|loadFailed|stopped|replaced|cleanup|crossfading|gapless)$/.test(reason) ? reason : 'unrecognized', track: track.encoded === report.firstEncoded ? 'A' :
       track.encoded === report.secondEncoded ? 'B' : 'unexpected' });
   });
   manager.on('nodeError', (_node, error) => record('nodeError', { errorCode: errorCode(error) }));
@@ -141,7 +141,10 @@ async function run(config) {
     stage = 'node-ready';
     const [node] = await readyWait.promise;
     if (node.backend?.kind !== 'nodelink') throw new Error('Expected NodeLink backend');
-    record('nodeReady', { version: node.backend.version });
+    const reportedVersion = typeof node.backend.version === 'string' &&
+      /^v?\d+(?:\.\d+){1,3}(?:[-+][0-9A-Za-z.-]+)?$/.test(node.backend.version) &&
+      node.backend.version.length <= 80 ? node.backend.version : null;
+    record('nodeReady', { version: reportedVersion });
     const tracks = [];
     stage = 'track-resolution';
     for (const url of config.urls) {
@@ -159,7 +162,7 @@ async function run(config) {
     });
     stage = 'voice-connect';
     await player.connect();
-    record('gatewayVoiceReady');
+    record('gatewayVoiceRequested');
     if (config.commandSmoke) {
       stage = 'command-smoke';
       const { verifyCommandSequence } = require('./live-voice-commands.cjs');
