@@ -1131,3 +1131,43 @@ test('TrackEnd handoff starts manual music queued during autoplay resolution', a
   assert.deepEqual(requests.filter(x => x.payload.track?.encoded).map(x => x.payload.track.encoded),
     [manual.encoded]);
 });
+
+test('a malformed resolved track cannot consume a queued song', async t => {
+  const { player, requests } = createPlayer(t);
+  const { TrackResolver } = require('../dist/src/tracks/TrackResolver.js');
+  const queued = createTrack('resolver-malformed-queued');
+  const active = createTrack('resolver-malformed-active');
+  player.current = active;
+  player.playing = true;
+  player.queue.add(queued);
+  const resolver = TrackResolver.resolve;
+  TrackResolver.resolve = async () => ({
+    encoded: 'invalid-resolved-encoding',
+    get info() { throw new Error('malformed plugin metadata'); },
+  });
+  t.after(() => { TrackResolver.resolve = resolver; });
+
+  assert.equal(await player.play(), false);
+  assert.equal(player.current, active);
+  assert.equal(player.playing, true);
+  assert.deepEqual(player.queue.tracks, [queued]);
+  assert.deepEqual(requests, []);
+});
+
+test('failed queued track normalization does not block a later valid playback', async t => {
+  const { player, requests } = createPlayer(t);
+  const { TrackResolver } = require('../dist/src/tracks/TrackResolver.js');
+  const selected = createTrack('resolver-retry-queued');
+  player.queue.add(selected);
+  const resolver = TrackResolver.resolve;
+  TrackResolver.resolve = async () => ({ encoded: selected.encoded, get info() { throw new Error('bad metadata'); } });
+  t.after(() => { TrackResolver.resolve = resolver; });
+
+  assert.equal(await player.play(), false);
+  TrackResolver.resolve = resolver;
+  assert.equal(await player.play(), true);
+  assert.equal(player.current, selected);
+  assert.equal(player.queue.size, 0);
+  assert.deepEqual(requests.filter(x => x.payload.track?.encoded).map(x => x.payload.track.encoded),
+    [selected.encoded]);
+});
