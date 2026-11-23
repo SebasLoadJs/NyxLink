@@ -166,6 +166,24 @@ async function writePrivateReport(target, report) {
   }
 }
 
+/**
+ * Crossfade acceptance needs an actual backend transition for track A.
+ * Two ordered starts alone can also describe an ordinary gapless handoff.
+ * It still does not establish that any listener actually heard overlapping audio.
+ */
+function evaluateCrossfadeEvents(events, remainingQueue) {
+  if (!Array.isArray(events)) throw new TypeError('Crossfade events must be an array');
+  const starts = events.filter(e => e?.type === 'trackStart').map(e => e.track);
+  const observed = starts.length === 2 && starts[0] === 'A' && starts[1] === 'B';
+  const transitionReasons = events.filter(e => e?.type === 'trackEnd').map(e => e.reason);
+  const crossfadeEventObserved = events.some(e =>
+    e?.type === 'trackEnd' && e.track === 'A' && e.reason === 'crossfading');
+  return {
+    observed, transitionReasons, crossfadeEventObserved, remainingQueue,
+    success: observed && remainingQueue === 0 && crossfadeEventObserved,
+  };
+}
+
 async function run(config) {
   const { Client, GatewayIntentBits } = require('discord.js');
   const { Manager, Connectors } = require('../dist');
@@ -275,13 +293,10 @@ async function run(config) {
       await delay(200);
     }
     await delay(2000);
-    const starts = events.filter(e => e.type === 'trackStart').map(e => e.track);
-    report.observed = starts.length === 2 && starts[0] === 'A' && starts[1] === 'B';
-    report.transitionReasons = events.filter(e => e.type === 'trackEnd').map(e => e.reason);
-    report.crossfadeEventObserved = report.transitionReasons.includes('crossfading');
-    report.remainingQueue = player.queue.size;
-    report.success = report.observed && report.remainingQueue === 0;
-    if (!report.success) throw new Error('Two ordered TrackStart events and an empty queue were not observed');
+    Object.assign(report, evaluateCrossfadeEvents(events, player.queue.size));
+    if (!report.success) {
+      throw new Error('Crossfade requires two ordered starts, a crossfading end of track A, and an empty queue');
+    }
     record('protocolSequencePassed');
     }
   } catch (error) {
@@ -322,4 +337,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { validateConfiguration, errorCode, event, writePrivateReport, reportPath, sourceRevision, safeBackendVersion, safeTrackEndReason };
+module.exports = { validateConfiguration, errorCode, event, writePrivateReport, reportPath, sourceRevision, safeBackendVersion, safeTrackEndReason, evaluateCrossfadeEvents };
