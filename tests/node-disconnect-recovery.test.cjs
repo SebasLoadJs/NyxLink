@@ -533,3 +533,50 @@ test('recovery completion cannot report success after player changes node owners
   assert.deepEqual(failures, []);
   assert.equal(player.node, next);
 });
+
+test('disconnect listener cannot cause old close to terminate replacement socket', async t => {
+  const { manager, node } = createPlayer(t);
+  const { NodeState } = require('../dist/src/typings/types.js');
+  const closed = [];
+  const oldSocket = { close: () => closed.push('old') };
+  const newSocket = { close: () => closed.push('new') };
+  node.socket = oldSocket;
+  manager.on('nodeDisconnect', () => {
+    node.socket = newSocket;
+    node.connected = true;
+    node.state = NodeState.READY;
+  });
+  node.retryAmount = 0;
+
+  await node.close({ code: 1006, reason: 'replacement-socket-registered' });
+  assert.deepEqual(closed, ['old']);
+  assert.equal(node.socket, newSocket);
+  assert.equal(node.connected, true);
+  assert.equal(node.state, NodeState.READY);
+  assert.equal(node.destroyed, false);
+  // The fixture cleanup invokes node.destroy(), which may close the replacement.
+});
+
+test('throwing nodeStateChange listener does not skip disconnect policy', async t => {
+  const { manager, node } = createPlayer(t);
+  const errors = [], orphaned = [];
+  manager.options.node = {
+    ...manager.options.node,
+    autoMovePlayers: false,
+    failover: { preserveOnFailure: true },
+  };
+  node.retryAmount = 0;
+  node.reconnectAttempts = 0;
+  manager.on('nodeError', (_node, error) => errors.push(error.message));
+  manager.on('nodeStateChange', (_node, _previous, next) => {
+    if (next === require('../dist/src/typings/types.js').NodeState.DISCONNECTED) {
+      throw new Error('node state observer crashed');
+    }
+  });
+  manager.on('playersOrphaned', players => orphaned.push(...players));
+
+  await node.close({ code: 1006, reason: 'state-change-listener-throws' });
+  assert.equal(node.destroyed, true);
+  assert.equal(orphaned.length, 1);
+  assert.deepEqual(errors, ['node state observer crashed']);
+});
