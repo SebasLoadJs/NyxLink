@@ -614,3 +614,71 @@ for (const hadValue of [false, true]) {
     assert.equal(player.current, null);
   });
 }
+
+for (const loop of ['track', 'queue']) {
+  test(`loadFailed does not replay the failed song indefinitely with loop=${loop}`, async t => {
+    const context = createPlayer(t);
+    const { manager, node, player, requests } = context;
+    player.setAutoPlay(false);
+    player.setLoop(loop);
+    const failing = createTrack(`failed-loop-${loop}`);
+    const next = createTrack(`next-after-failed-loop-${loop}`);
+    const wire = await playAndStart(context, failing);
+    player.queue.add(next);
+    const ends = [];
+    manager.on('queueEnd', () => ends.push(true));
+
+    await node.handleTrackEnd(player, { reason: 'loadFailed', track: wire });
+
+    assert.equal(player.current, next);
+    assert.deepEqual(player.queue.tracks, []);
+    assert.deepEqual(playbackRequests(requests).map(item => item.payload.track.encoded),
+      [failing.encoded, next.encoded]);
+    assert.deepEqual(ends, []);
+  });
+
+  test(`loadFailed finishes an empty loop=${loop} queue instead of repeating`, async t => {
+    const context = createPlayer(t);
+    const { manager, node, player, requests } = context;
+    player.setAutoPlay(false);
+    player.setLoop(loop);
+    const failing = createTrack(`failed-last-${loop}`);
+    const wire = await playAndStart(context, failing);
+    const ends = [];
+    manager.on('queueEnd', () => ends.push(true));
+
+    await node.handleTrackEnd(player, { reason: 'loadFailed', track: wire });
+
+    assert.equal(player.current, null);
+    assert.equal(player.playing, false);
+    assert.deepEqual(player.queue.tracks, []);
+    assert.deepEqual(playbackRequests(requests).map(item => item.payload.track.encoded),
+      [failing.encoded]);
+    assert.deepEqual(ends, [true]);
+  });
+}
+
+test('loadFailed in track loop respects the configured retry limit', async t => {
+  const context = createPlayer(t);
+  const { manager, node, player, requests } = context;
+  player.setAutoPlay(false);
+  player.setLoop('track');
+  manager.options.trackHandling = { retryFailedTracks: true, maxRetryAttempts: 1 };
+  const failed = createTrack('failed-track-retry-limit');
+  const firstWire = await playAndStart(context, failed);
+  const ends = [];
+  manager.on('queueEnd', () => ends.push(true));
+
+  await node.handleTrackEnd(player, { reason: 'loadFailed', track: firstWire });
+  assert.equal(failed.retries, 1);
+  assert.equal(playbackRequests(requests).length, 2);
+  const secondWire = echoedTrack(failed, playbackRequests(requests).at(-1));
+  await node.handleTrackStart(player, { track: secondWire });
+
+  await node.handleTrackEnd(player, { reason: 'loadFailed', track: secondWire });
+
+  assert.equal(failed.retries, 1);
+  assert.equal(playbackRequests(requests).length, 2, 'no third request after the retry limit');
+  assert.equal(player.current, null);
+  assert.deepEqual(ends, [true]);
+});
