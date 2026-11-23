@@ -417,3 +417,34 @@ test('eject preserves source when recovered ACK points to an unregistered live o
   assert.equal(source.destroyed, false);
   assert.equal(manager.nodes.nodes.get(source.identifier), source);
 });
+
+test('cancelled eject does not destroy newer intent on a connecting target', async t => {
+  const { NodeFailover } = require('../dist/src/nodes/NodeFailover');
+  const { manager, node: source, player } = createPlayer(t);
+  const [target] = candidates(manager);
+  target.connected = false;
+  target.state = NodeState.CONNECTING;
+  const originalMove = NodeFailover.move;
+  NodeFailover.move = async () => {
+    player.node = target;
+    return { status: 'cancelled', attempts: 1 };
+  };
+  t.after(() => { NodeFailover.move = originalMove; });
+  manager.options.node = {
+    ...manager.options.node,
+    failover: { preserveOnFailure: false },
+  };
+  let destroyCalls = 0;
+  const originalDestroy = player.destroy.bind(player);
+  player.destroy = async (...args) => {
+    destroyCalls++;
+    return originalDestroy(...args);
+  };
+
+  assert.equal(await manager.nodes.eject(source.identifier), false);
+  assert.equal(destroyCalls, 0);
+  assert.equal(player.node, target);
+  assert.equal(player.destroyed, false);
+  assert.equal(source.destroyed, false);
+  assert.equal(manager.nodes.nodes.get(source.identifier), source);
+});
