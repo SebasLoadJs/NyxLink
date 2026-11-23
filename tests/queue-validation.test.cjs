@@ -60,3 +60,52 @@ test('truncate reports the inclusive end index of the removed range', async t =>
   assert.equal(q.truncate(1), true);
   assert.deepEqual(events, [{tracks:[b,c],start:1,end:2}]);
 });
+
+test('duplicate creates independent playback state and metadata for each queue entry', async t => {
+  const { player, manager } = createPlayer(t);
+  const q = player.queue;
+  const original = createTrack('duplicate-independent');
+  original.position = 23000;
+  original.userData = { nested: { label: 'initial' } };
+  original.pluginInfo = { nested: { quality: 100 } };
+  q.add(original);
+  const events = [];
+  manager.on('queueDuplicate', (_player, tracks, index) => events.push({ tracks, index }));
+
+  assert.equal(q.duplicate(0, 2), true);
+  assert.equal(q.size, 3);
+  assert.equal(q.tracks[0], original);
+  assert.notEqual(q.tracks[1], original);
+  assert.notEqual(q.tracks[2], original);
+  assert.notEqual(q.tracks[1], q.tracks[2]);
+  assert.deepEqual(q.tracks.map(track => track.encoded), Array(3).fill(original.encoded));
+  assert.deepEqual(events, [{ tracks: q.tracks.slice(1), index: 0 }]);
+
+  q.tracks[1].position = 0;
+  q.tracks[1].userData.nested.label = 'changed';
+  q.tracks[1].pluginInfo.nested.quality = 50;
+  assert.equal(original.position, 23000);
+  assert.equal(q.tracks[2].position, 23000);
+  assert.equal(original.userData.nested.label, 'initial');
+  assert.equal(q.tracks[2].userData.nested.label, 'initial');
+  assert.equal(original.pluginInfo.nested.quality, 100);
+  assert.equal(q.tracks[2].pluginInfo.nested.quality, 100);
+});
+
+test('failed duplicate does not partially mutate queue or emit duplicate event', async t => {
+  const { player, manager } = createPlayer(t);
+  const q = player.queue;
+  const original = createTrack('duplicate-unserializable');
+  original.userData = { circular: null };
+  original.userData.circular = original.userData;
+  // Persist a valid original first; it is intentionally made invalid only
+  // for duplication, so the test observes the rollback boundary.
+  const saved = createTrack('duplicate-valid');
+  q.add(saved);
+  let events = 0;
+  manager.on('queueDuplicate', () => events++);
+  q.tracks[0] = original;
+  assert.equal(q.duplicate(0, 2), false);
+  assert.deepEqual(q.tracks, [original]);
+  assert.equal(events, 0);
+});
