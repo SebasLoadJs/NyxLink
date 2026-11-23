@@ -31,7 +31,7 @@ pnpm run build
 node scripts/test-live-voice.cjs --armed
 ```
 
-The script sends voice connection requests and plays the two tracks with `setCrossfade({enabled:true,mode:'smart'})` plus `setQueuePreload({enabled:true})`. It requires two ordered `trackStart` events and an empty queue at handoff. It separately records whether `trackEnd` was tagged `crossfading`, `gapless`, or another reason. Each run now writes a **separate private JSON report** in `.runtime/live-voice/`, named with the backend, acceptance mode, UTC time and a unique run identifier (mode 0600). Previous run evidence is preserved. Credentials and source URLs are omitted. The terminal prints the exact new report path.
+The script sends voice connection requests and plays the two tracks with `setCrossfade({enabled:true,mode:'smart'})` plus `setQueuePreload({enabled:true})`. It requires two ordered `trackStart` events and an empty queue at handoff. It separately records whether `trackEnd` was tagged `crossfading`, `gapless`, or another reason. Each run writes a **separate private JSON report** in `.runtime/live-voice/`, named with the backend, acceptance mode, UTC time and a unique run identifier (mode 0600). Previous evidence is preserved. Credentials and source URLs are omitted. The report records `sourceRevision` as the exact Git commit SHA when the repository is available, or `null` if it cannot be verified. **Reports without a verified candidate SHA cannot close the release gate.** The terminal prints the exact new report path.
 
 ## Separate playback-command acceptance mode
 
