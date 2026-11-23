@@ -68,6 +68,56 @@ Connection auth and TLS belong in the application environment.
   deployment is intentionally coordinated**. Do not share a namespace between
   independent bots or test/prod environments.
 
+## Optional per-guild ownership leases
+
+\`RedisGuildLeaseCoordinator\` is a separate opt-in coordination primitive. It
+can help multiple shard workers agree which process currently handles a guild.
+It uses atomic Redis Lua scripts: one active owner, a bounded lease TTL,
+explicit renewal, ownership-checked release and a monotonically increasing
+**fencingToken** per guild. The token changes when ownership passes to another
+process, allowing higher-level systems to reject delayed work from old owners.
+
+~~~js
+const { RedisGuildLeaseCoordinator } = require('nyxlink');
+const leases = new RedisGuildLeaseCoordinator({
+  client: { sendCommand: args => client.sendCommand(args) },
+  namespace: 'obey_staging',
+  ttlMs: 30000,
+});
+
+const guildId = '123456789012345678';
+const lease = await leases.acquire(guildId);
+if (lease) {
+  // Application must verify and renew ownership before accepting voice work.
+  const stillOwner = await leases.renew(lease);
+  if (!stillOwner) {
+    // Cancel current guild work; do not send new play/voice operations.
+  }
+  // Keep lease.fencingToken with messages to a cooperating, fenced consumer.
+  await leases.release(lease);
+}
+await leases.close(); // does not disconnect the caller's Redis client
+~~~
+
+**Critical limitation:** this lease does not automatically hook into
+\`PlayerManager\`, the Discord gateway or NodeLink/Lavalink commands. A lease
+alone cannot stop a previously issued voice command after expiry or a network
+partition: downstream consumers must validate the fencing token or the
+application must safely stop work on renewal failure. In particular, it does
+**not** certify exactly-one-audible-session behavior across shards.
+
+A worker must periodically renew a lease (for example every TTL/3 with a
+jitter-aware policy), stop on failure, and release during orderly shutdown.
+There is no automatic heartbeat timer. Lease counters persist by design to
+preserve fencing monotonicity; do not clear their Redis namespace during
+production. Applications should use a single Redis persistence/HA strategy
+appropriate to these safety requirements.
+
+The live Redis tests in \`tests/integration/redis-guild-lease.test.cjs\`
+verify exclusivity, expiry, monotonically increasing tokens, stale release
+protection, multiple guilds and shutdown races. They run together with
+storage CAS tests in the Redis 7 GitHub Actions workflow.
+
 ## Testing
 
 An isolated, real Redis 7 integration job runs on both Node.js 22 and 24:
