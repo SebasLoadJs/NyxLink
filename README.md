@@ -37,7 +37,7 @@
 | **Varios nodos** | Selección por carga, seguimiento de disponibilidad y failover con intentos limitados. |
 | **Pistas** | Metadatos, requester y resolución en el backend de destino al migrar. |
 | **Búsqueda** | Fuentes configurables, cancelación, timeout y caché TTL/LRU opcional. |
-| **Almacenamiento** | Estado en memoria, persistencia local y un contrato para adaptadores propios. |
+| **Almacenamiento** | Memoria, persistencia local y Redis 7 opcional con snapshots atómicos. |
 | **Integración** | Conector Discord.js, eventos y declaraciones de tipos incluidas. |
 | **Consola** | Logger opcional con Consola, banner de terminal y estado de nodos. |
 
@@ -335,7 +335,25 @@ La importación reemplaza el registro almacenado; no crea un reproductor ni inic
 
 `PlayerSnapshotCodec.parse()` valida un objeto o JSON versionado; `fromRecord()` admite registros heredados sin versión y les asigna revisión `null`. Un formato futuro o inválido devuelve `SnapshotValidationError` (`INVALID_SNAPSHOT`); las sesiones reanudadas tampoco adoptan formatos futuros. La copia JSON tiene un límite de 16 MiB. Las lecturas de registros de player devuelven copias; modificar una copia no guarda cambios.
 
-`StorageAdapter.compareAndSet()` es opcional. `Memory` y `Local` implementan comparación y reemplazo atómicos dentro de su ámbito; `Local` sigue requiriendo un solo proceso por directorio. Un adaptador antiguo sin ese método conserva la serialización de su manager. Para compartir almacenamiento entre procesos, el adaptador debe implementar CAS en el servicio de almacenamiento. Esto no aporta leases ni exclusión de controladores activos. Las escrituras directas al proveedor o reemplazos de la colección completa quedan fuera del contrato de revisiones por guild. Los reemplazos completos generan más datos de WAL que una actualización de campo. Para añadir muchas pistas, usa `player.queue.add(tracks)` en un solo lote: cada llamada guarda una copia de la cola.
+`StorageAdapter.compareAndSet()` es opcional. `Memory` y `Local` implementan comparación y reemplazo atómicos dentro de su ámbito; `Local` sigue requiriendo un solo proceso por directorio. Un adaptador antiguo sin ese método conserva la serialización de su manager. Para compartir almacenamiento entre procesos, el adaptador debe implementar CAS en el servicio de almacenamiento. **El almacenamiento por sí solo** no aporta leases ni exclusión de controladores activos; las funciones opt-in de propiedad de guild se describen debajo. Las escrituras directas al proveedor o reemplazos de la colección completa quedan fuera del contrato de revisiones por guild. Los reemplazos completos generan más datos de WAL que una actualización de campo. Para añadir muchas pistas, usa `player.queue.add(tracks)` en un solo lote: cada llamada guarda una copia de la cola.
+
+**Redis opcional y control de shards.** `RedisStorage` implementa CAS
+atómico con Redis 7 sin añadir el cliente Redis como dependencia del paquete.
+`RedisGuildLeaseCoordinator` y `manager.useGuildLeases()` permiten adquirir
+una guild antes de construir su reproductor, utilizando
+`await manager.players.createOwned(...)` o `restoreOwned(...)`.
+Para enrutar comandos de voz entre procesos, `RedisGuildIpcRouter`
+acepta el protocolo `nyxlink/guild-voice/2`, con secuencias crecientes por
+guild. El bot debe aportar el cliente Redis, el transporte IPC autenticado
+y el enrutamiento real de shards; no se garantizan comandos de voz exactamente
+una vez ante una partición de red. Consulta la
+[guía de Redis y fencing](docs/redis-storage.md).
+
+**Observabilidad opcional.** `await manager.startPrivateMetricsServer({ token })`
+abre únicamente un endpoint autenticado de loopback. Expone salud,
+resúmenes de nodos y reproductores y métricas Prometheus sin IDs de guild
+ni secretos. No se inicia por defecto. Consulta la
+[guía de métricas privadas](docs/private-metrics.md).
 
 El logger está desactivado por defecto. `logging` activa la salida de Consola y `banner: true` muestra el banner de terminal. Los eventos `debug` contienen información técnica y pueden incluir credenciales: revisa su contenido antes de compartirlos.
 
