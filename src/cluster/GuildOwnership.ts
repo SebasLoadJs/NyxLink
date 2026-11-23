@@ -1,5 +1,8 @@
 import type { Manager } from '../core/Manager';
 import { RedisGuildLeaseCoordinator, type RedisGuildLease } from '../database/RedisGuildLeaseCoordinator';
+import { playbackGuard } from '../players/PlaybackGuard';
+
+const assignedCoordinators = new WeakSet<RedisGuildLeaseCoordinator>();
 
 export interface GuildOwnershipOptions {
     /** Must be a connected, dedicated coordinator for this Manager. */
@@ -38,6 +41,10 @@ export class GuildOwnership {
         if (!Number.isInteger(interval) || interval < 50 || interval >= ttl / 2) {
             throw new TypeError('Guild lease renewal must be at least 50ms and less than TTL/2');
         }
+        if (assignedCoordinators.has(options.coordinator)) {
+            throw new Error('A guild lease coordinator may belong to only one Manager');
+        }
+        assignedCoordinators.add(options.coordinator);
         this.manager = manager;
         this.coordinator = options.coordinator;
         this.interval = setInterval(() => { void this.heartbeat(); }, interval);
@@ -60,6 +67,14 @@ export class GuildOwnership {
     private drop(guildId: string, lease: RedisGuildLease, reason: string): void {
         if (this.active.get(guildId) !== lease) return;
         this.active.delete(guildId);
+        // Stop local health polling and invalidate queued playback intent.
+        // Do not send a gateway leave or backend DELETE: ownership may have
+        // moved to another shard already.
+        const player = this.manager.players.get(guildId);
+        if (player && !player.destroyed) {
+            playbackGuard(player).invalidate();
+            player.stopHealthCheck();
+        }
         try { this.manager.emit('guildOwnershipLost', guildId, lease.fencingToken, reason); }
         catch { /* consumer observers must not interrupt coordination */ }
     }
