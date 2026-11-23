@@ -206,3 +206,16 @@ const externalDatabaseOptions: import('../../dist').IManagerOptionsConfig['datab
 // @ts-expect-error Redis storage namespaces cannot be omitted from the public API.
 const invalidRedisOptions: import('../../dist').RedisStorageOptions = { client: redisCommands };
 void [redisStorage, externalDatabaseOptions, invalidRedisOptions];
+
+
+const leaseCoordinator: import('../../dist').RedisGuildLeaseCoordinator =
+    new (require('../../dist').RedisGuildLeaseCoordinator)({
+        client: redisCommands, namespace: 'my_bot', ttlMs: 30000,
+    } as import('../../dist').RedisGuildLeaseOptions);
+const acquiredLease: Promise<import('../../dist').RedisGuildLease | null> =
+    leaseCoordinator.acquire('123456789012345678');
+const renewLease = (lease: import('../../dist').RedisGuildLease): Promise<boolean> =>
+    leaseCoordinator.renew(lease);
+// @ts-expect-error An owner cannot supply a custom arbitrary fencing identifier.
+const invalidLease: import('../../dist').RedisGuildLease = { guildId: '123456789012345678', fencingToken: 'one' };
+void [acquiredLease, renewLease, invalidLease];
