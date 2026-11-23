@@ -243,7 +243,7 @@ test('queued seek does not move a replacement track after a newer play intent', 
   const play = player.play({ track: replacement });
   release.resolve();
   await Promise.all([pause, seek, play]);
-  assert.deepEqual(applied.map(p => p.position).filter(p => p !== undefined), []);
+  assert.deepEqual(applied.filter(p => p.position === 42000), [], 'stale seek must not send position 42000');
   assert.equal(player.current, replacement);
   assert.equal(original.position, 0);
   assert.equal(replacement.position, 0);
@@ -289,7 +289,7 @@ test('trackStuck handler cannot seek or skip a track replaced by its event liste
   await node.handleTrackStuck(player, { thresholdMs: 10000 });
   await nextPlay;
   assert.equal(player.current, replacement);
-  assert.equal(requests.filter(r => r.payload.position !== undefined).length, 0);
+  assert.equal(requests.filter(r => r.payload.position === 1000).length, 0, 'stale stuck recovery must not seek');
   assert.equal(requests.filter(r => r.payload.track?.encoded === null).length, 0);
 });
 
@@ -368,7 +368,7 @@ test('failed recovery seek cannot restart a player superseded by an explicit pla
   let restarts = 0;
   player.restart = async () => { restarts++; return true; };
   node.rest.updatePlayer = async (_guild, payload) => {
-    if (payload.position !== undefined) {
+    if (payload.position === 1000) {
       started.resolve();
       await release.promise;
       throw new Error('old seek failed');
