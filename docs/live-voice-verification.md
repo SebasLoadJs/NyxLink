@@ -8,7 +8,7 @@ This is a **manual, opt-in, potentially audible** integration check. It will con
 - A bot token stored privately in local environment variables (never paste tokens into chat or commit them).
 - A reachable NodeLink server (for crossfade/commands/reconnect) or Lavalink v4 server (commands/reconnect), with HTTP audio-source access and permission to connect Discord voice.
 - Two **different, authorized** HTTP(S) audio WAV files, approximately 15–120 seconds each, reachable **from the NodeLink server**. Use original generated test tones or files you control; avoid streamed/copyrighted catalog material.
-- Node.js 22+ and repository development dependencies installed; run `pnpm run build` before launching.
+- Node.js 22+, development dependencies installed and a clean source checkout. The harness recompiles TypeScript **before Discord login**, rather than trusting older checked-in `dist/` output.
 
 Provide the required environment variables using your local process environment or a secrets manager. No `.env` file is required:
 
@@ -27,11 +27,10 @@ Provide the required environment variables using your local process environment 
 **Run only when intentionally joining the test channel:**
 
 ```bash
-pnpm run build
 node scripts/test-live-voice.cjs --armed
 ```
 
-The script sends voice connection requests and plays the two tracks with `setCrossfade({enabled:true,mode:'smart'})` plus `setQueuePreload({enabled:true})`. It requires two ordered `trackStart` events and an empty queue at handoff. It separately records whether `trackEnd` was tagged `crossfading`, `gapless`, or another reason. Each run writes a **separate private JSON report** in `.runtime/live-voice/`, named with the backend, acceptance mode, UTC time and a unique run identifier (mode 0600). Previous evidence is preserved. Credentials and source URLs are omitted. The report records `sourceRevision` as the exact Git commit SHA only when the source checkout is clean both at the start and end of the run. It is `null` if Git is unavailable, tracked or untracked files are changed, or the checkout changes while testing. **Reports without a verified candidate SHA cannot close the release gate.** The terminal prints the exact new report path.
+The script sends voice connection requests and plays the two tracks with `setCrossfade({enabled:true,mode:'smart'})` plus `setQueuePreload({enabled:true})`. It requires two ordered `trackStart` events and an empty queue at handoff. It separately records whether `trackEnd` was tagged `crossfading`, `gapless`, or another reason. Each run writes a **separate private JSON report** in `.runtime/live-voice/`, named with the backend, acceptance mode, UTC time and a unique run identifier (mode 0600). Previous evidence is preserved. Credentials and source URLs are omitted. The report records `sourceRevision` as the exact Git commit SHA only when the source checkout is clean both at the start and end of the run. It is `null` if Git is unavailable, tracked or untracked files are changed, or the checkout changes while testing. Generated `dist/` files may differ from Git because a fresh build overwrites older tracked JavaScript; the source SHA check excludes **only** these compiler outputs, while other modified or untracked source files still invalidate the report. The report also requires `buildValidated: true` from a successful TypeScript rebuild. **Reports without a verified candidate SHA and validated build cannot close the release gate.** The terminal prints the exact new report path.
 
 ## Separate playback-command acceptance mode
 
@@ -40,7 +39,6 @@ sequence. To test **play, pause, resume, volume, seek and skip** against an
 authorized **real NodeLink backend**, use this separate mode:
 
 ```bash
-pnpm run build
 node scripts/test-live-voice.cjs --armed --commands
 ```
 
@@ -90,7 +88,7 @@ candidate checkout without initiating connections, run:
 pnpm run release:check-voice-evidence
 ```
 
-The command checks the five separate NodeLink and Lavalink modes, backend
+The command checks the five separate NodeLink and Lavalink modes, the verified build marker, backend
 acknowledgements, report structure and exact local Git revision. The NodeLink
 crossfade report also must contain a `crossfading` transition event, not
 only two track-start events; this still does not demonstrate that two audio
