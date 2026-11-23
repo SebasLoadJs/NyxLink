@@ -37,6 +37,15 @@ These APIs only describe **client and tested protocol behavior**; they do not gu
 - Added basic redaction of known secret fields and authorization tokens; reinforced transport/authentication handling, failure boundaries and test-laboratory security.
 - Enabled strict compilation on Node.js 22/24, regression/contract tests, backend integration, CodeQL and endurance validation in GitHub Actions.
 
+### Optional distributed operation (Redis 7)
+
+- Added a caller-owned Redis adapter with atomic player snapshot revision checks and namespaced storage, with no mandatory Redis dependency.
+- Added per-guild ownership leases, renewal, expiry detection and fencing tokens; opt-in Player, Voice and REST guards block stale workers without changing unconfigured bots.
+- Added an application-routed Discord voice IPC gate with atomic Redis ownership checks, duplicate-command protection, per-guild monotonic sequencing and serialized callbacks on each gateway receiver.
+- **IPC wire protocol `nyxlink/guild-voice/2`** requires a Redis-issued `sequence` field. Prior development-only `nyxlink/guild-voice/1` messages are rejected; update IPC senders and receivers together.
+- Added Redis 7 integration tests in Node.js 22/24, including cross-process owner transfer, delayed command handling, out-of-order join/leave and replay expiration.
+- Redis and IPC checks do not replace an authenticated gateway transport or provide end-to-end fencing for commands already accepted by Discord.
+
 ### Distribution
 
 - Added npm channel policy validation: `dev` for development builds, `next` for release candidates and `latest` for stable SemVer versions.
