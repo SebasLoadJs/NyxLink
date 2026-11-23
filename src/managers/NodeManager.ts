@@ -173,11 +173,17 @@ export class NodeManager {
             }
         }));
         if (!active()) return false;
-        const attached = (player: Player) => !player.destroyed && player.node === node &&
+        const registered = (player: Player) => !player.destroyed &&
             this.manager.players.get(player.guildId) === player;
+        const attached = (player: Player) => registered(player) && player.node === node;
+        const stranded = (player: Player) => registered(player) &&
+            (!player.node.connected || player.node.destroyed);
         // A cancellation represents a newer intent, not permission to orphan or destroy it.
         if (players.some((player, index) => results[index].status === 'cancelled' && attached(player))) return false;
-        const failed = players.filter((player, index) => results[index].status === 'failed' && attached(player));
+        // A failed transfer may have switched ownership to a destination that
+        // disconnected immediately. Report and handle that player as orphaned.
+        const failed = players.filter((player, index) => results[index].status === 'failed' &&
+            (attached(player) || stranded(player)));
         if (failed.length) {
             // Orphan notifications are observational: listeners may throw.
             try { this.manager.emit('playersOrphaned', failed, node); }
