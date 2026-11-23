@@ -5,7 +5,7 @@ const { EventEmitter } = require('node:events');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
-const { validateConfiguration, errorCode, event, writePrivateReport, reportPath, sourceRevision, safeBackendVersion, safeTrackEndReason } = require('../scripts/test-live-voice.cjs');
+const { validateConfiguration, errorCode, event, writePrivateReport, reportPath, sourceRevision, safeBackendVersion, safeTrackEndReason, evaluateCrossfadeEvents } = require('../scripts/test-live-voice.cjs');
 
 function config(){
  return {
@@ -188,4 +188,43 @@ test('source revision rejects modified and untracked source in a disposable Git 
   assert.equal(sourceRevision(directory), expected);
   await fs.writeFile(path.join(directory, 'untracked.js'), 'module.exports = 3;\n');
   assert.equal(sourceRevision(directory), null, 'untracked source is not immutable');
+});
+
+test('crossfade lab rejects an ordinary handoff even when both tracks start in order', () => {
+  const events = [
+    { type: 'trackStart', track: 'A' },
+    { type: 'trackEnd', track: 'A', reason: 'finished' },
+    { type: 'trackStart', track: 'B' },
+  ];
+  const result = evaluateCrossfadeEvents(events, 0);
+  assert.equal(result.observed, true);
+  assert.equal(result.crossfadeEventObserved, false);
+  assert.equal(result.success, false);
+});
+
+test('crossfade lab accepts ordered starts with a crossfading end for track A', () => {
+  const events = [
+    { type: 'trackStart', track: 'A' },
+    { type: 'trackEnd', track: 'A', reason: 'crossfading' },
+    { type: 'trackStart', track: 'B' },
+  ];
+  assert.deepEqual(evaluateCrossfadeEvents(events, 0), {
+    observed: true,
+    transitionReasons: ['crossfading'],
+    crossfadeEventObserved: true,
+    remainingQueue: 0,
+    success: true,
+  });
+  assert.equal(evaluateCrossfadeEvents(events, 1).success, false);
+});
+
+test('crossfade lab does not accept duplicate starts or unrelated crossfading events', () => {
+  const wrongTrack = [
+    { type: 'trackStart', track: 'A' },
+    { type: 'trackEnd', track: 'B', reason: 'crossfading' },
+    { type: 'trackStart', track: 'B' },
+  ];
+  assert.equal(evaluateCrossfadeEvents(wrongTrack, 0).success, false);
+  assert.equal(evaluateCrossfadeEvents([...wrongTrack, { type: 'trackStart', track: 'B' }], 0).success, false);
+  assert.throws(() => evaluateCrossfadeEvents({}, 0), TypeError);
 });
