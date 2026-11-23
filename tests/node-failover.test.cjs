@@ -166,3 +166,52 @@ test('players cannot migrate to a node belonging to another manager', async t =>
   assert.equal(await player.transferNode(foreign.node),false);
   assert.equal(player.node,node);
 });
+
+test('failover retries another candidate when the acknowledged target disconnects', async t => {
+  const { NodeFailover } = require('../dist/src/nodes/NodeFailover');
+  const { playbackGuard } = require('../dist/src/players/PlaybackGuard');
+  const { manager, node: source, player } = createPlayer(t);
+  const [first, second] = candidates(manager);
+  const visited = [];
+  player.transferNode = async target => {
+    playbackGuard(player).invalidate();
+    visited.push(target.identifier);
+    player.node = target;
+    if (target === first) {
+      first.connected = false;
+      first.state = NodeState.DISCONNECTED;
+    }
+    return true;
+  };
+
+  const result = await NodeFailover.move(player, source, { maxAttempts: 2, retryDelayMs: 0 });
+  assert.equal(result.status, 'recovered');
+  assert.equal(result.attempts, 2);
+  assert.equal(result.node, second);
+  assert.equal(player.node, second);
+  assert.deepEqual(visited, ['first', 'second']);
+});
+
+test('no alternate candidate reports failed after a target disconnects post-ACK', async t => {
+  const { NodeFailover } = require('../dist/src/nodes/NodeFailover');
+  const { playbackGuard } = require('../dist/src/players/PlaybackGuard');
+  const { manager, node: source, player } = createPlayer(t);
+  const [first, second] = candidates(manager);
+  manager.nodes.nodes.delete(second.identifier);
+  let failures = 0;
+  manager.on('playerRecoveryFailed', () => failures++);
+  player.transferNode = async target => {
+    playbackGuard(player).invalidate();
+    player.node = target;
+    target.connected = false;
+    target.state = NodeState.DISCONNECTED;
+    return true;
+  };
+
+  const result = await NodeFailover.move(player, source, { maxAttempts: 2, retryDelayMs: 0 });
+  assert.equal(result.status, 'failed');
+  assert.equal(result.attempts, 1);
+  assert.equal(failures, 1);
+  assert.equal(player.node, first);
+  assert.equal(first.connected, false);
+});
