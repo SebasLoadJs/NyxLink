@@ -744,6 +744,10 @@ export class Node {
     if (this.destroyed || (this.state === NodeState.DISCONNECTED && !this.connected)) return;
     this.invalidateBackendRefresh();
     const closeGeneration = this.backendGeneration;
+    // Capture and detach the socket before notifying consumers; a listener may
+    // reconnect synchronously and install a newer socket instance.
+    const closingSocket = this.socket;
+    this.socket = null;
     // Consumer callbacks are observational and must not interrupt disconnection
     // cleanup. Report listener failures if a separate error observer is available.
     const notify = (callback: () => void): void => {
@@ -761,17 +765,19 @@ export class Node {
     this.readyTimeout = undefined;
     const { code, reason } = event;
     if (this.connected) this.connected = false;
-    this.setState(NodeState.DISCONNECTED);
+    notify(() => this.setState(NodeState.DISCONNECTED));
     this.resetResumeUpdateState();
-    
-    this.manager.emit("debug", `Moonlink.js > Node <- Disconnected from ${this.identifier}. Code: ${code}, Reason: ${reason}.`);
+
+    notify(() => this.manager.emit("debug", `Moonlink.js > Node <- Disconnected from ${this.identifier}. Code: ${code}, Reason: ${reason}.`));
+    try { closingSocket?.close(); }
+    catch (error) {
+      notify(() => this.manager.emit("nodeError", this, error instanceof Error ? error : new Error(String(error))));
+    }
     notify(() => this.manager.emit("nodeDisconnect", this, code, reason));
 
-    if (this.socket) {
-      this.socket.close();
-      this.socket = null;
-    }
-
+    // A listener might have begun a new connection. Its timers and socket
+    // belong to a newer lifecycle and must not be touched by this close.
+    if (!closingThisConnection()) return;
     if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
     this.reconnectTimeout = undefined;
 
