@@ -72,3 +72,20 @@ test('failover panel follows the confirmed failure result and never prints Recov
   assert.match(output.stdout, /Failed/);
   assert.doesNotMatch(output.stdout, /Recovered/);
 });
+
+test('opt-in logger redacts credentials from strings, objects and errors', () => {
+  const output = run("const {Logger}=require('./dist'); const log=new Logger({level:'debug',color:false,timestamps:false}); log.debug('Node','Authorization: Bearer bearer-secret-987 password=pass-secret-987'); log.info('Request',{token:'object-token-987',apiKey:'object-api-987'}); log.error('Backend',new Error('access_token=query-secret-987'))");
+  const all = output.stdout + output.stderr;
+  for (const secret of ['bearer-secret-987','pass-secret-987','object-token-987','object-api-987','query-secret-987']) {
+    assert.equal(all.includes(secret), false, 'Secret leaked: ' + secret);
+  }
+  assert.match(all, /\[REDACTED\]/);
+  assert.match(all, /Backend/);
+});
+
+test('opt-in logger preserves ordinary text while redacting JSON keys', () => {
+  const output = run("const {Logger}=require('./dist'); const log=new Logger({level:'info',color:false,timestamps:false}); log.info('HTTP', 'Response 401: {\"token\":\"json-secret-987\",\"status\":\"denied\"}')");
+  assert.match(output.stdout, /Response 401/);
+  assert.match(output.stdout, /denied/);
+  assert.doesNotMatch(output.stdout, /json-secret-987/);
+});
