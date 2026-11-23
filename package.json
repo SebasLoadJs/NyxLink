@@ -55,7 +55,8 @@
   "files": [
     "dist",
     "assets/nyxlink_banner.png",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE.md"
   ],
   "dependencies": {
     "consola": "3.4.2"
