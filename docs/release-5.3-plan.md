@@ -141,3 +141,13 @@ The following implementation changes are committed on `dev`, but their latest co
 ### Stop conditions
 
 Do not tag or publish while any required CI job is failing or unverified, while known critical/high-severity problems remain, if a backend path is silently misreported as supported, or if the release package/installation does not pass. Every unchecked item requires evidence or an explicitly documented scope reduction before a stable release.
+
+## Release-gate verification checkpoint — 2026-11-23 (20:00 PYT)
+
+**Verified automatic baseline:** commit `2763ab98515a4bf46bb3e23be0ae0e8b444c5338` passed **11/11 GitHub Actions checks**: Node 22/24, backend protocols/integrations (baseline and modern NodeLink, pinned Lavalink plugins), Redis 7, CodeQL and baseline endurance. [Validation and backend evidence](https://github.com/SebasLoadJs/NyxLink/actions/runs/45284983084), [protocol tests](https://github.com/SebasLoadJs/NyxLink/actions/runs/45284982838), [Redis tests](https://github.com/SebasLoadJs/NyxLink/actions/runs/45284983123). These results apply only to that commit.
+
+**Earlier completed extended endurance:** commit `1e270a9d15039df103f395e44b0dee45f8399162` passed the separate `stabilization / endurance` GitHub check configured with `seconds: '600'`, along with the other 11 checks. This is a historical 600-second acceptance, **not** a substitute for the new RC commit.
+
+**More recent release safety implementation:** read-only npm version-collision preflight is now included in both manual package validation and RC/stable tag validation; automated workflow regression tests assert tag matching, 600-second gate wiring, and no automatic publication. These commits require their own completed GitHub CI check before being considered verified. Recording this checkpoint triggers a fresh extended stabilization run for the updated development source.
+
+**Unchanged stop conditions:** no `v5.3.0-rc.1` Git tag or npm publication before final same-SHA CI, candidate 600-second endurance, authorized and independently heard real Discord playback (NodeLink and Lavalink), package/license attribution sign-off, npm owner/write permission and explicit publication approval.
