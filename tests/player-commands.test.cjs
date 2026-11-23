@@ -1092,3 +1092,42 @@ test('autoplay resolution still starts when no manual queue entry appears', asyn
   assert.deepEqual(player.queue.tracks, []);
   assert.equal(requests.filter(request => request.payload.track?.encoded === track.encoded).length, 1);
 });
+
+test('TrackEnd handoff starts manual music queued during autoplay resolution', async t => {
+  const { node, player, requests } = createPlayer(t);
+  const { TrackResolver } = require('../dist/src/tracks/TrackResolver.js');
+  const previous = createTrack('manual-priority-ended');
+  const recommended = createTrack('manual-priority-auto');
+  const manual = createTrack('manual-priority-requested');
+  player.current = previous;
+  player.playing = true;
+  player.autoPlay = true;
+  player.autoLeave = false;
+  player.recommendations = [recommended];
+
+  const originalResolver = TrackResolver.resolve;
+  const entered = deferred();
+  const release = deferred();
+  TrackResolver.resolve = async track => {
+    if (track === recommended) {
+      entered.resolve();
+      await release.promise;
+    }
+    return track;
+  };
+  t.after(() => { TrackResolver.resolve = originalResolver; });
+
+  const ending = node.handleTrackEnd(player, {
+    track: previous.toJSON(), reason: 'finished',
+  });
+  await entered.promise;
+  player.queue.add(manual);
+  release.resolve();
+  await ending;
+
+  assert.equal(player.current, manual);
+  assert.equal(player.playing, true);
+  assert.deepEqual(player.queue.tracks, []);
+  assert.deepEqual(requests.filter(x => x.payload.track?.encoded).map(x => x.payload.track.encoded),
+    [manual.encoded]);
+});
