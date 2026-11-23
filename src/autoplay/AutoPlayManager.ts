@@ -34,12 +34,10 @@ export class AutoPlayManager {
             // Unexpected backend/queue failures must not interrupt TrackEnd.
             player.manager.emit('debug', `NyxLink > AutoPlay > Recommendation playback failed for guild ${player.guildId}: ${error instanceof Error ? error.message : String(error)}`);
         }
-        if (!accepted || !active()) {
-            // A rejected recommendation must not become a later queued user request.
-            const index = player.queue.tracks.indexOf(selected);
-            if (index >= 0) player.queue.remove(index);
-            return false;
-        }
+        // playAutoPlay owns cleanup of any unconsumed automatic queue insertion.
+        // Removing by Track identity here could erase a manual queue entry when
+        // the listener reused that same Track instance during an HTTP request.
+        if (!accepted || !active()) return false;
 
         player.recommendations = player.recommendations.filter(t => t.encoded !== selected.encoded);
         player.manager.emit('autoPlayed', player, selected, previous);
