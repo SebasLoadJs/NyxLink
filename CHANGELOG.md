@@ -48,7 +48,8 @@ These APIs only describe **client and tested protocol behavior**; they do not gu
 
 ### Live voice acceptance harness
 
-- Added a separately armed live Discord command smoke for NodeLink and Lavalink v4: play, backend-confirmed track A, pause/resume, volume, seek, skip and backend-confirmed track B.
+- Added separately armed live Discord command smoke for NodeLink and Lavalink v4: play, backend-confirmed track A, pause/resume, volume, seek, skip and backend-confirmed track B.
+- Added a controlled Discord voice disconnect/reconnect acceptance mode on both backends. It verifies a new gateway voice handshake, confirms the active track in REST and explicitly exercises player recovery; it does not simulate a network partition.
 - Kept the NodeLink-specific crossfade acceptance mode separate. Unrecognized backends are rejected, and Lavalink is not advertised as implementing NodeLink crossfade.
 - Bounded status polling even when the REST request stalls, and sanitized backend version and track-end metadata in local reports.
 - **No audible Discord output has been independently certified** by this harness or automated CI.
