@@ -38,6 +38,8 @@ export type { StorageAdapter } from './src/database/StorageAdapter';
 export { Memory } from './src/database/Memory';
 export { RedisStorage } from './src/database/RedisStorage';
 export type { RedisCommandClient, RedisStorageOptions } from './src/database/RedisStorage';
+export { RedisGuildLeaseCoordinator } from './src/database/RedisGuildLeaseCoordinator';
+export type { RedisGuildLease, RedisGuildLeaseOptions } from './src/database/RedisGuildLeaseCoordinator';
 export { Local } from './src/database/Local';
 export { PlayerSnapshotCodec, SnapshotConflictError, SnapshotValidationError } from './src/database/PlayerSnapshot';
 export type { PlayerSnapshot, PlayerSnapshotData } from './src/database/PlayerSnapshot';
