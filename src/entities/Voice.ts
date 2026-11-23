@@ -348,7 +348,11 @@ export class Voice extends EventEmitter<VoiceEvents> {
         this.emit('disconnect', new Error('Voice destroyed'));
         this.finishDisconnect?.();
         if (active) {
-            try { this.manager.send(this.player.guildId, { op: 4, d: { guild_id: this.player.guildId, channel_id: null, self_deaf: false, self_mute: false } }); } catch {}
+            try {
+                // Do not let an expired worker send a stale gateway disconnect.
+                this.manager.guildOwnership?.assertLocal(this.player.guildId);
+                this.manager.send(this.player.guildId, { op: 4, d: { guild_id: this.player.guildId, channel_id: null, self_deaf: false, self_mute: false } });
+            } catch {}
         }
     }
 }
