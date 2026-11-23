@@ -83,6 +83,22 @@ code revision as proof for the candidate. Even when each report says
 `protocolPassed: true`, its `audioMeasured: false` field means a person still
 needs to verify audio quality and dropout behavior.
 
+To inventory the five required **private protocol** reports for a clean
+candidate checkout without initiating connections, run:
+
+```bash
+pnpm run release:check-voice-evidence
+```
+
+The command checks the five separate NodeLink and Lavalink modes, backend
+acknowledgements, report structure and exact local Git revision. It rejects
+missing, malformed, failed, stale or superseded reports. Its output always
+sets `releaseApproved: false` and `humanListeningRequired: true`: even five
+`protocol-pass` reports **do not** prove that anyone heard audio. The
+second human observer and release reviewer must separately sign off before
+promotion. Private files stay under the ignored `.runtime/live-voice/`
+folder; this command does not copy their contents into a release.
+
 **CI coverage:** `tests/live-voice-commands.test.cjs` verifies the command
 sequence with a fake backend and failure cases; CI deliberately does
 not initiate real Discord voice connections.
