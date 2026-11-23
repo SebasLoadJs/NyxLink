@@ -28,6 +28,9 @@ test('live voice harness is opt-in and never initiates a connection by default',
 test('live voice harness requires valid IDs, safe URLs and bounded test configuration',()=>{
  const valid=validateConfiguration(config(),['--armed']);
  assert.equal(valid.crossfadeMs,5000);
+ assert.equal(valid.commandSmoke,false);
+ assert.equal(validateConfiguration(config(),['--armed','--commands']).commandSmoke,true);
+ assert.throws(()=>validateConfiguration(config(),['--commands']),/--armed/);
  for(const patch of [
   {NYXLINK_DISCORD_GUILD_ID:'wrong'},
   {NYXLINK_NODE_PORT:'65536'},
