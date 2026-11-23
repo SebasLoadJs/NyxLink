@@ -2,6 +2,7 @@ import { Track } from "./Track";
 import type { Manager } from "../core/Manager";
 import type { Player } from "./Player";
 import { TrackCodec } from '../tracks/TrackCodec';
+import { snapshotJSON } from '../database/PlayerSnapshot';
 
 export class Queue {
     private player: Player;
@@ -25,7 +26,7 @@ export class Queue {
             // Some JavaScript consumers provide custom Track-compatible objects.
             // Reject implementations whose serialization fails before mutating
             // the queue; persistence immediately serializes these same entries.
-            const snapshot = TrackCodec.serialize(candidate as Track);
+            const snapshot = snapshotJSON(TrackCodec.serialize(candidate as Track));
             return snapshot?.encoded === candidate.encoded &&
                 !!snapshot.info && typeof snapshot.info === 'object';
         } catch {
