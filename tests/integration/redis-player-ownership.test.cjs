@@ -87,3 +87,41 @@ test('Manager shutdown frees owned guilds and stops the ownership heartbeat', as
   replacement.stopHealthCheck();
   assert.ok(b.manager.guildOwnership.localLease(GUILD).fencingToken > token);
 });
+
+test('separate Node.js processes cannot both create the same guild player', async t => {
+  const { fork } = require('node:child_process');
+  const { once } = require('node:events');
+  const path = require('node:path');
+  const namespace = 'fork_' + randomBytes(8).toString('hex');
+  const child = fork(path.join(__dirname, '../helpers/redis-player-worker.cjs'), [namespace], {
+    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+  });
+  let stderr = '';
+  child.stderr.on('data', chunk => { stderr += chunk.toString(); });
+  t.after(() => { if (child.exitCode === null) child.kill(); });
+  const [message] = await once(child, 'message', { signal: AbortSignal.timeout(12000) });
+  assert.equal(message.event, 'acquired', stderr || JSON.stringify(message));
+  const childToken = message.fencingToken;
+
+  const client = await connectRedis();
+  t.after(async () => {
+    const helper = new RedisStorage({ client, namespace });
+    await helper.init({});
+    await helper.clear();
+    await helper.shutdown();
+    await client.close();
+  });
+  const parent = await ownedManager(client, namespace);
+  t.after(async () => parent.manager.shutdown());
+  await assert.rejects(parent.manager.players.createOwned(parent.options), /another process/);
+  assert.throws(() => parent.manager.send(GUILD, { op: 4 }), /lease/);
+
+  child.send({ event: 'release' });
+  const [released] = await once(child, 'message', { signal: AbortSignal.timeout(12000) });
+  assert.equal(released.event, 'released', stderr || JSON.stringify(released));
+  const replacement = await parent.manager.players.createOwned(parent.options);
+  replacement.stopHealthCheck();
+  assert.ok(parent.manager.guildOwnership.localLease(GUILD).fencingToken > childToken);
+  await replacement.pause();
+  assert.equal(parent.activity.updates.length, 1);
+});
