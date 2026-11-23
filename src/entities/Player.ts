@@ -1441,6 +1441,9 @@ export class Player {
         if (!this.current?.encoded || this.destroyed) return false;
         const guard = playbackGuard(this);
         const ticket = guard.invalidate();
+        // replay() previously delegated to play(): retain its pending-play
+        // semantics so a seek issued immediately afterwards targets the replay.
+        this.pendingPlayTicket = ticket;
         return this.commands.enqueue(async () => {
             if (this.destroyed || !guard.isCurrent(ticket)) return false;
             const original = this.current;
@@ -1453,8 +1456,10 @@ export class Player {
                 this.manager.options.trackPartial ?? []);
             let injectedTrackQueued = false;
             try {
-                return await this.playNext({ track: copy, position: 0 }, ticket, () => true,
+                const played = await this.playNext({ track: copy, position: 0 }, ticket, () => true,
                     queued => { injectedTrackQueued = queued; }, true);
+                if (played) this.lastSuccessfulExplicitPlayTicket = ticket;
+                return played;
             } finally {
                 // On an unsuccessful attempt the normal play path may leave
                 // its injected Track queued. Never turn replay into a future
@@ -1464,6 +1469,8 @@ export class Player {
                     if (index >= 0) this.queue.remove(index);
                 }
             }
+        }).finally(() => {
+            if (this.pendingPlayTicket === ticket) this.pendingPlayTicket = undefined;
         });
     }
 
