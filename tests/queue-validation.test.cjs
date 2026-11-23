@@ -109,3 +109,52 @@ test('failed duplicate does not partially mutate queue or emit duplicate event',
   assert.deepEqual(q.tracks, [original]);
   assert.equal(events, 0);
 });
+
+test('invalid entries reject the whole add batch before any queue or event mutation', async t => {
+  const { player, manager } = createPlayer(t);
+  const q = player.queue;
+  const original = createTrack('atomic-add-original');
+  const valid = createTrack('atomic-add-valid');
+  q.add(original);
+  let events = 0;
+  manager.on('queueAdd', () => events++);
+  const invalid = { encoded: 'present-but-not-playable' };
+
+  assert.throws(() => q.add([valid, invalid]), /playable Track/);
+  assert.deepEqual(q.tracks, [original]);
+  assert.equal(events, 0);
+  // Historical null/undefined no-op behavior is retained for compatibility.
+  q.add([null, valid, undefined]);
+  assert.deepEqual(q.tracks, [original, valid]);
+});
+
+test('invalid insertion, unshift, and replacement cannot poison the queue', async t => {
+  const { player, manager } = createPlayer(t);
+  const q = player.queue;
+  const first = createTrack('atomic-insert-first');
+  const valid = createTrack('atomic-insert-valid');
+  q.add(first);
+  let events = 0;
+  manager.on('queueAdd', () => events++);
+  const invalid = { encoded: 'not-a-track' };
+
+  assert.throws(() => q.insert(0, [valid, invalid]), /playable Track/);
+  assert.throws(() => q.unshift(invalid), /playable Track/);
+  assert.equal(q.replace(0, invalid), false);
+  assert.deepEqual(q.tracks, [first]);
+  assert.equal(events, 0);
+
+  q.insert(0, [undefined, valid, null]);
+  assert.deepEqual(q.tracks, [valid, first]);
+});
+
+test('queue entry validation supports playable Track-compatible subclasses', async t => {
+  const { player } = createPlayer(t);
+  const original = createTrack('queue-compatible');
+  const subclass = Object.create(original);
+  // Exercising structural compatibility rather than enforcing a concrete
+  // constructor identity supports existing custom Track implementations.
+  player.queue.add(subclass);
+  assert.equal(player.queue.first, subclass);
+  assert.equal(player.queue.size, 1);
+});
