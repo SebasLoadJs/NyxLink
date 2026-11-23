@@ -45,13 +45,13 @@ Status: **in progress**, development branch `dev`. For the 38 original tasks, ph
 - [ ] Keep logging opt-in and silent by default; redact known sensitive credentials and test it.
 - [ ] Define structured logging and an optional Pino adapter if justified; do not install Pino, pino-pretty and Chalk merely to duplicate Consola's functionality.
 - [ ] Review timeout/cancellation policies, input validation, request handling and local database writes.
-- [ ] Dependency security audit, CodeQL and license/attribution review (including original Moonlink contributors).
+- [ ] Dependency security audit, CodeQL and license/attribution review (including original Moonlink contributors); confirm `NOTICE.md` is shipped and complete `docs/license-attribution-review.md`.
 - [ ] Review benchmark and memory/connection leak evidence.
 
 ## Phase 5 — Public consumption and documentation
 
 - [ ] `pnpm run test:package` installs and exercises the *packed* package in an isolated consumer.
-- [ ] `pnpm run pack:check` verifies the archive contains no private/runtime files.
+- [ ] `pnpm run pack:check` verifies the archive contains no private/runtime files and includes `NOTICE.md` and `LICENSE`.
 - [ ] Both CommonJS and ESM consumers, TypeScript declaration imports and discord.js examples pass.
 - [ ] README, API docs, compatibility matrix, installation examples, migration guide and CHANGELOG match shipped code.
 - [ ] Build version/channel validation accepts `dev`, `next` and `latest` only for matching SemVer versions.
@@ -61,7 +61,7 @@ Status: **in progress**, development branch `dev`. For the 38 original tasks, ph
 
 - [ ] CI pipelines are green at one immutable candidate commit. Record commit SHA and run URLs.
 - [ ] Run local-backend endurance for >= 600 seconds without leaks/regressions (short smoke tests are not sufficient).
-- [ ] Perform controlled real Discord voice playback/seek/skip/pause/volume/reconnect tests with authorized test infrastructure.
+- [ ] Perform controlled real Discord voice playback/seek/skip/pause/volume/reconnect tests with authorized test infrastructure: `--armed --commands` on NodeLink and `NYXLINK_LIVE_BACKEND=lavalink --armed --commands` on Lavalink; use the default `--armed` mode for NodeLink crossfade.
 - [ ] Publish an *explicitly approved* candidate `5.3.0-rc.1` to npm `next` and verify a fresh installation.
 - [ ] Freeze candidate, address release blockers, and repeat all changed-area tests.
 - [ ] Create `v5.3` branch and `v5.3.0` Git tag/Release from the exact approved commit.
