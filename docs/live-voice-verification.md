@@ -6,7 +6,7 @@ This is a **manual, opt-in, potentially audible** integration check. It will con
 
 - A dedicated test guild and voice channel where you have permission to send audio.
 - A bot token stored privately in local environment variables (never paste tokens into chat or commit them).
-- A reachable NodeLink server running the pinned modern-compatible protocol, with HTTP audio source enabled and gateway access to Discord voice.
+- A reachable NodeLink server (for crossfade/commands/reconnect) or Lavalink v4 server (commands/reconnect), with HTTP audio-source access and permission to connect Discord voice.
 - Two **different, authorized** HTTP(S) audio WAV files, approximately 15–120 seconds each, reachable **from the NodeLink server**. Use original generated test tones or files you control; avoid streamed/copyrighted catalog material.
 - Node.js 22+ and repository development dependencies installed; run `pnpm run build` before launching.
 
@@ -22,6 +22,7 @@ Provide the required environment variables using your local process environment 
 | `NYXLINK_NODE_SECURE` | Optional `true` for HTTPS/WSS |
 | `NYXLINK_LIVE_TRACK_A` / `NYXLINK_LIVE_TRACK_B` | Controlled, reachable fixture URLs |
 | `NYXLINK_LIVE_CROSSFADE_MS` | Optional 1000–15000; default 5000 |
+| `NYXLINK_LIVE_BACKEND` | `nodelink` (default) or `lavalink`; Lavalink requires `--commands` or `--reconnect` |
 
 **Run only when intentionally joining the test channel:**
 
@@ -65,7 +66,7 @@ events. Every backend acknowledgement has a bounded polling window,
 **including an HTTP request that never returns**. Failures are recorded only
 as an error category and stage.
 
-The local report includes `commandChecks` with the six accepted operations
+The local report includes `commandChecks` with eight accepted checkpoints
 and whether the ordered start events were observed. It never records song
 URLs, bearer tokens, encoded tracks or gateway voice tokens. Neither mode
 certifies audible fidelity: a human observer must confirm actual voice
@@ -74,6 +75,32 @@ output, pause/resume audibility, seek precision and lack of dropouts.
 **CI coverage:** `tests/live-voice-commands.test.cjs` verifies the command
 sequence with a fake backend and failure cases; CI deliberately does
 not initiate real Discord voice connections.
+
+## Separate voice reconnect acceptance mode
+
+To test a **controlled voice disconnect and rejoin**, select `--reconnect`
+instead of `--commands`. It supports both NodeLink and Lavalink v4:
+
+```bash
+# NodeLink
+node scripts/test-live-voice.cjs --armed --reconnect
+
+# Lavalink v4 (choose a compatible server with valid fixture URLs)
+NYXLINK_LIVE_BACKEND=lavalink node scripts/test-live-voice.cjs --armed --reconnect
+```
+
+The reconnect mode starts controlled track A, verifies the backend has
+the correct track, deliberately leaves the voice channel, reconnects via
+Discord, calls the player's recovery operation without destroying it,
+and confirms the backend reports a connected session with track A.
+Five checkpoints are recorded in `reconnectChecks`, not raw session IDs,
+gateway voice credentials or track encodings.
+
+**It is not a network-partition or audible-recovery certification.** The
+test does not forcibly kill the gateway, unplug a NodeLink/Lavalink node or
+measure the absence of an audio dropout. Repeat a separate authorized
+interruption test for those release requirements. The three live acceptance
+modes are mutually exclusive; every mode requires `--armed`.
 
 ## Human / audio observer acceptance
 
