@@ -54,6 +54,8 @@ test('lost lease prevents REST, gateway and snapshot writes by the old Player', 
   player.stopHealthCheck();
   await a.manager.database.flush();
   const previous = a.manager.guildOwnership.localLease(GUILD);
+  const { playbackGuard } = require('../../dist/src/players/PlaybackGuard.js');
+  const oldTicket = playbackGuard(player).ticket;
   await a.coordinator.release(previous);
   const successor = await b.manager.players.createOwned(b.options);
   successor.stopHealthCheck();
@@ -62,6 +64,7 @@ test('lost lease prevents REST, gateway and snapshot writes by the old Player', 
   assert.ok(record && record.revision);
 
   await assert.rejects(player.pause(), /lease/);
+  assert.ok(playbackGuard(player).ticket > oldTicket, 'lease loss cancels queued playback intent');
   assert.equal(a.activity.updates.length, 0);
   await assert.rejects(a.manager.database.set('players.' + GUILD + '.paused', true), /lease/);
   await assert.rejects(player.connect(), /lease/);
