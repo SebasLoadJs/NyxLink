@@ -31,7 +31,7 @@ export class DatabaseManager {
   private shutdownPromise?: Promise<void>;
   private readonly importing = new Set<string>();
   private manager: Manager;
-  private dbConfig: { type: 'memory' | 'local'; options?: any; };
+  private dbConfig: { type: 'memory' | 'local' | 'external'; options?: any; };
 
   constructor(manager: Manager) {
     this.manager = manager;
