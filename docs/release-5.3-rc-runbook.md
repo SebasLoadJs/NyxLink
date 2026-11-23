@@ -25,6 +25,8 @@ A Git tag and an npm version are **separate artifacts**. Publishing the package,
 
 Record the final candidate SHA, individual Actions URLs, image digests, duration of the endurance run, location of private voice reports, and reviewer decisions in private release evidence. Do not mark an unobserved voice test as passed.
 
+After gathering the five `.runtime/live-voice/` reports on a **clean candidate checkout**, run `pnpm run release:check-voice-evidence`. It checks their SHA-bound protocol evidence and reports missing/failed modes without exposing the files. Even a complete result reports `releaseApproved: false`: the independent audible observations, attribution review and approval decision remain manual.
+
 ## Prepare an RC without publishing
 
 On a clean `dev` checkout, after freezing the candidate:
