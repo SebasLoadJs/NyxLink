@@ -32,6 +32,35 @@ node scripts/test-live-voice.cjs --armed
 
 The script sends voice connection requests and plays the two tracks with `setCrossfade({enabled:true,mode:'smart'})` plus `setQueuePreload({enabled:true})`. It requires two ordered `trackStart` events and an empty queue at handoff. It separately records whether `trackEnd` was tagged `crossfading`, `gapless`, or another reason. Its output is `.runtime/live-voice/report.json` with private mode 0600; credentials and source URLs are omitted.
 
+## Separate playback-command acceptance mode
+
+The default `--armed` run checks the NodeLink crossfade/queue-preload
+sequence. To test **play, pause, resume, volume, seek and skip** against an
+authorized **real NodeLink backend**, use this separate mode:
+
+```bash
+pnpm run build
+node scripts/test-live-voice.cjs --armed --commands
+```
+
+The same dedicated test server, channel, credentials and two controlled
+15–120 second tracks are required. This mode **does not** enable crossfade,
+so it does not interfere with the default transition scenario. It checks
+REST-confirmed pause and resume state, backend volume 40, playback position
+after a 5-second seek, successful skip and the appearance of the second
+track-start event. Every backend acknowledgement has a bounded polling
+window, and failures are recorded only as an error category and stage.
+
+The local report includes `commandChecks` with the six accepted operations
+and whether the ordered start events were observed. It never records song
+URLs, bearer tokens, encoded tracks or gateway voice tokens. Neither mode
+certifies audible fidelity: a human observer must confirm actual voice
+output, pause/resume audibility, seek precision and lack of dropouts.
+
+**CI coverage:** `tests/live-voice-commands.test.cjs` verifies the command
+sequence with a fake backend and failure cases; CI deliberately does
+not initiate real Discord voice connections.
+
 ## Human / audio observer acceptance
 
 A second Discord participant must listen to the channel and check: audible A; audible B; whether the overlap actually occurs for the expected duration; correct volume; no dropout; no duplicate B or unexpected replay. Mark audio as **unverified** until a listener confirms these criteria. A correct track-start event alone is not audible evidence; the script explicitly stores `audioMeasured: false`.
