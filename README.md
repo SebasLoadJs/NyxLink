@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/SebasLoadJs/NyxLink/v0.1.0-dev.2/assets/nyxlink_banner.png" alt="NyxLink — A modern Lavalink &amp; NodeLink client for Discord bots" width="100%">
+  <img src="https://raw.githubusercontent.com/SebasLoadJs/NyxLink/dev/assets/nyxlink_banner.png" alt="NyxLink — A modern Lavalink &amp; NodeLink client for Discord bots" width="100%">
 </p>
 
 <h1 align="center">NyxLink</h1>
@@ -10,10 +10,10 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/nyxlink/v/0.1.0-dev.2"><img src="https://img.shields.io/npm/v/nyxlink/dev?style=flat-square&amp;color=818cf8&amp;label=npm%20dev" alt="Versión npm del canal dev"></a>
+  <a href="https://www.npmjs.com/package/nyxlink"><img src="https://img.shields.io/npm/v/nyxlink/dev?style=flat-square&amp;color=818cf8&amp;label=npm%20dev" alt="Versión npm del canal dev"></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-%3E%3D22.12.0-43853d?style=flat-square" alt="Node.js 22.12 o superior"></a>
-  <a href="https://github.com/SebasLoadJs/NyxLink/actions/workflows/pr.yml"><img src="https://github.com/SebasLoadJs/NyxLink/actions/workflows/pr.yml/badge.svg?branch=v5.2" alt="Estado de CI"></a>
-  <a href="https://github.com/SebasLoadJs/NyxLink/blob/v5.2/dist/index.d.ts"><img src="https://img.shields.io/badge/TypeScript-types%20included-3178c6?style=flat-square" alt="Declaraciones TypeScript incluidas"></a>
+  <a href="https://github.com/SebasLoadJs/NyxLink/actions/workflows/pr.yml"><img src="https://github.com/SebasLoadJs/NyxLink/actions/workflows/pr.yml/badge.svg?branch=dev" alt="Estado de CI"></a>
+  <a href="https://github.com/SebasLoadJs/NyxLink/blob/dev/dist/index.d.ts"><img src="https://img.shields.io/badge/TypeScript-types%20included-3178c6?style=flat-square" alt="Declaraciones TypeScript incluidas"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-OSL--3.0-a78bfa?style=flat-square" alt="Licencia OSL-3.0"></a>
 </p>
 
@@ -45,14 +45,14 @@ NyxLink es el cliente de tu bot. **Necesitas un servidor Lavalink v4 o NodeLink 
 
 ## Instalación
 
-Requiere **Node.js 22.12 o superior**. La versión actual del canal de desarrollo es **`0.1.0-dev.2`**.
+Requiere **Node.js 22.12 o superior**. La versión declarada en la rama de desarrollo es **`0.1.0-dev.3`**; consultá npm para confirmar qué versión está publicada.
 
 ```sh
 npm install nyxlink@dev
 ```
 
 <details>
-<summary><strong>Otros gestores y versión exacta</strong></summary>
+<summary><strong>Otros gestores y consulta de versiones</strong></summary>
 
 ```sh
 pnpm add nyxlink@dev
@@ -63,7 +63,7 @@ yarn add nyxlink@dev
 ```
 
 ```sh
-npm install nyxlink@0.1.0-dev.2
+npm view nyxlink dist-tags --json
 ```
 
 </details>
@@ -356,7 +356,7 @@ Las extensiones de NodeLink —como letras, mixer o streaming directo— requier
 | `queueEnd` | Se agota la cola de reproducción. |
 | `playerDestroy` | Se destruye un reproductor. |
 
-Los eventos y sus argumentos están definidos en [`IManagerEvents`](https://github.com/SebasLoadJs/NyxLink/blob/v5.2/src/typings/Interfaces.ts).
+Los eventos y sus argumentos están definidos en [`IManagerEvents`](https://github.com/SebasLoadJs/NyxLink/blob/dev/src/typings/Interfaces.ts).
 
 ## TypeScript y ejemplos
 
@@ -381,8 +381,8 @@ const typedManager = new Manager(config);
 
 | Ejemplo | Contenido |
 | --- | --- |
-| [JavaScript / CommonJS](https://github.com/SebasLoadJs/NyxLink/blob/v5.2/examples/discordjs.cjs) | Cliente Discord.js, búsqueda, cola y cierre. |
-| [TypeScript](https://github.com/SebasLoadJs/NyxLink/blob/v5.2/examples/discordjs.ts) | La misma integración con configuración tipada. |
+| [JavaScript / CommonJS](https://github.com/SebasLoadJs/NyxLink/blob/dev/examples/discordjs.cjs) | Cliente Discord.js, búsqueda, cola y cierre. |
+| [TypeScript](https://github.com/SebasLoadJs/NyxLink/blob/dev/examples/discordjs.ts) | La misma integración con configuración tipada. |
 
 ### Cierre de la aplicación
 
