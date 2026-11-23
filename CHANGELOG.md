@@ -18,6 +18,7 @@ This changelog describes the unreleased NyxLink 5.3 development line and its ver
 - Preserved caller-owned and historical track positions on rejected `play()`, `back()` and positional `skip()` requests; malformed positional queue entries are rejected before removal.
 - Reworked `replay()` to use an independent track instance: rejected or cancelled restarts preserve the original playback position, successful restarts do not duplicate history, and immediately queued `seek()` commands retain their intended target.
 - Tightened recommendation seed validation for YouTube/YouTube Music and prevented failed or stale autoplay requests from deleting independently queued manual tracks.
+- Yielded in-flight autoplay recommendations when a listener queues music during asynchronous source resolution, including when the manually queued item is the same Track instance as the automatic candidate.
 - Added rollback- and intent-aware player migration, bounded failover, candidate selection, health monitoring and explicit node maintenance (`drain`/`eject`).
 - Added cancellation safeguards for late backend responses, worker failures, voice disconnects, crossfading/gapless transitions and mixed-node recovery.
 - Introduced node-identity-scoped session storage and safe fallback for unambiguous legacy endpoint-only resume records.
