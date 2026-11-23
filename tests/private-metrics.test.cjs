@@ -100,3 +100,18 @@ test('Manager shutdown closes every opt-in metrics listener', async t => {
   await assert.rejects(fetch(urlB + '/health'), /fetch failed/i);
   await assert.rejects(manager.startPrivateMetricsServer({ token: TOKEN }), /shut down/);
 });
+
+test('concurrent start and close cannot leave an orphaned listener', async t => {
+  const { manager } = createPlayer(t);
+  const { PrivateMetricsServer } = require('../dist');
+  const endpoint = new PrivateMetricsServer(manager, { token: TOKEN });
+  const first = endpoint.listen();
+  const second = endpoint.listen();
+  const closing = endpoint.close();
+  const results = await Promise.allSettled([first, second, closing]);
+  assert.equal(results[2].status, 'fulfilled');
+  assert.equal(results[0].status, 'fulfilled');
+  assert.equal(results[1].status, 'fulfilled');
+  assert.throws(() => endpoint.url, /not listening/);
+  await assert.rejects(endpoint.listen(), /closed/);
+});
