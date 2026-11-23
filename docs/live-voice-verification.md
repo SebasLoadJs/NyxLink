@@ -63,8 +63,13 @@ play acknowledgement, **backend confirmation of track A**, paused state,
 resumed state, backend volume 40, a 5-second seek, skip acknowledgement and
 **backend confirmation of track B**. It separately observes ordered track-start
 events. Every backend acknowledgement has a bounded polling window,
-**including an HTTP request that never returns**. Failures are recorded only
-as an error category and stage.
+**including an HTTP request that never returns**. The underlying play/pause/resume/seek/skip
+operations are also deadline-bounded, as are Discord login, controlled source
+resolution, initial voice connection, voice disconnect/reconnect, restart,
+crossfade setup and teardown. A timed-out request may still complete remotely;
+the test attempts to stop the player and close the manager before writing a
+failed report. Timeouts are not evidence of successful or audible playback.
+Failures are recorded only as an error category and stage.
 
 The local report includes `commandChecks` with eight accepted checkpoints
 and whether the ordered start events were observed. It never records song
