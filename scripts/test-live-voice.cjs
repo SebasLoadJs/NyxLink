@@ -115,6 +115,19 @@ function errorCode(error) {
   return 'OPERATION_ERROR';
 }
 
+/** Store every controlled run separately; never overwrite earlier evidence. */
+function reportPath(config, instant = new Date(), id = randomUUID()) {
+  const backend = config.backend;
+  const mode = config.reconnectSmoke ? 'reconnect' : config.commandSmoke ? 'commands' : 'crossfade';
+  if (!['nodelink', 'lavalink'].includes(backend) ||
+      !/^[0-9a-f-]{36}$/i.test(id) ||
+      !(instant instanceof Date) || !Number.isFinite(instant.getTime())) {
+    throw new TypeError('Invalid live voice report identity');
+  }
+  const stamp = instant.toISOString().replace(/:/g, '-');
+  return path.resolve('.runtime/live-voice', backend + '-' + mode + '-' + stamp + '-' + id + '.json');
+}
+
 async function writePrivateReport(target, report) {
   const folder = path.dirname(target);
   await fs.mkdir(folder, { recursive: true });
@@ -258,7 +271,7 @@ async function run(config) {
     try { if (player) await player.stop().catch(() => {}); } catch {}
     try { await manager.shutdown(); } catch {}
     client.destroy();
-    const target = path.resolve('.runtime/live-voice/report.json');
+    const target = reportPath(config);
     await writePrivateReport(target, report);
     console.log(JSON.stringify({ report: target, protocolPassed: report.success,
       crossfadeEventObserved: report.crossfadeEventObserved ?? false,
@@ -280,4 +293,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { validateConfiguration, errorCode, event, writePrivateReport, safeBackendVersion, safeTrackEndReason };
+module.exports = { validateConfiguration, errorCode, event, writePrivateReport, reportPath, safeBackendVersion, safeTrackEndReason };
