@@ -439,3 +439,97 @@ test('disaster recovery only restarts players owned by the exact node', async t 
   assert.deepEqual(restarts, ['first']);
   assert.equal(second.node, peer);
 });
+
+test('observer exceptions during disaster recovery never fabricate restart failures', async t => {
+  const { manager, node, player } = createPlayer(t);
+  let starts = 0;
+  let successes = 0;
+  let failures = 0;
+  let restarts = 0;
+  const errors = [];
+  player.restart = async () => { restarts++; return true; };
+  manager.on('nodeError', (_node, error) => errors.push(error.message));
+  manager.on('playerRecoveryStarted', () => {
+    starts++;
+    throw new Error('start observer failed');
+  });
+  manager.on('playerRecoverySuccess', () => {
+    successes++;
+    throw new Error('success observer failed');
+  });
+  manager.on('playerRecoveryFailed', () => failures++);
+
+  await node.startDisasterRecovery('throwing-observer-regression');
+  assert.equal(restarts, 1);
+  assert.equal(starts, 1);
+  assert.equal(successes, 1);
+  assert.equal(failures, 0);
+  assert.deepEqual(errors, ['start observer failed', 'success observer failed']);
+});
+
+test('a rejected restart does not interrupt recovery of a separate guild', async t => {
+  const { manager, node, player: first } = createPlayer(t);
+  const { Player } = require('../dist');
+  const second = new Player(manager, node, {
+    guildId: '123456789012345679',
+    voiceChannelId: '223456789012345679',
+    autoPlay: false,
+  });
+  second.stopHealthCheck();
+  manager.players.players.set(second.guildId, second);
+  t.after(() => second.stopHealthCheck());
+  first.restart = async () => { throw new Error('first restart rejected'); };
+  let secondRestarts = 0;
+  second.restart = async () => { secondRestarts++; return true; };
+
+  const successes = [];
+  const failures = [];
+  const errors = [];
+  manager.on('nodeError', (_node, error) => errors.push(error.message));
+  manager.on('playerRecoverySuccess', player => successes.push(player));
+  manager.on('playerRecoveryFailed', player => failures.push(player));
+  await node.startDisasterRecovery('mixed-success-failure');
+
+  assert.equal(secondRestarts, 1);
+  assert.deepEqual(successes, [second]);
+  assert.deepEqual(failures, [first]);
+  assert.deepEqual(errors, ['first restart rejected']);
+});
+
+test('recovery completion cannot report success after player changes node ownership', async t => {
+  const { manager, node: source, player } = createPlayer(t);
+  const { Node, NodeState } = require('../dist');
+  const next = new Node(manager, {
+    identifier: 'replacement-owner', host: '127.0.0.1',
+    port: 2999, password: 'test-only',
+  });
+  next.connected = true;
+  next.state = NodeState.READY;
+  manager.nodes.nodes.set(next.identifier, next);
+  t.after(async () => { await next.destroy(); });
+  let enteredResolve;
+  let resumeResolve;
+  const entered = new Promise(resolve => { enteredResolve = resolve; });
+  const resume = new Promise(resolve => { resumeResolve = resolve; });
+  player.restart = async () => {
+    enteredResolve();
+    await resume;
+    return true;
+  };
+  const successes = [];
+  const failures = [];
+  manager.on('playerRecoverySuccess', current => successes.push(current));
+  manager.on('playerRecoveryFailed', current => failures.push(current));
+
+  const recovering = source.startDisasterRecovery('owner-replaced');
+  try {
+    await entered;
+    player.node = next;
+  } finally {
+    resumeResolve();
+  }
+  await recovering;
+  assert.deepEqual(successes, []);
+  assert.deepEqual(failures, []);
+  assert.equal(player.node, next);
+});
