@@ -177,3 +177,59 @@ test('explicit play during in-flight migration rolls back target before replacin
   assert.equal(saved.node, source.identifier);
   assert.equal(saved.current.encoded, replacement.encoded);
 });
+
+test('rollback cleans destination exactly once even when nodeError observer throws', async t => {
+  const { manager, node: source, player } = createPlayer(t);
+  const target = attachDestination(t, manager);
+  const original = createTrack('listener-throws-on-cleanup');
+  player.current = original;
+  player.playing = true;
+  player.restart = async () => false;
+
+  let targetCleanups = 0;
+  let sourceCleanups = 0;
+  let observedErrors = 0;
+  target.rest.destroyPlayer = async () => {
+    targetCleanups++;
+    throw new Error('destination cleanup failed');
+  };
+  source.rest.destroyPlayer = async () => { sourceCleanups++; };
+  manager.on('nodeError', () => {
+    observedErrors++;
+    throw new Error('subscriber callback threw');
+  });
+
+  const statuses = [];
+  manager.on('playerNodeFailover', (_player, status) => statuses.push(status.status));
+
+  assert.equal(await player.transferNode(target), false);
+  assert.equal(targetCleanups, 1, 'rollback must not repeat destructive REST requests');
+  assert.equal(sourceCleanups, 0, 'source session remains owned by original node');
+  assert.equal(observedErrors, 1);
+  assert.equal(player.node, source);
+  assert.equal(player.current, original);
+  assert.equal(player.playing, true);
+  assert.deepEqual(statuses, ['in-progress', 'failed']);
+});
+
+test('rollback still cleans target if best-effort persistence diagnostics throw', async t => {
+  const { manager, node: source, player } = createPlayer(t);
+  const target = attachDestination(t, manager);
+  player.restart = async () => false;
+  const originalUpdateData = player.updateData.bind(player);
+  player.updateData = async (key, value) => {
+    if (key === 'queue') throw new Error('simulated rollback persistence failure');
+    return originalUpdateData(key, value);
+  };
+  manager.on('debug', message => {
+    if (message.includes('Migration rollback storage failed')) {
+      throw new Error('diagnostic listener failed');
+    }
+  });
+  let targetCleanups = 0;
+  target.rest.destroyPlayer = async () => { targetCleanups++; };
+
+  assert.equal(await player.transferNode(target), false);
+  assert.equal(player.node, source);
+  assert.equal(targetCleanups, 1);
+});
