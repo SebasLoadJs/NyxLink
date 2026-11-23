@@ -143,3 +143,30 @@ test('separate Node.js processes cannot both create the same guild player', asyn
   await replacement.pause();
   assert.equal(parent.activity.updates.length, 1);
 });
+
+test('background lease renewal detects lost ownership and cancels stale playback without sending voice packets', async t => {
+  const { a, b } = await pair(t, { ttlMs: 1000, renewIntervalMs: 100 });
+  const player = await a.manager.players.createOwned(a.options);
+  player.stopHealthCheck();
+  const { playbackGuard } = require('../../dist/src/players/PlaybackGuard.js');
+  const initialTicket = playbackGuard(player).ticket;
+  const lost = new Promise((resolve, reject) => {
+    const limit = setTimeout(() => reject(new Error('lease-loss notification was not emitted')), 3000);
+    a.manager.on('guildOwnershipLost', (guildId, fencingToken, reason) => {
+      clearTimeout(limit);
+      resolve({ guildId, fencingToken, reason });
+    });
+  });
+  const prior = a.manager.guildOwnership.localLease(GUILD);
+  assert.equal(await a.coordinator.release(prior), true);
+  const next = await b.manager.players.createOwned(b.options);
+  next.stopHealthCheck();
+  const event = await lost;
+  assert.equal(event.guildId, GUILD);
+  assert.equal(event.fencingToken, prior.fencingToken);
+  assert.match(event.reason, /renewal-rejected|expired-or-replaced/);
+  assert.ok(playbackGuard(player).ticket > initialTicket);
+  assert.equal(a.activity.gateway.length, 0);
+  assert.equal(a.activity.deletions.length, 0);
+  await assert.rejects(player.pause(), /lease/);
+});
