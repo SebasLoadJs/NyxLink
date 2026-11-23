@@ -1037,10 +1037,19 @@ export class Player {
                     // Keep a selected queue entry recoverable until playback is
                     // acknowledged; an unsuccessful positional skip must not
                     // silently change the order of the user's remaining tracks.
+                    // Normalize before removing anything: a malformed queue entry
+                    // must not be lost if Track construction throws.
+                    let playbackTrack: Track;
+                    try {
+                        playbackTrack = track instanceof Track ? track :
+                            new Track(track, undefined, undefined, this.manager.options.trackPartial ?? []);
+                    } catch (error) {
+                        this.manager.emit("debug", `NyxLink > Player#skip >> Invalid queued track: ${error instanceof Error ? error.name : "unknown"}`);
+                        return false;
+                    }
                     const selected = this.queue.remove(position);
                     if (!selected) return false;
-                    const playbackTrack = selected instanceof Track ? selected :
-                        new Track(selected, undefined, undefined, this.manager.options.trackPartial ?? []);
+                    const originalPosition = playbackTrack.position;
                     let injectedTrackQueued = false;
                     let played = false;
                     try {
@@ -1049,6 +1058,7 @@ export class Player {
                         return played;
                     } finally {
                         if (!played) {
+                            playbackTrack.position = originalPosition;
                             // playNext may have requeued its injected track after
                             // a rejected REST response. Remove that insertion
                             // before restoring the original position.
@@ -1484,8 +1494,10 @@ export class Player {
             if (!lastTrack) return false;
             const outgoing = this.current;
             const priorBackFlag = this.get<boolean>("isBackPlay") ?? false;
+            const originalPreviousPosition = lastTrack.position;
             let injectedTrackQueued = false;
             let played = false;
+            let committed = false;
 
             // Do not consume history or change the current track before the
             // backend acknowledges playback. The command queue also prevents
@@ -1502,6 +1514,7 @@ export class Player {
                     this.updateData("previous", this.previous.map(track => TrackCodec.serialize(track)));
                 }
                 if (outgoing) this.queue.unshift(outgoing);
+                committed = true;
                 this.manager.emit("playerTriggeredBack", this, lastTrack);
                 return true;
             } finally {
@@ -1511,7 +1524,13 @@ export class Player {
                     const index = this.queue.tracks.indexOf(lastTrack);
                     if (index >= 0) this.queue.remove(index);
                 }
-                if (!played) this.set("isBackPlay", priorBackFlag);
+                if (!committed) {
+                    // playNext sets the previous Track's position before REST
+                    // acknowledgement. A rejected/stale back must not rewrite
+                    // the remaining history entry or leave back mode enabled.
+                    lastTrack.position = originalPreviousPosition;
+                    this.set("isBackPlay", priorBackFlag);
+                }
             }
         });
     }
