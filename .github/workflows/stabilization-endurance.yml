@@ -5,6 +5,7 @@ on:
     branches: [dev]
     paths:
       - 'docs/phase-1-audit.md'
+      - 'docs/release-5.3-plan.md'
       - '.github/workflows/stabilization-endurance.yml'
   workflow_dispatch:
 
