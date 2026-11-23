@@ -98,6 +98,12 @@ The following implementation changes are committed on `dev`, but their latest co
 - Ejection records failed transfers that left a player on a now-disconnected target, rather than hiding the orphan.
 - Regression tests were added in `tests/node-disconnect-recovery.test.cjs` and `tests/node-failover.test.cjs`.
 
+**Additional lifecycle hardening (2026-11-22, later commits):**
+- Drain/eject only accept recovery when the player has a live, registered owner. False success ACKs, disconnected targets and rejected cleanup operations cannot silently complete an evacuation.
+- Disconnect notifications close the **captured old socket**, not an instance that a listener may have installed during reconnection.
+- Node resume persistence is now scoped to the node identifier as well as its endpoint. A uniquely configured node may read its old host/port-only session; concurrent instances with the same endpoint never import that ambiguous legacy session.
+- Added regression tests for stale socket notifications, drain/eject outcomes, cross-instance resume records and legacy fallback.
+
 **Still required:** TypeScript build, all unit/contract tests, baseline and modern NodeLink labs, Lavalink plugin lab, endurance, security audit, package-consumer tests and controlled Discord voice acceptance for the final release commit. No release tag, npm stable version or publication is implied by this checkpoint.
 
 ### Stop conditions
