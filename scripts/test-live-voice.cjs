@@ -2,6 +2,7 @@ const { setTimeout: delay } = require('node:timers/promises');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
+const { execFileSync } = require('node:child_process');
 
 const snowflake = value => typeof value === 'string' && /^\d{17,20}$/.test(value);
 const address = value => {
@@ -116,6 +117,22 @@ function errorCode(error) {
 }
 
 /** Store every controlled run separately; never overwrite earlier evidence. */
+/** Bind acceptance evidence to an exact checked-out commit when Git exists. */
+function sourceRevision() {
+  try {
+    const revision = execFileSync('git', ['rev-parse', '--verify', 'HEAD'], {
+      cwd: path.resolve(__dirname, '..'),
+      encoding: 'utf8',
+      timeout: 3000,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return /^[0-9a-f]{40}$/.test(revision) ? revision : null;
+  } catch {
+    return null;
+  }
+}
+
 function reportPath(config, instant = new Date(), id = randomUUID()) {
   const backend = config.backend;
   const mode = config.reconnectSmoke ? 'reconnect' : config.commandSmoke ? 'commands' : 'crossfade';
@@ -159,6 +176,7 @@ async function run(config) {
     mode: config.reconnectSmoke ? 'reconnect' : config.commandSmoke ? 'commands' : 'crossfade',
     audioMeasured: false,
     operatorListeningRequired: true,
+    sourceRevision: sourceRevision(),
     observed: false,
     events
   };
@@ -293,4 +311,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { validateConfiguration, errorCode, event, writePrivateReport, reportPath, safeBackendVersion, safeTrackEndReason };
+module.exports = { validateConfiguration, errorCode, event, writePrivateReport, reportPath, sourceRevision, safeBackendVersion, safeTrackEndReason };
