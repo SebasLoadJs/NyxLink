@@ -162,7 +162,16 @@ export class NodeManager {
         const active = () => !this.manager.destroyed && !node.destroyed && this.nodes.get(identifier) === node;
         if (!active()) return false;
         const players = this.manager.players.filter(player => player.node === node);
-        const results = await Promise.all(players.map(player => NodeFailover.move(player, node)));
+        const results = await Promise.all(players.map(async player => {
+            try {
+                return await NodeFailover.move(player, node);
+            } catch (error) {
+                // One rejected guild migration must not abort the entire evacuation.
+                const failure = error instanceof Error ? error : new Error(String(error));
+                try { this.manager.emit('nodeError', node, failure); } catch { /* observer failure */ }
+                return { status: 'failed' as const, attempts: 0 };
+            }
+        }));
         if (!active()) return false;
         const attached = (player: Player) => !player.destroyed && player.node === node &&
             this.manager.players.get(player.guildId) === player;
@@ -170,10 +179,23 @@ export class NodeManager {
         if (players.some((player, index) => results[index].status === 'cancelled' && attached(player))) return false;
         const failed = players.filter((player, index) => results[index].status === 'failed' && attached(player));
         if (failed.length) {
-            this.manager.emit('playersOrphaned', failed, node);
+            // Orphan notifications are observational: listeners may throw.
+            try { this.manager.emit('playersOrphaned', failed, node); }
+            catch (error) {
+                const failure = error instanceof Error ? error : new Error(String(error));
+                try { this.manager.emit('nodeError', node, failure); } catch { /* observer failure */ }
+            }
             if (!active()) return false;
             if (!this.manager.options.node?.failover?.preserveOnFailure) {
-                await Promise.all(failed.filter(attached).map(player => player.destroy('Node ejected: failover failed')));
+                // Do not remove a node while any owned guild cleanup is unresolved.
+                const cleanup = await Promise.allSettled(failed.filter(attached)
+                    .map(player => player.destroy('Node ejected: failover failed')));
+                const errors = cleanup.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+                for (const result of errors) {
+                    const failure = result.reason instanceof Error ? result.reason : new Error(String(result.reason));
+                    try { this.manager.emit('nodeError', node, failure); } catch { /* observer failure */ }
+                }
+                if (errors.length) return false;
             }
         }
         if (!active()) return false;
