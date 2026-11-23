@@ -1027,3 +1027,68 @@ test('successful explicit playback starts at requested position and preserves it
   assert.equal(requests.at(-1).payload.position, 5000);
   assert.deepEqual(player.previous, [previous]);
 });
+
+test('manual queue insertion during autoplay resolution takes precedence', async t => {
+  const { player, requests } = createPlayer(t);
+  const { TrackResolver } = require('../dist/src/tracks/TrackResolver.js');
+  const { playbackGuard } = require('../dist/src/players/PlaybackGuard.js');
+  const automatic = createTrack('automatic-inflight');
+  const manual = createTrack('manual-inflight');
+  const originalResolver = TrackResolver.resolve;
+  const entered = deferred();
+  const release = deferred();
+  TrackResolver.resolve = async track => {
+    entered.resolve();
+    await release.promise;
+    return track;
+  };
+  t.after(() => { TrackResolver.resolve = originalResolver; });
+
+  const guard = playbackGuard(player);
+  const pending = player.playAutoPlay(automatic, guard.ticket, guard.cancelAutoPlay());
+  await entered.promise;
+  player.queue.add(manual);
+  release.resolve();
+
+  assert.equal(await pending, false);
+  assert.deepEqual(player.queue.tracks, [manual]);
+  assert.equal(requests.some(request => request.payload.track?.encoded === automatic.encoded), false);
+});
+
+test('manual requeue of the same Track instance survives cancelled autoplay resolution', async t => {
+  const { player, requests } = createPlayer(t);
+  const { TrackResolver } = require('../dist/src/tracks/TrackResolver.js');
+  const { playbackGuard } = require('../dist/src/players/PlaybackGuard.js');
+  const track = createTrack('manual-same-instance');
+  const originalResolver = TrackResolver.resolve;
+  const entered = deferred();
+  const release = deferred();
+  TrackResolver.resolve = async selected => {
+    entered.resolve();
+    await release.promise;
+    return selected;
+  };
+  t.after(() => { TrackResolver.resolve = originalResolver; });
+
+  const guard = playbackGuard(player);
+  const pending = player.playAutoPlay(track, guard.ticket, guard.cancelAutoPlay());
+  await entered.promise;
+  player.queue.add(track);
+  release.resolve();
+
+  assert.equal(await pending, false);
+  assert.deepEqual(player.queue.tracks, [track]);
+  assert.deepEqual(requests, []);
+});
+
+test('autoplay resolution still starts when no manual queue entry appears', async t => {
+  const { player, requests } = createPlayer(t);
+  const { playbackGuard } = require('../dist/src/players/PlaybackGuard.js');
+  const track = createTrack('automatic-alone');
+  const guard = playbackGuard(player);
+
+  assert.equal(await player.playAutoPlay(track, guard.ticket, guard.cancelAutoPlay()), true);
+  assert.equal(player.current, track);
+  assert.deepEqual(player.queue.tracks, []);
+  assert.equal(requests.filter(request => request.payload.track?.encoded === track.encoded).length, 1);
+});
