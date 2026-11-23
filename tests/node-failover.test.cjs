@@ -215,3 +215,70 @@ test('no alternate candidate reports failed after a target disconnects post-ACK'
   assert.equal(player.node, first);
   assert.equal(first.connected, false);
 });
+
+test('eject isolates a failed guild migration and still evacuates a peer', async t => {
+  const { NodeFailover } = require('../dist/src/nodes/NodeFailover');
+  const { Player } = require('../dist');
+  const { manager, node: source, player: first } = createPlayer(t);
+  const [target] = candidates(manager);
+  const second = new Player(manager, source, {
+    guildId: '123456789012345679',
+    voiceChannelId: '223456789012345679',
+    autoPlay: false,
+  });
+  second.stopHealthCheck();
+  manager.players.players.set(second.guildId, second);
+  t.after(() => second.stopHealthCheck());
+
+  const originalMove = NodeFailover.move;
+  NodeFailover.move = async player => {
+    if (player === first) throw new Error('first migration rejected');
+    player.node = target;
+    return { status: 'recovered', attempts: 1, node: target };
+  };
+  t.after(() => { NodeFailover.move = originalMove; });
+  manager.options.node = { ...manager.options.node, failover: { preserveOnFailure: true } };
+  const orphans = [], errors = [];
+  manager.on('playersOrphaned', players => orphans.push(...players));
+  manager.on('nodeError', (_node, error) => errors.push(error.message));
+
+  assert.equal(await manager.nodes.eject(source.identifier), true);
+  assert.equal(manager.nodes.nodes.has(source.identifier), false);
+  assert.equal(source.destroyed, true);
+  assert.equal(second.node, target);
+  assert.deepEqual(orphans, [first]);
+  assert.deepEqual(errors, ['first migration rejected']);
+});
+
+test('eject leaves node registered if an orphan destroy fails', async t => {
+  const { NodeFailover } = require('../dist/src/nodes/NodeFailover');
+  const { Player } = require('../dist');
+  const { manager, node: source, player: first } = createPlayer(t);
+  const second = new Player(manager, source, {
+    guildId: '123456789012345679',
+    voiceChannelId: '223456789012345679',
+    autoPlay: false,
+  });
+  second.stopHealthCheck();
+  manager.players.players.set(second.guildId, second);
+  t.after(() => second.stopHealthCheck());
+
+  const originalMove = NodeFailover.move;
+  NodeFailover.move = async () => ({ status: 'failed', attempts: 1 });
+  t.after(() => { NodeFailover.move = originalMove; });
+  manager.options.node = { ...manager.options.node, failover: { preserveOnFailure: false } };
+  const cleaned = [], errors = [];
+  first.destroy = async () => {
+    cleaned.push('first');
+    throw new Error('first destroy unavailable');
+  };
+  second.destroy = async () => { cleaned.push('second'); };
+  manager.on('nodeError', (_node, error) => errors.push(error.message));
+
+  assert.equal(await manager.nodes.eject(source.identifier), false);
+  assert.deepEqual(cleaned, ['first', 'second']);
+  assert.deepEqual(errors, ['first destroy unavailable']);
+  assert.equal(source.destroyed, false);
+  assert.equal(manager.nodes.nodes.get(source.identifier), source);
+  assert.equal(source.draining, true);
+});
