@@ -20,6 +20,7 @@ function make(backend, mode, suffix = '2026-11-23T20-00-00.000Z') {
       commandChecks: mode === 'commands' ? commandChecks : undefined,
       reconnectChecks: mode === 'reconnect' ? reconnectChecks : undefined,
       remainingQueue: mode === 'crossfade' ? 0 : undefined,
+      crossfadeEventObserved: mode === 'crossfade',
       transitionReasons: mode === 'crossfade' ? ['crossfading'] : undefined,
       events: mode === 'crossfade' ? [{ type: 'trackStart', track: 'A' },
         { type: 'trackStart', track: 'B' }] : [],
@@ -77,4 +78,14 @@ test('private evidence directory inspection tolerates absent and corrupt files',
   assert.equal((await inspectDirectory(revision, folder)).protocolEvidenceComplete, true);
   await fs.writeFile(path.join(folder, fixture[0].name), '{corrupt');
   assert.equal((await inspectDirectory(revision, folder)).modes['nodelink:commands'], 'invalid-or-stale');
+});
+
+test('two track starts without a crossfading transition event do not pass crossfade evidence', () => {
+  const entries = all();
+  entries[2].report.crossfadeEventObserved = false;
+  entries[2].report.transitionReasons = ['finished'];
+  const summary = inspectReports(revision, entries);
+  assert.equal(summary.modes['nodelink:crossfade'], 'failed');
+  assert.equal(summary.protocolEvidenceComplete, false);
+  assert.equal(summary.releaseApproved, false);
 });
