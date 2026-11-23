@@ -80,6 +80,18 @@ function event(manager, name, matches, timeoutMs) {
   return { promise, cancel };
 }
 
+/** Whitelist data emitted by a remote backend before writing local reports. */
+function safeBackendVersion(value) {
+  return typeof value === 'string' && value.length <= 80 &&
+    /^v?\d+(?:\.\d+){1,3}(?:[-+][0-9A-Za-z.-]+)?$/.test(value) ? value : null;
+}
+
+function safeTrackEndReason(reason) {
+  return typeof reason === 'string' &&
+    /^(?:finished|loadFailed|stopped|replaced|cleanup|crossfading|gapless)$/.test(reason)
+      ? reason : 'unrecognized';
+}
+
 function errorCode(error) {
   // Never persist or log third-party error messages: they can contain
   // credentials, remote URLs, bearer headers, or encoded audio tracks.
@@ -129,7 +141,7 @@ async function run(config) {
       track.encoded === report.secondEncoded ? 'B' : 'unexpected' });
   });
   manager.on('trackEnd', (p, track, reason) => {
-    if (p.guildId === config.guildId) record('trackEnd', { reason: typeof reason === 'string' && /^(?:finished|loadFailed|stopped|replaced|cleanup|crossfading|gapless)$/.test(reason) ? reason : 'unrecognized', track: track.encoded === report.firstEncoded ? 'A' :
+    if (p.guildId === config.guildId) record('trackEnd', { reason: safeTrackEndReason(reason), track: track.encoded === report.firstEncoded ? 'A' :
       track.encoded === report.secondEncoded ? 'B' : 'unexpected' });
   });
   manager.on('nodeError', (_node, error) => record('nodeError', { errorCode: errorCode(error) }));
@@ -141,10 +153,7 @@ async function run(config) {
     stage = 'node-ready';
     const [node] = await readyWait.promise;
     if (node.backend?.kind !== 'nodelink') throw new Error('Expected NodeLink backend');
-    const reportedVersion = typeof node.backend.version === 'string' &&
-      /^v?\d+(?:\.\d+){1,3}(?:[-+][0-9A-Za-z.-]+)?$/.test(node.backend.version) &&
-      node.backend.version.length <= 80 ? node.backend.version : null;
-    record('nodeReady', { version: reportedVersion });
+    record('nodeReady', { version: safeBackendVersion(node.backend.version) });
     const tracks = [];
     stage = 'track-resolution';
     for (const url of config.urls) {
@@ -241,4 +250,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { validateConfiguration, errorCode, event, writePrivateReport };
+module.exports = { validateConfiguration, errorCode, event, writePrivateReport, safeBackendVersion, safeTrackEndReason };
