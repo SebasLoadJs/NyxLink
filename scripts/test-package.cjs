@@ -7,6 +7,7 @@ const { spawnSync } = require('node:child_process');
 const root = path.resolve(__dirname, '..');
 const manifest = require('../package.json');
 const baseline = require('../tests/fixtures/public-exports.json');
+const { validateReleaseManifest } = require('./release-policy.cjs');
 const fromRegistry = process.argv.includes('--registry');
 assert.ok(process.argv.slice(2).every(argument => argument === '--registry'), 'Usage: node scripts/test-package.cjs [--registry]');
 
@@ -17,10 +18,7 @@ function run(command, args, cwd) {
 }
 
 async function main() {
-  assert.equal(manifest.name, 'nyxlink');
-  assert.equal(manifest.private, false, 'The owner authorized this development publication');
-  assert.match(manifest.version, /^0\.1\.0-dev\.\d+$/);
-  assert.deepEqual(manifest.publishConfig, { registry: 'https://registry.npmjs.org/', access: 'public', tag: 'dev' }, 'Development releases must target the explicit public registry and dev tag');
+  validateReleaseManifest(manifest);
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'nyxlink-package-'));
   const checks = [];
   let passed = false;
