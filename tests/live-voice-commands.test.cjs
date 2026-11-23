@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { verifyCommandSequence, waitForSnapshot } = require('../scripts/live-voice-commands.cjs');
+const { verifyCommandSequence, verifyReconnectSequence, waitForSnapshot } = require('../scripts/live-voice-commands.cjs');
 
 function fixture() {
   const calls = [];
@@ -80,4 +80,61 @@ test('snapshot polling survives transient null responses then confirms a valid b
   const rest = { getPlayer: async () => ++count < 3 ? null : { paused: true } };
   await waitForSnapshot(rest, '123456789012345678', row => row.paused === true, 'pause', 900);
   assert.equal(count, 3);
+});
+
+function reconnectFixture() {
+  const calls = [];
+  const encoded = 'fixture-recovery-A';
+  const state = { track: null, state: { connected: true, position: 0 } };
+  const player = {
+    guildId: '123456789012345678',
+    connected: true,
+    voice: { sessionId: 'fixture-session', token: 'fixture-token', endpoint: 'voice.example.invalid' },
+    queue: { add(tracks) { calls.push(['queue', tracks.length]); } },
+    async play() { calls.push('play'); state.track = { encoded }; return true; },
+    async disconnect() { calls.push('disconnect'); this.connected = false; state.state.connected = false; },
+    async connect() { calls.push('connect'); this.connected = true; },
+    async restart(options) {
+      calls.push(['restart', options]);
+      state.state.connected = true;
+      return true;
+    },
+  };
+  const node = { rest: { async getPlayer() { return { ...state, state: { ...state.state } }; } } };
+  return { calls, player, node, track: { encoded }, state };
+}
+
+test('real reconnect smoke confirms old voice disconnect and new backend track state', async () => {
+  const { calls, player, node, track } = reconnectFixture();
+  assert.deepEqual(await verifyReconnectSequence(player, node, track), [
+    'initialTrackConfirmed', 'disconnectConfirmed', 'voiceReconnected',
+    'restartAcknowledged', 'backendVoiceAndTrackConfirmed',
+  ]);
+  assert.deepEqual(calls.map(x => Array.isArray(x) ? x[0] : x),
+    ['queue', 'play', 'disconnect', 'connect', 'restart']);
+  assert.deepEqual(calls[4][1], { destroyOnFailure: false, startQueued: false });
+});
+
+test('reconnect acceptance rejects missing tracks and rejected restart', async () => {
+  const { player, node, track } = reconnectFixture();
+  await assert.rejects(verifyReconnectSequence(player, node, null), TypeError);
+  player.restart = async () => false;
+  await assert.rejects(verifyReconnectSequence(player, node, track),
+    /Playback restart rejected/);
+});
+
+test('reconnect acceptance stops after unsuccessful voice rejoin', async () => {
+  const { calls, player, node, track } = reconnectFixture();
+  player.connect = async function () { calls.push('connect'); this.connected = false; };
+  await assert.rejects(verifyReconnectSequence(player, node, track), /Voice credentials were not confirmed/);
+  assert.equal(calls.some(call => Array.isArray(call) && call[0] === 'restart'), false);
+});
+
+test('reconnect acceptance rejects backend that reports a disconnected voice', async () => {
+  const { player, node, track } = reconnectFixture();
+  player.restart = async () => true;
+  // Not audible evidence: backend state must also report connected.
+  node.rest.getPlayer = async () => ({ track: { encoded: track.encoded }, state: { connected: false } });
+  await assert.rejects(verifyReconnectSequence(player, node, track),
+    /did not confirm reconnected active track/);
 });
