@@ -23,6 +23,7 @@ function make(backend, mode, suffix = '2026-11-23T20-00-00.000Z') {
       crossfadeEventObserved: mode === 'crossfade',
       transitionReasons: mode === 'crossfade' ? ['crossfading'] : undefined,
       events: mode === 'crossfade' ? [{ type: 'trackStart', track: 'A' },
+        { type: 'trackEnd', track: 'A', reason: 'crossfading' },
         { type: 'trackStart', track: 'B' }] : [],
     },
   };
@@ -88,4 +89,25 @@ test('two track starts without a crossfading transition event do not pass crossf
   assert.equal(summary.modes['nodelink:crossfade'], 'failed');
   assert.equal(summary.protocolEvidenceComplete, false);
   assert.equal(summary.releaseApproved, false);
+});
+
+test('a crossfading event for track B cannot certify the handoff of track A', () => {
+  const entries = all();
+  entries[2].report.events[1].track = 'B';
+  const summary = inspectReports(revision, entries);
+  assert.equal(summary.modes['nodelink:crossfade'], 'failed');
+  assert.equal(summary.protocolEvidenceComplete, false);
+});
+
+test('out-of-order or duplicate track starts invalidate crossfade evidence', () => {
+  const reversed = all();
+  reversed[2].report.events = [
+    { type: 'trackStart', track: 'B' },
+    { type: 'trackEnd', track: 'A', reason: 'crossfading' },
+    { type: 'trackStart', track: 'A' },
+  ];
+  assert.equal(inspectReports(revision, reversed).modes['nodelink:crossfade'], 'failed');
+  const duplicate = all();
+  duplicate[2].report.events.push({ type: 'trackStart', track: 'B' });
+  assert.equal(inspectReports(revision, duplicate).modes['nodelink:crossfade'], 'failed');
 });
