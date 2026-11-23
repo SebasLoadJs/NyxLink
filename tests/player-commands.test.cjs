@@ -604,3 +604,31 @@ test('failed autoplay recommendation lookup still permits autoLeave', async t =>
 
   assert.equal(player.destroyed, true);
 });
+
+test('a delayed recommendation result cannot restart playback after explicit stop', async t => {
+  const { node, player, requests } = createPlayer(t);
+  const previous = createTrack('old-autoplay-search');
+  const recommendation = createTrack('late-recommendation');
+  player.current = previous;
+  player.playing = true;
+  player.autoPlay = true;
+  player.autoLeave = false;
+  const entered = deferred();
+  const release = deferred();
+  node.updateRecommendations = async () => {
+    entered.resolve();
+    await release.promise;
+    player.recommendations.push(recommendation);
+  };
+  const ended = node.handleTrackEnd(player, {
+    track: previous.toJSON(),
+    reason: 'finished',
+  });
+  await entered.promise;
+  const stopping = player.stop();
+  release.resolve();
+  await Promise.all([ended, stopping]);
+  assert.equal(player.current, null);
+  assert.equal(player.playing, false);
+  assert.equal(requests.some(request => request.payload.track?.encoded === recommendation.encoded), false);
+});
