@@ -627,22 +627,33 @@ export class Node {
     if (this.recoveryInProgress) return;
     this.recoveryInProgress = true;
     this.pendingRecovery = false;
-    this.manager.emit(
-      "debug",
-      `Moonlink.js > Node >> Session not resumed for node ${this.identifier}. Starting disaster recovery (${reason}).`
-    );
-    const playersOnNode = this.manager.players.filter(
-      (p) => p.node === this
-    );
-    try {
-      await Promise.all(playersOnNode.map(async player => {
-        this.manager.emit('playerRecoveryStarted', player);
+    // Observer failures must not abort other guild restores or turn an
+    // acknowledged restart into a false playerRecoveryFailed event.
+    const notify = (callback: () => void): void => {
+      try { callback(); } catch (error) {
         try {
-          const success = await player.restart({ startQueued: false });
-          if (!this.destroyed) this.manager.emit(success ? 'playerRecoverySuccess' : 'playerRecoveryFailed', player);
+          this.manager.emit("nodeError", this, error instanceof Error ? error : new Error(String(error)));
+        } catch { /* observer failure */ }
+      }
+    };
+    try {
+      notify(() => this.manager.emit(
+        "debug",
+        `Moonlink.js > Node >> Session not resumed for node ${this.identifier}. Starting disaster recovery (${reason}).`
+      ));
+      const playersOnNode = this.manager.players.filter(player => player.node === this);
+      await Promise.all(playersOnNode.map(async player => {
+        const active = () => !this.destroyed && !player.destroyed && player.node === this;
+        if (!active()) return;
+        notify(() => this.manager.emit('playerRecoveryStarted', player));
+        if (!active()) return;
+        let success = false;
+        try {
+          success = await player.restart({ startQueued: false });
         } catch (error) {
-          if (!this.destroyed) this.manager.emit('playerRecoveryFailed', player);
+          notify(() => this.manager.emit('nodeError', this, error instanceof Error ? error : new Error(String(error))));
         }
+        if (active()) notify(() => this.manager.emit(success ? 'playerRecoverySuccess' : 'playerRecoveryFailed', player));
       }));
     } finally {
       this.recoveryInProgress = false;
