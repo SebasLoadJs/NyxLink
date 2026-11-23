@@ -124,6 +124,18 @@ The following implementation changes are committed on `dev`, but their latest co
 
 **Still required:** TypeScript build, all unit/contract tests, baseline and modern NodeLink labs, Lavalink plugin lab, endurance, security audit, package-consumer tests and controlled Discord voice acceptance for the final release commit. No release tag, npm stable version or publication is implied by this checkpoint.
 
+## CI and playback stabilization checkpoint — 2026-11-23 (later)
+
+**Fully green reference:** `d1048b0454892a9544045ccbeb7c324c80220f3f` had all **11 GitHub Actions checks successful**, including Node 22/24 strict builds, coverage, installed-package consumers, baseline and modern NodeLink protocols, pinned Lavalink plugins, Redis 7, endurance and CodeQL. Evidence: [validate and backend](https://github.com/SebasLoadJs/NyxLink/actions/runs/45266840340), [protocols](https://github.com/SebasLoadJs/NyxLink/actions/runs/45266840415), [Redis](https://github.com/SebasLoadJs/NyxLink/actions/runs/45266840434), [endurance](https://github.com/SebasLoadJs/NyxLink/actions/runs/45266840194) and [CodeQL](https://github.com/SebasLoadJs/NyxLink/actions/runs/45266840197). These checks verify the cited SHA only.
+
+**Subsequent fixes on `dev`:**
+- Autoplay insertion ownership: preserve manually queued tracks across stale or failed REST acknowledgements; tests exercise stop, queue contention, backend failure and command serialization.
+- `back()`: retain the current song, queue and prior history until playback succeeds; do not consume history or queue the outgoing song on failed/aborted acknowledgements.
+- Positional `skip(index)`: restore the selected queue entry to its original order if the request is rejected or superseded; cover both success and stop races.
+- Regression tests and changelog updated; see commits `c8b0203` and `7f09559`.
+
+**Gate remains open:** later code changes must pass **all** checks on their final SHA. No automated job establishes independently audible Discord output, real crossfade quality, network-partition continuity or legal/publication approval. Do not treat documentation-only updates as a release candidate.
+
 ### Stop conditions
 
 Do not tag or publish while any required CI job is failing or unverified, while known critical/high-severity problems remain, if a backend path is silently misreported as supported, or if the release package/installation does not pass. Every unchecked item requires evidence or an explicitly documented scope reduction before a stable release.
