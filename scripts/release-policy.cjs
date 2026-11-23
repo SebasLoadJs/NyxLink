@@ -24,4 +24,17 @@ function validateReleaseManifest(manifest) {
   return Object.freeze({ version: manifest.version, channel, stable: channel === 'latest' });
 }
 
-module.exports = { validateReleaseManifest };
+/**
+ * A release can only be built from a tag that matches its exact SemVer.
+ * This is a read-only guard; it does not create tags or publish packages.
+ * The development channel remains branch-based and cannot be tag-released.
+ */
+function validateReleaseTag(manifest, gitRef) {
+  const release = validateReleaseManifest(manifest);
+  assert.notEqual(release.channel, 'dev', 'Development packages cannot be released from a tag');
+  assert.equal(gitRef, `refs/tags/v${release.version}`,
+    `Release ref must be refs/tags/v${release.version}`);
+  return Object.freeze({ ...release, tag: `v${release.version}` });
+}
+
+module.exports = { validateReleaseManifest, validateReleaseTag };
