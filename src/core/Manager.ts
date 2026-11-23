@@ -21,6 +21,7 @@ import { SpotifySource } from "../sources/spotify";
 import { DeezerSource } from "../sources/deezer";
 import { Logger } from "../logging/Logger";
 import { PrivateMetricsServer, type PrivateMetricsOptions } from '../observability/PrivateMetricsServer';
+import { GuildOwnership, type GuildOwnershipOptions } from '../cluster/GuildOwnership';
 
 export class Manager extends EventEmitter<IManagerEvents> {
     public initialized: boolean = false;
@@ -30,6 +31,8 @@ export class Manager extends EventEmitter<IManagerEvents> {
     public clientId: string = "";
     public readonly nodes: NodeManager;
     public readonly players: PlayerManager;
+    /** Optional, explicitly configured per-guild owner fencing. */
+    public guildOwnership?: GuildOwnership;
     private databaseInstance?: DatabaseManager;
     public get database(): DatabaseManager {
         if (!this.databaseInstance) throw new Error('Manager database is not initialized');
@@ -64,7 +67,11 @@ export class Manager extends EventEmitter<IManagerEvents> {
         validate(config.nodes, (value) => Array.isArray(value) && value.length > 0, "Manager config requires a non-empty nodes array.");
         validate(config.options, (value) => value == null || (typeof value === "object" && !Array.isArray(value)), "Manager config 'options' must be a plain object if provided.");
 
-        this.send = config.send ?? this.missingSend;
+        const gatewaySend = config.send ?? this.missingSend;
+        this.send = (guildId, payload) => {
+            this.guildOwnership?.assertLocal(guildId);
+            gatewaySend(guildId, payload);
+        };
         
         this.options = { 
             clientName: `NyxLink/${version} (https://github.com/SebasLoadJs/NyxLink)`,
@@ -164,6 +171,15 @@ export class Manager extends EventEmitter<IManagerEvents> {
         }
     }
 
+    /** Enable Redis guild ownership before creating any players. */
+    public useGuildLeases(options: GuildOwnershipOptions): this {
+        if (this.destroyed || this.guildOwnership || this.players.size > 0) {
+            throw new Error('Guild leases must be enabled once, before creating players');
+        }
+        this.guildOwnership = new GuildOwnership(this, options);
+        return this;
+    }
+
     /** Opt-in, localhost-only metrics endpoint. No HTTP server starts by default. */
     public async startPrivateMetricsServer(options: PrivateMetricsOptions): Promise<PrivateMetricsServer> {
         if (this.destroyed) throw new Error('Manager is shut down');
@@ -243,6 +259,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
             if (this.initializationPromise) await attempt(() => this.initializationPromise);
             await Promise.all(this.players.all.map(player => attempt(() => player.destroy('Manager shutdown'))));
             this.players.players.clear();
+            await attempt(() => this.guildOwnership?.close());
             await Promise.all([...this.nodes.nodes.values()].map(node => attempt(() => node.destroy())));
             this.nodes.nodes.clear();
             for (const connector of this.connectors) await attempt(() => connector.dispose?.());
