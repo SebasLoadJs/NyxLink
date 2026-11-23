@@ -138,11 +138,18 @@ export class NodeManager {
             if (player.destroyed || player.node !== node) continue;
             try {
                 const result = await NodeFailover.move(player, node);
-                if (result.status !== 'recovered' && !player.destroyed && player.node === node) drained = false;
-                else if (result.status === 'failed') drained = false;
+                const current = !player.destroyed && this.manager.players.get(player.guildId) === player;
+                const destination = player.node;
+                // Neither a claimed recovery nor an unrelated new command
+                // proves evacuation unless the guild has a live, registered owner.
+                if (result.status === 'failed' || current && (
+                    destination === node || !destination.connected || destination.destroyed ||
+                    this.nodes.get(destination.identifier) !== destination
+                )) drained = false;
             } catch { drained = false; }
         }
-        return drained && !node.destroyed && !this.manager.destroyed;
+        return drained && !node.destroyed && !this.manager.destroyed &&
+            this.nodes.get(node.identifier) === node;
     }
 
     public eject(identifier: string): Promise<boolean> {
