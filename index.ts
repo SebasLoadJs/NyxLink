@@ -39,6 +39,8 @@ export { Memory } from './src/database/Memory';
 export { RedisStorage } from './src/database/RedisStorage';
 export type { RedisCommandClient, RedisStorageOptions } from './src/database/RedisStorage';
 export { RedisGuildLeaseCoordinator } from './src/database/RedisGuildLeaseCoordinator';
+export { GuildOwnership } from './src/cluster/GuildOwnership';
+export type { GuildOwnershipOptions } from './src/cluster/GuildOwnership';
 export type { RedisGuildLease, RedisGuildLeaseOptions } from './src/database/RedisGuildLeaseCoordinator';
 export { Local } from './src/database/Local';
 export { PlayerSnapshotCodec, SnapshotConflictError, SnapshotValidationError } from './src/database/PlayerSnapshot';
