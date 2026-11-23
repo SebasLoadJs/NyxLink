@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { verifyCommandSequence, verifyReconnectSequence, waitForSnapshot } = require('../scripts/live-voice-commands.cjs');
+const { verifyCommandSequence, verifyReconnectSequence, waitForSnapshot, withDeadline } = require('../scripts/live-voice-commands.cjs');
 
 function fixture() {
   const calls = [];
@@ -137,4 +137,25 @@ test('reconnect acceptance rejects backend that reports a disconnected voice', a
   node.rest.getPlayer = async () => ({ track: { encoded: track.encoded }, state: { connected: false } });
   await assert.rejects(verifyReconnectSequence(player, node, track),
     /did not confirm reconnected active track/);
+});
+
+test('live command timeout returns a bounded failure when an operation never resolves', async () => {
+  const started = Date.now();
+  await assert.rejects(withDeadline(() => new Promise(() => {}), 'voice reconnect', 30),
+    /Live command timed out: voice reconnect/);
+  assert.ok(Date.now() - started < 500, 'stalled player command exceeded its deadline');
+});
+
+test('successful and rejected player commands settle without waiting for their deadline', async () => {
+  assert.equal(await withDeadline(async () => 'ack', 'initial play', 5000), 'ack');
+  await assert.rejects(withDeadline(async () => { throw new Error('backend rejected'); }, 'skip', 5000),
+    /backend rejected/);
+});
+
+test('live command timeout rejects invalid deadlines and unsafe labels', async () => {
+  for (const ms of [0, -1, 1.5, NaN, 60001]) {
+    await assert.rejects(withDeadline(async () => true, 'pause', ms), TypeError);
+  }
+  await assert.rejects(withDeadline(async () => true, 'Bearer secret: http://token', 100), TypeError);
+  await assert.rejects(withDeadline(null, 'play', 100), TypeError);
 });
