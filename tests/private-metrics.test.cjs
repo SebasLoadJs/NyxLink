@@ -73,7 +73,7 @@ test('private JSON and Prometheus output contain only aggregates and opaque node
   assert.match(metrics, /# TYPE nyxlink_players_total gauge/);
   const versions = await (await get('/versions')).json();
   assert.equal(typeof versions.nyxlink, 'string');
-  assert.deepEqual(versions.backends, []);
+  assert.deepEqual(versions.nodes, []);
 
   const combined = JSON.stringify({ nodes, summary, versions }) + metrics;
   for (const secret of [
@@ -114,4 +114,18 @@ test('concurrent start and close cannot leave an orphaned listener', async t => 
   assert.equal(results[1].status, 'fulfilled');
   assert.throws(() => endpoint.url, /not listening/);
   await assert.rejects(endpoint.listen(), /closed/);
+});
+
+test('version inventory includes backend release only when safely formatted', async t => {
+  const { node, get } = await open(t);
+  node.backend = { kind: 'nodelink', version: '3.10.0-dev.2026-11-15.8' };
+  const data = await (await get('/versions')).json();
+  assert.equal(data.nodes.length, 1);
+  assert.equal(data.nodes[0].backend, 'nodelink');
+  assert.equal(data.nodes[0].version, '3.10.0-dev.2026-11-15.8');
+  assert.match(data.nodes[0].key, /^[0-9a-f]{16}$/);
+  node.backend = { kind: 'nodelink', version: '3.10.0 password=not-for-logs' };
+  const invalid = await (await get('/versions')).json();
+  assert.equal(invalid.nodes[0].version, null);
+  assert.doesNotMatch(JSON.stringify(invalid), /not-for-logs/);
 });
