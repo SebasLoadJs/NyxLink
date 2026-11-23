@@ -84,8 +84,12 @@ async function recover(context: Context, known: Map<string, Snapshot>): Promise<
                 if (storage.current ? storage.current.encoded !== row.track?.encoded : !!row.track?.encoded) continue;
                 let player: Player;
                 creating = row.guildId;
-                try { player = manager.players.restore({ ...storage, guildId: row.guildId, volume: row.volume, node: node.identifier }); }
-                finally { creating = undefined; }
+                try {
+                    const options = { ...storage, guildId: row.guildId, volume: row.volume, node: node.identifier };
+                    player = manager.guildOwnership
+                        ? await manager.players.restoreOwned(options)
+                        : manager.players.restore(options);
+                } finally { creating = undefined; }
                 // A playerCreate callback may already have stopped, replaced or destroyed this player.
                 if (player.destroyed || player.node !== node || manager.players.get(row.guildId) !== player || playbackGuard(player).ticket !== 0 || touched.has(row.guildId)) continue;
                 const initial = snapshot(player);
