@@ -178,11 +178,19 @@ export class NodeManager {
         const attached = (player: Player) => registered(player) && player.node === node;
         const stranded = (player: Player) => registered(player) &&
             (!player.node.connected || player.node.destroyed);
-        // A cancellation represents a newer intent, not permission to orphan or destroy it.
+        const recovered = (player: Player, index: number) => {
+            const result = results[index];
+            return result.status === 'recovered' && !!result.node &&
+                registered(player) && player.node === result.node &&
+                result.node !== node && result.node.connected && !result.node.destroyed;
+        };
+        // A cancellation on the source represents a newer intent. The node
+        // cannot be removed while that command still owns the player.
         if (players.some((player, index) => results[index].status === 'cancelled' && attached(player))) return false;
-        // A failed transfer may have switched ownership to a destination that
-        // disconnected immediately. Report and handle that player as orphaned.
-        const failed = players.filter((player, index) => results[index].status === 'failed' &&
+        // A claimed recovery is not evidence of success if the target is dead,
+        // unregistered or no longer owns that guild. Keep those cases visible.
+        const failed = players.filter((player, index) => registered(player) &&
+            !recovered(player, index) &&
             (attached(player) || stranded(player)));
         if (failed.length) {
             // Orphan notifications are observational: listeners may throw.
@@ -194,14 +202,14 @@ export class NodeManager {
             if (!active()) return false;
             if (!this.manager.options.node?.failover?.preserveOnFailure) {
                 // Do not remove a node while any owned guild cleanup is unresolved.
-                const cleanup = await Promise.allSettled(failed.filter(attached)
+                const cleanup = await Promise.allSettled(failed.filter(registered)
                     .map(player => player.destroy('Node ejected: failover failed')));
                 const errors = cleanup.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
                 for (const result of errors) {
                     const failure = result.reason instanceof Error ? result.reason : new Error(String(result.reason));
                     try { this.manager.emit('nodeError', node, failure); } catch { /* observer failure */ }
                 }
-                if (errors.length) return false;
+                if (errors.length || failed.some(registered)) return false;
             }
         }
         if (!active()) return false;
