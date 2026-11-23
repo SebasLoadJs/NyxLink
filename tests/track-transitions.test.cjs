@@ -682,3 +682,32 @@ test('loadFailed in track loop respects the configured retry limit', async t => 
   assert.equal(player.current, null);
   assert.deepEqual(ends, [true]);
 });
+
+test('queue looping creates a fresh playback entry without rewriting history', async t => {
+  const context = createPlayer(t);
+  const { player, node } = context;
+  player.setAutoPlay(false);
+  player.setLoop('queue');
+  const first = createTrack('loop-history-original');
+  const next = createTrack('loop-history-next');
+  const firstWire = await playAndStart(context, first);
+  first.position = 73000;
+  first.userData = { nested: { label: 'original' } };
+  player.queue.add(next);
+
+  await node.handleTrackEnd(player, { reason: 'finished', track: firstWire });
+
+  assert.equal(player.current, next);
+  assert.equal(player.queue.size, 1);
+  const repeated = player.queue.first;
+  assert.notEqual(repeated, first);
+  assert.equal(repeated.encoded, first.encoded);
+  assert.equal(repeated.position, 0);
+  assert.equal(first.position, 73000);
+  assert.equal(player.previous.at(-1), first);
+  assert.equal(player.previous.at(-1).position, 73000);
+  repeated.userData.nested.label = 'changed only on repeat';
+  repeated.position = 12000;
+  assert.equal(first.userData.nested.label, 'original');
+  assert.equal(player.previous.at(-1).position, 73000);
+});
