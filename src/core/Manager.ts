@@ -20,6 +20,7 @@ import { version } from "../..";
 import { SpotifySource } from "../sources/spotify";
 import { DeezerSource } from "../sources/deezer";
 import { Logger } from "../logging/Logger";
+import { PrivateMetricsServer, type PrivateMetricsOptions } from '../observability/PrivateMetricsServer';
 
 export class Manager extends EventEmitter<IManagerEvents> {
     public initialized: boolean = false;
@@ -43,6 +44,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
     private shuttingDown = false;
     private readonly connectors = new Set<Connector>();
     private readonly searches: SearchService;
+    private readonly privateMetricsServers = new Set<PrivateMetricsServer>();
 
     public get destroyed(): boolean { return this.shuttingDown; }
     private spotifySource?: SpotifySource;
@@ -162,6 +164,19 @@ export class Manager extends EventEmitter<IManagerEvents> {
         }
     }
 
+    /** Opt-in, localhost-only metrics endpoint. No HTTP server starts by default. */
+    public async startPrivateMetricsServer(options: PrivateMetricsOptions): Promise<PrivateMetricsServer> {
+        if (this.destroyed) throw new Error('Manager is shut down');
+        const endpoint = new PrivateMetricsServer(this, options);
+        await endpoint.listen();
+        if (this.destroyed) {
+            await endpoint.close();
+            throw new Error('Manager is shut down');
+        }
+        this.privateMetricsServers.add(endpoint);
+        return endpoint;
+    }
+
     public detachLogger(): void {
         this.detachLogging?.();
         this.detachLogging = undefined;
@@ -223,6 +238,8 @@ export class Manager extends EventEmitter<IManagerEvents> {
             const attempt = async (operation: () => unknown) => {
                 try { await operation(); } catch (error) { errors.push(error); }
             };
+            await Promise.all([...this.privateMetricsServers].map(endpoint => attempt(() => endpoint.close())));
+            this.privateMetricsServers.clear();
             if (this.initializationPromise) await attempt(() => this.initializationPromise);
             await Promise.all(this.players.all.map(player => attempt(() => player.destroy('Manager shutdown'))));
             this.players.players.clear();
