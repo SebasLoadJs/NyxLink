@@ -219,3 +219,27 @@ const renewLease = (lease: import('../../dist').RedisGuildLease): Promise<boolea
 // @ts-expect-error An owner cannot supply a custom arbitrary fencing identifier.
 const invalidLease: import('../../dist').RedisGuildLease = { guildId: '123456789012345678', fencingToken: 'one' };
 void [acquiredLease, renewLease, invalidLease];
+
+
+const clusterCoordinator: import('../../dist').RedisGuildLeaseCoordinator =
+    new (require('../../dist').RedisGuildLeaseCoordinator)({
+        client: redisCommands, namespace: 'cluster_test', ttlMs: 30000,
+    });
+const ownershipConfig: import('../../dist').GuildOwnershipOptions = {
+    coordinator: clusterCoordinator, renewIntervalMs: 5000,
+};
+const ownedManager = manager.useGuildLeases(ownershipConfig);
+const ownedPlayer: Promise<import('../../dist').Player> =
+    ownedManager.players.createOwned({
+        guildId: '123456789012345678', voiceChannelId: '223456789012345678',
+    });
+const restoredOwnedPlayer: Promise<import('../../dist').Player> =
+    ownedManager.players.restoreOwned({
+        guildId: '123456789012345678', voiceChannelId: '223456789012345678',
+        node: 'node-1',
+    });
+ownedManager.on('guildOwnershipLost', (guildId, generation, reason) => {
+    const event: [string, number, string] = [guildId, generation, reason];
+    void event;
+});
+void [ownedPlayer, restoredOwnedPlayer];
