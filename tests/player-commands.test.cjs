@@ -632,3 +632,44 @@ test('a delayed recommendation result cannot restart playback after explicit sto
   assert.equal(player.playing, false);
   assert.equal(requests.some(request => request.payload.track?.encoded === recommendation.encoded), false);
 });
+
+test('rejected recommendation playback does not suppress queueEnd', async t => {
+  const { manager, node, player } = createPlayer(t);
+  const previous = createTrack('autoplay-playback-error');
+  const recommendation = createTrack('autoplay-rejected');
+  player.current = previous;
+  player.playing = true;
+  player.autoPlay = true;
+  player.autoLeave = false;
+  player.recommendations = [recommendation];
+  const events = [];
+  manager.on('queueEnd', (_player, track) => events.push(track.encoded));
+  player.playAutoPlay = async () => { throw new Error('backend request rejected'); };
+
+  await node.handleTrackEnd(player, {
+    track: previous.toJSON(),
+    reason: 'finished',
+  });
+
+  assert.deepEqual(events, [previous.encoded]);
+  assert.equal(player.current, null);
+  assert.equal(player.playing, false);
+  assert.equal(player.destroyed, false);
+});
+
+test('rejected recommendation playback still allows autoLeave', async t => {
+  const { node, player } = createPlayer(t);
+  const previous = createTrack('autoplay-rejection-auto-leave');
+  player.current = previous;
+  player.playing = true;
+  player.autoPlay = true;
+  player.autoLeave = true;
+  player.recommendations = [createTrack('recommendation-that-fails')];
+  player.playAutoPlay = async () => { throw new Error('server unavailable'); };
+
+  await node.handleTrackEnd(player, {
+    track: previous.toJSON(),
+    reason: 'finished',
+  });
+  assert.equal(player.destroyed, true);
+});
