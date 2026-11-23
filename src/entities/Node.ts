@@ -434,6 +434,22 @@ export class Node {
     this.manager.emit("nodeStateChange", this, oldState, state);
   }
 
+  /** Distinct node identifiers sharing one endpoint need distinct resume keys. */
+  private get sessionStoragePath(): string {
+    return `nodes.${this.uuid}.sessions.${generateUUID(this.identifier, 0)}`;
+  }
+
+  /** Legacy host/port sessions are only safe when this endpoint is unique. */
+  private async loadStoredSessionId(): Promise<string | undefined> {
+    const scoped = await this.manager.database.get<{ sessionId: string }>(this.sessionStoragePath);
+    if (typeof scoped?.sessionId === 'string' && scoped.sessionId) return scoped.sessionId;
+    const shared = [...this.manager.nodes.nodes.values()].some(node =>
+      node !== this && node.uuid === this.uuid);
+    if (shared) return undefined;
+    const legacy = await this.manager.database.get<{ sessionId: string }>(`nodes.${this.uuid}`);
+    return typeof legacy?.sessionId === 'string' && legacy.sessionId ? legacy.sessionId : undefined;
+  }
+
   public async connect(): Promise<void> {
     if (this.destroyed || this.connected || this.connecting || this.state === NodeState.CONNECTING && this.socket) return;
     this.connecting = true;
@@ -445,11 +461,8 @@ export class Node {
       `Moonlink.js > Node -> Attempting connection to ${this.identifier} (${this.host}:${this.port}).`
     );
 
-    const nodeData = await this.manager.database.get<{ sessionId: string }>(
-      `nodes.${this.uuid}`
-    );
+    const sessionId = await this.loadStoredSessionId();
     if (this.destroyed) return;
-    const sessionId = nodeData?.sessionId;
 
     let headers: Record<string, string> = {
       Authorization: this.password,
@@ -923,7 +936,7 @@ export class Node {
         this.setState(NodeState.READY);
         if (this.destroyed || !this.connected) return;
 
-        await this.manager.database.set(`nodes.${this.uuid}`, {
+        await this.manager.database.set(this.sessionStoragePath, {
           sessionId: this.sessionId,
         });
         if (this.destroyed || !this.connected || this.socket !== readySocket || this.backendGeneration !== readyGeneration) return;
