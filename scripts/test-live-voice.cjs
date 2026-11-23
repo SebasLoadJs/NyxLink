@@ -177,8 +177,11 @@ async function run(config) {
     for (const url of config.urls) {
       const result = await manager.search({ query: url, node: node.identifier });
       const track = result.tracks?.[0];
-      if (!track || track.getInfo().isStream || track.getInfo().length < config.crossfadeMs + 10000 ||
-        track.getInfo().length > 120000) throw new Error('Both test tracks must be finite, 15–120s long and decodable');
+      const minimumLength = config.reconnectSmoke ? 45000 : config.crossfadeMs + 10000;
+      if (!track || track.getInfo().isStream || track.getInfo().length < minimumLength ||
+        track.getInfo().length > 120000) {
+        throw new Error('Test tracks must be finite, sufficiently long and decodable');
+      }
       tracks.push(track);
     }
     if (tracks[0].encoded === tracks[1].encoded) throw new Error('Test tracks must be distinct');
