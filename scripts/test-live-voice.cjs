@@ -3,6 +3,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { execFileSync } = require('node:child_process');
+const { withDeadline } = require('./live-voice-commands.cjs');
 
 const snowflake = value => typeof value === 'string' && /^\d{17,20}$/.test(value);
 const address = value => {
@@ -201,7 +202,7 @@ async function run(config) {
   try {
     readyWait = event(manager, 'nodeReady', n => n.identifier === config.node.identifier, 45000);
     stage = 'discord-login';
-    await client.login(config.token);
+    await withDeadline(() => client.login(config.token), 'discord login', 45000);
     stage = 'node-ready';
     const [node] = await readyWait.promise;
     if (node.backend?.kind !== config.backend) {
@@ -211,7 +212,8 @@ async function run(config) {
     const tracks = [];
     stage = 'track-resolution';
     for (const url of config.urls) {
-      const result = await manager.search({ query: url, node: node.identifier });
+      const result = await withDeadline(() => manager.search({ query: url, node: node.identifier }),
+        'controlled track resolution', 30000);
       const track = result.tracks?.[0];
       const minimumLength = config.reconnectSmoke ? 45000 : config.crossfadeMs + 10000;
       if (!track || track.getInfo().isStream || track.getInfo().length < minimumLength ||
@@ -227,7 +229,7 @@ async function run(config) {
       guildId: config.guildId, voiceChannelId: config.channelId, autoPlay: false
     });
     stage = 'voice-connect';
-    await player.connect();
+    await withDeadline(() => player.connect(), 'initial voice connect', 45000);
     record('gatewayVoiceRequested');
     if (config.reconnectSmoke) {
       stage = 'reconnect-smoke';
@@ -257,11 +259,12 @@ async function run(config) {
       record('commandSequencePassed');
     } else {
     stage = 'transition-configuration';
-    await player.setCrossfade({ enabled: true, mode: 'smart', duration: config.crossfadeMs, curve: 'sinusoidal' });
+    await withDeadline(() => player.setCrossfade({ enabled: true, mode: 'smart', duration: config.crossfadeMs, curve: 'sinusoidal' }),
+      'crossfade configuration', 20000);
     player.setQueuePreload({ enabled: true, leadMs: Math.min(35000, tracks[0].getInfo().length) });
     player.queue.add(tracks);
     stage = 'playback-start';
-    const played = await player.play();
+    const played = await withDeadline(() => player.play(), 'crossfade initial play', 30000);
     if (!played) throw new Error('Backend did not accept initial playback');
     // Do not trust REST acknowledgement as evidence of voice audio.
     stage = 'handoff-observation';
@@ -294,8 +297,8 @@ async function run(config) {
     // Never persist bearer tokens, server URLs or encoded tracks to disk.
     delete report.firstEncoded;
     delete report.secondEncoded;
-    try { if (player) await player.stop().catch(() => {}); } catch {}
-    try { await manager.shutdown(); } catch {}
+    try { if (player) await withDeadline(() => player.stop(), 'test player stop', 15000); } catch {}
+    try { await withDeadline(() => manager.shutdown(), 'manager shutdown', 15000); } catch {}
     client.destroy();
     const target = reportPath(config);
     await writePrivateReport(target, report);
