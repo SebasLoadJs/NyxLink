@@ -23,6 +23,36 @@ export class PlayerManager {
         return this.createOnNode(options, false);
     }
 
+    /**
+     * Opt-in cluster path: acquire an exclusive Redis guild lease before
+     * constructing a Player or making any backend/Discord voice changes.
+     */
+    public async createOwned(options: IPlayerConfig): Promise<Player> {
+        return this.createWithLease(options, false);
+    }
+
+    /** Restore a previously persisted player only after acquiring its guild lease. */
+    public async restoreOwned(options: IPlayerConfig): Promise<Player> {
+        return this.createWithLease(options, true);
+    }
+
+    private async createWithLease(options: IPlayerConfig, restoring: boolean): Promise<Player> {
+        const ownership = this.manager.guildOwnership;
+        if (!ownership) throw new Error('Call manager.useGuildLeases() before createOwned or restoreOwned');
+        if (this.players.has(options.guildId) && !ownership.localLease(options.guildId)) {
+            throw new Error('A local player exists without a valid guild lease');
+        }
+        const lease = await ownership.acquire(options.guildId);
+        try {
+            return this.createOnNode(options, restoring);
+        } catch (error) {
+            if (!this.players.has(options.guildId)) {
+                await ownership.release(options.guildId, lease);
+            }
+            throw error;
+        }
+    }
+
     /** @internal Adopt an existing server session without treating maintenance as new assignment. */
     public restore(options: IPlayerConfig): Player {
         validate(options.node, value => typeof value === 'string' && value.length > 0, 'Session restoration requires a node identifier');
@@ -33,6 +63,9 @@ export class PlayerManager {
         if (this.manager.destroyed) throw new Error('Manager is shut down');
         validate(options.guildId, (v) => typeof v === "string" && /^\d{17,20}$/.test(v), "IPlayerConfig#guildId must be a valid Discord Snowflake string.");
         validate(options.voiceChannelId, (v) => typeof v === "string" && /^\d{17,20}$/.test(v), "IPlayerConfig#voiceChannelId must be a valid Discord Snowflake string.");
+        // A synchronous creation cannot atomically acquire Redis ownership.
+        // Opted-in Managers must use createOwned()/restoreOwned() first.
+        this.manager.guildOwnership?.assertLocal(options.guildId);
         if (options.textChannelId) {
             validate(options.textChannelId, (v) => typeof v === "string" && /^\d{17,20}$/.test(v), "IPlayerConfig#textChannelId must be a valid Discord Snowflake string.");
         }
