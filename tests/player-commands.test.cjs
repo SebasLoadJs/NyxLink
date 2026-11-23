@@ -814,3 +814,73 @@ test('a concurrent stop does not lose a positional skip entry awaiting acknowled
   assert.equal(player.current, null);
   assert.deepEqual(player.queue.tracks, [first, selected, last]);
 });
+
+test('replay rejection preserves the original position, history and manual queue', async t => {
+  const { node, player } = createPlayer(t);
+  const current = createTrack('current');
+  current.position = 42000;
+  const prior = createTrack('prior');
+  const queued = createTrack('queued');
+  player.current = current;
+  player.playing = true;
+  player.previous.push(prior);
+  player.queue.add(queued);
+  node.rest.updatePlayer = async () => null;
+
+  assert.equal(await player.replay(), false);
+  assert.equal(player.current, current);
+  assert.equal(current.position, 42000);
+  assert.equal(player.playing, true);
+  assert.deepEqual(player.previous, [prior]);
+  assert.deepEqual(player.queue.tracks, [queued]);
+});
+
+test('successful replay restarts at zero without inserting a duplicate history entry', async t => {
+  const { player, requests } = createPlayer(t);
+  const current = createTrack('current');
+  current.position = 42000;
+  const prior = createTrack('prior');
+  const queued = createTrack('queued');
+  player.current = current;
+  player.playing = true;
+  player.previous.push(prior);
+  player.queue.add(queued);
+
+  assert.equal(await player.replay(), true);
+  assert.equal(player.current.encoded, current.encoded);
+  assert.notEqual(player.current, current);
+  assert.equal(player.current.position, 0);
+  assert.equal(current.position, 42000);
+  assert.deepEqual(player.previous, [prior]);
+  assert.deepEqual(player.queue.tracks, [queued]);
+  assert.deepEqual(requests.filter(r => r.payload.track?.encoded).map(r => r.payload.position), [0]);
+});
+
+test('stop supersedes a pending replay without changing its original track position', async t => {
+  const { node, player } = createPlayer(t);
+  const original = createTrack('current');
+  original.position = 28000;
+  const queued = createTrack('queued');
+  player.current = original;
+  player.playing = true;
+  player.queue.add(queued);
+  const entered = deferred();
+  const release = deferred();
+  node.rest.updatePlayer = async (_guild, payload) => {
+    if (payload.track?.encoded === original.encoded) {
+      entered.resolve();
+      await release.promise;
+    }
+    return payload;
+  };
+  const replaying = player.replay();
+  await entered.promise;
+  const stopping = player.stop();
+  release.resolve();
+  assert.equal(await replaying, false);
+  await stopping;
+  assert.equal(original.position, 28000);
+  assert.equal(player.current, null);
+  assert.equal(player.playing, false);
+  assert.deepEqual(player.queue.tracks, [queued]);
+});
