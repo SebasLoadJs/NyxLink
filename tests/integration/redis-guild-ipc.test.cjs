@@ -39,10 +39,11 @@ test('owner prepares an IPC packet; receiver checks Redis and delivers only once
   player.stopHealthCheck();
   const payload = packet();
   const command = await sender.prepare(a.manager.guildOwnership, GUILD, payload);
-  assert.equal(command.protocol, 'nyxlink/guild-voice/1');
+  assert.equal(command.protocol, 'nyxlink/guild-voice/2');
   assert.equal(command.guildId, GUILD);
   assert.equal(command.packet.d.channel_id, VOICE);
   assert.ok(command.fencingToken > 0);
+  assert.ok(command.sequence > 0);
   assert.match(command.commandId, /^[0-9a-f-]{36}$/);
   const delivered = [];
   assert.equal(await receiver.dispatch(command, value => delivered.push(value)), 'delivered');
@@ -95,6 +96,10 @@ test('wrong schema, guild mismatch and forged tokens never reach gateway callbac
     { ...correct, guildId: 'bad' },
     { ...correct, fencingToken: 0 },
     { ...correct, fencingToken: 1.2 },
+    { ...correct, sequence: 0 },
+    { ...correct, sequence: Number.MAX_SAFE_INTEGER + 1 },
+    { ...correct, sequence: 'not-a-number' },
+    { ...correct, protocol: 'nyxlink/guild-voice/1' },
     { ...correct, packet: { op: 8, d: correct.packet.d } },
     { ...correct, packet: { op: 4, d: { ...correct.packet.d, guild_id: VOICE } } },
     { ...correct, packet: { op: 4, d: { ...correct.packet.d, self_mute: 'false' } } },
@@ -105,6 +110,8 @@ test('wrong schema, guild mismatch and forged tokens never reach gateway callbac
   }
   const forged = { ...correct, fencingToken: correct.fencingToken + 3 };
   assert.equal(await receiver.dispatch(forged, handler), 'stale');
+  const forgedFuture = { ...correct, sequence: correct.sequence + 999 };
+  assert.equal(await receiver.dispatch(forgedFuture, handler), 'stale');
   assert.equal(calls, 0);
   assert.equal(await receiver.dispatch(correct, handler), 'delivered');
   assert.equal(calls, 1);
@@ -180,4 +187,60 @@ test('fenced IPC packet sent by separate Node.js worker is stale after handoff',
   assert.ok(newEnvelope.fencingToken > staleEnvelope.fencingToken);
   assert.equal(await receiver.dispatch(newEnvelope, value => delivered.push(value)), 'delivered');
   assert.equal(delivered.length, 2);
+});
+
+
+test('newer voice state wins when IPC packets arrive out of order', async t => {
+  const { a, sender, receiver } = await setup(t);
+  const player = await a.manager.players.createOwned(a.options);
+  player.stopHealthCheck();
+
+  const join = await sender.prepare(a.manager.guildOwnership, GUILD, packet());
+  const leave = await sender.prepare(a.manager.guildOwnership, GUILD, {
+    op: 4,
+    d: { guild_id: GUILD, channel_id: null, self_deaf: true, self_mute: false },
+  });
+  assert.ok(leave.sequence > join.sequence);
+  const deliveries = [];
+  assert.equal(await receiver.dispatch(leave, value => deliveries.push(value)), 'delivered');
+  assert.equal(await receiver.dispatch(join, value => deliveries.push(value)), 'stale');
+  assert.equal(deliveries.length, 1);
+  assert.equal(deliveries[0].d.channel_id, null);
+});
+
+test('IPC sender sequence is monotonic under concurrent preparation on separate clients', async t => {
+  const { a, sender, receiver } = await setup(t);
+  const player = await a.manager.players.createOwned(a.options);
+  player.stopHealthCheck();
+  const operations = await Promise.all(Array.from({ length: 12 }, (_, i) =>
+    (i % 2 ? receiver : sender).prepare(a.manager.guildOwnership, GUILD, packet())
+  ));
+  const values = operations.map(x => x.sequence);
+  assert.equal(new Set(values).size, operations.length);
+  assert.deepEqual(values.slice().sort((a, b) => a - b),
+    Array.from({ length: 12 }, (_, i) => Math.min(...values) + i));
+  const newest = operations.reduce((a, b) => a.sequence > b.sequence ? a : b);
+  const oldest = operations.reduce((a, b) => a.sequence < b.sequence ? a : b);
+  const delivered = [];
+  assert.equal(await receiver.dispatch(newest, p => delivered.push(p)), 'delivered');
+  assert.equal(await sender.dispatch(oldest, p => delivered.push(p)), 'stale');
+  assert.equal(delivered.length, 1);
+});
+
+test('an older sequence stays stale after deduplication key expiry', async t => {
+  const { a, receiver, sender } = await setup(t);
+  const shortReceiver = new RedisGuildIpcRouter({
+    client: { sendCommand: (...args) => receiver.client.sendCommand(...args) },
+    namespace: 'not-used',
+  });
+  // Both packets are prepared and routed through the regular namespace.
+  const player = await a.manager.players.createOwned(a.options);
+  player.stopHealthCheck();
+  const first = await sender.prepare(a.manager.guildOwnership, GUILD, packet());
+  const second = await sender.prepare(a.manager.guildOwnership, GUILD, packet());
+  const delivered = [];
+  assert.equal(await receiver.dispatch(second, p => delivered.push(p)), 'delivered');
+  assert.equal(await receiver.dispatch(first, p => delivered.push(p)), 'stale');
+  assert.equal(delivered.length, 1);
+  void shortReceiver; // the lasting sequence key is independent of replay dedupe TTL.
 });
