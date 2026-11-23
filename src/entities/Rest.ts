@@ -91,6 +91,11 @@ export class Rest {
 
     private async featureRequest<T = any>(operation: ExtensionOperation, params: ExtensionRouteParameters, options: http.RequestOptions & { body?: any }, validate?: (response: unknown) => void): Promise<T> {
         const route = this.extensionRoute(operation, params);
+        // NodeLink extension commands must obey the same guild lease as
+        // ordinary playback PATCH/DELETE, including mix and subscription APIs.
+        if (params.guildId && route.method !== 'GET') {
+            await this.node.manager.guildOwnership?.assertCurrent(params.guildId);
+        }
         const feature = route.feature;
         this.node.assertFeature(feature);
         if (route.transport !== 'json') throw new TypeError('Extension requires stream transport');
@@ -151,6 +156,7 @@ export class Rest {
         guildId: string,
         categories?: LavalinkSponsorBlockCategory[]
     ): Promise<LavalinkSponsorBlockCategory[] | void> {
+        if (method !== 'GET') await this.node.manager.guildOwnership?.assertCurrent(guildId);
         const path = lavalinkSponsorBlockPath(this.node.sessionId, guildId);
         const body = method === 'PUT' ? sponsorBlockCategoryBody(categories!) : undefined;
         const backend = this.node.backend;
