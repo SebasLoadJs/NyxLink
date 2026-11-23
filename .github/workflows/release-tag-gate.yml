@@ -24,8 +24,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Tag, version and npm dist-tag must match
         run: pnpm run release:check-tag
-      - name: Exact npm release version must not already exist (read-only)
-        run: pnpm run release:check-registry
+      - name: Inspect public npm version without rejecting already-published tag reruns
+        run: node scripts/check-npm-registry.cjs --report-only
       - name: Strict public source types
         run: pnpm run typecheck:strict
       - name: Regression tests with coverage
