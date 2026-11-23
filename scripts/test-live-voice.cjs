@@ -198,7 +198,7 @@ async function run(config) {
       const starts = events.filter(e => e.type === 'trackStart').map(e => e.track);
       report.observed = starts.includes('A') && starts.includes('B') &&
         starts.indexOf('A') < starts.indexOf('B');
-      report.success = report.observed && report.commandChecks.length === 6;
+      report.success = report.observed && report.commandChecks.length === 8;
       if (!report.success) throw new Error('Live command sequence did not produce ordered track events');
       record('commandSequencePassed');
     } else {
