@@ -100,6 +100,8 @@ export class RedisGuildIpcRouter {
     private readonly client: RedisCommandClient;
     private readonly prefix: string;
     private readonly dedupeTtlMs: number;
+    /** Serialize gateway callbacks per guild on this receiver instance. */
+    private readonly pendingByGuild = new Map<string, Promise<void>>();
 
     constructor(options: RedisGuildIpcOptions) {
         if (!options?.client || typeof options.client.sendCommand !== 'function') {
@@ -170,6 +172,11 @@ export class RedisGuildIpcRouter {
             throw new TypeError('Invalid IPC command envelope');
         }
         const packet = validateVoicePacket(entry.guildId, entry.packet);
+        // Multiple IPC messages can arrive concurrently on one gateway
+        // receiver. Claim and deliver in receiver order to keep a slow
+        // callback from completing after a newer voice state was sent.
+        const previous = this.pendingByGuild.get(entry.guildId) ?? Promise.resolve();
+        const operation = previous.then(async (): Promise<GuildVoiceDispatchStatus> => {
         const leaseKey = this.prefix + 'guild-lease.' + entry.guildId;
         const replayKey = this.prefix + 'guild-ipc.' + entry.guildId + '.' + entry.commandId;
         const lastKey = this.prefix + 'guild-ipc-last.' + entry.guildId;
@@ -185,5 +192,15 @@ export class RedisGuildIpcRouter {
         // A thrown callback is surfaced and the command is NOT retried by us.
         await deliver(packet);
         return 'delivered';
+        });
+        // A failed gateway send must not poison later commands in this guild.
+        const barrier = operation.then(() => undefined, () => undefined);
+        this.pendingByGuild.set(entry.guildId, barrier);
+        void barrier.then(() => {
+            if (this.pendingByGuild.get(entry.guildId) === barrier) {
+                this.pendingByGuild.delete(entry.guildId);
+            }
+        });
+        return operation;
     }
 }
