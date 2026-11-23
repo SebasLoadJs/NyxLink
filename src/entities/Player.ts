@@ -328,6 +328,7 @@ export class Player {
     }
 
     private async sendPlayerUpdate(payload: PlayerUpdatePayload, noReplace?: boolean, reservedTrack?: Track): Promise<any> {
+        await this.manager.guildOwnership?.assertCurrent(this.guildId);
         const finalPayload = this.node.backend
             ? this.node.backend.preparePlayerUpdate(payload, this.voiceChannelId)
             : preparePlayerUpdate(this.node.isNodeLink ? 'nodelink' : 'unknown', payload, this.voiceChannelId);
@@ -377,6 +378,7 @@ export class Player {
     }
 
     public async connect({ selfDeaf, selfMute }: { selfDeaf?: boolean; selfMute?: boolean } = {}): Promise<this> {
+        await this.manager.guildOwnership?.assertCurrent(this.guildId);
         this.node.cancelVoiceReconnect?.(this);
         const connectStack = new Error().stack?.split("\n").slice(2, 8).join("\n");
         this.manager.emit("debug", `Moonlink.js > Player#connect -> Connect requested for guild ${this.guildId}. Stack: ${connectStack || "unavailable"}`);
@@ -1168,8 +1170,13 @@ export class Player {
         playbackGuard(this).invalidate();
         this.destroyed = true;
         this.node.cancelVoiceReconnect?.(this);
-        this.destructionPromise = this.commands.enqueue(() => this.destroyPlayback(reason));
-        this.voice.destroy();
+        const leased = this.manager.guildOwnership?.localLease(this.guildId);
+        this.destructionPromise = this.commands.enqueue(() => this.destroyPlayback(reason))
+            .finally(async () => {
+                if (leased) await this.manager.guildOwnership?.release(this.guildId, leased);
+            });
+        // Leased voice cleanup must be authorized before any gateway send.
+        if (!this.manager.guildOwnership) this.voice.destroy();
         this.stopHealthCheck();
         return this.destructionPromise;
     }
@@ -1190,12 +1197,14 @@ export class Player {
 
         this.playing = false;
         this.paused = false;
-        try {
+        const owner = !this.manager.guildOwnership ||
+            await this.manager.guildOwnership.isCurrent(this.guildId);
+        if (owner) try {
             await this.disconnect();
         } catch (e) {
             this.manager.emit("debug", `Moonlink.js > Player#destroy >> Voice disconnection failed for guild ${this.guildId}: ${(e as Error).message}`);
         }
-        try {
+        if (owner) try {
             await this.node.rest.destroyPlayer(this.guildId);
         } catch (e) {
             this.manager.emit("debug", `Moonlink.js > Player#destroy >> Failed to destroy player on node: ${(e as Error).message}`);
@@ -1204,10 +1213,16 @@ export class Player {
         this.current = null;
         this.queue.clear();
         this.previous = [];
-        this.updateData("previous", []);
+        if (owner) this.updateData("previous", []);
 
-        this.manager.players.players.delete(this.guildId);
-        await this.manager.database.remove(`players.${this.guildId}`);
+        if (this.manager.players.get(this.guildId) === this) {
+            this.manager.players.players.delete(this.guildId);
+        }
+        // A stale process must not erase a successor's stored snapshot.
+        if (owner && (!this.manager.guildOwnership ||
+            await this.manager.guildOwnership.isCurrent(this.guildId))) {
+            await this.manager.database.remove(`players.${this.guildId}`);
+        }
         this.manager.emit('playerDestroyed', this, reason);
 
         this.manager.emit("debug", `Moonlink.js > Player#destroy >> Player destroyed for guild ${this.guildId}.`);
