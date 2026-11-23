@@ -26,13 +26,16 @@ export class RecommendationResolver {
       let searchSource: string | null = null;
       const source = info.sourceName.toLowerCase();
       const identifier = info.identifier;
+      const validYouTubeId = /^[A-Za-z0-9_-]{11}$/.test(identifier);
 
       switch (source) {
         case "youtube":
+          if (!validYouTubeId) return;
           uri = `https://www.youtube.com/watch?v=${identifier}&list=RD${identifier}`;
           searchSource = "youtube";
           break;
         case "youtubemusic":
+          if (!validYouTubeId) return;
           uri = `https://music.youtube.com/watch?v=${identifier}&list=RD${identifier}`;
           searchSource = "youtubemusic";
           break;
