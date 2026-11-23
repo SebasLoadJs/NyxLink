@@ -131,74 +131,75 @@ export class RedisGuildIpcRouter {
         await ownership.assertCurrent(guildId);
         const lease = ownership.localLease(guildId);
         if (!lease) throw new Error('IPC sender no longer owns the guild');
-        const leaseKey = this.prefix + 'guild-lease.' + guildId;
-        const sequenceKey = this.prefix + 'guild-ipc-sequence.' + guildId;
-        // The sender may lose ownership between the initial check and here.
-        const sequence = Number(await this.client.sendCommand([
-            'EVAL', ALLOCATE_SEQUENCE, '2', leaseKey, sequenceKey,
-            String(lease.fencingToken),
-        ]));
-        if (sequence === 0) throw new Error('Guild lease changed while preparing IPC command');
-        if (!Number.isSafeInteger(sequence) || sequence <= 0) {
-            throw new Error('Invalid Redis guild IPC sequence');
+            const leaseKey = this.prefix + 'guild-lease.' + guildId;
+            const sequenceKey = this.prefix + 'guild-ipc-sequence.' + guildId;
+            // The sender may lose ownership between the initial check and here.
+            const sequence = Number(await this.client.sendCommand([
+                'EVAL', ALLOCATE_SEQUENCE, '2', leaseKey, sequenceKey,
+                String(lease.fencingToken),
+            ]));
+            if (sequence === 0) throw new Error('Guild lease changed while preparing IPC command');
+            if (!Number.isSafeInteger(sequence) || sequence <= 0) {
+                throw new Error('Invalid Redis guild IPC sequence');
+            }
+            return {
+                protocol: 'nyxlink/guild-voice/2',
+                guildId,
+                fencingToken: lease.fencingToken,
+                sequence,
+                commandId: randomUUID(),
+                packet: data,
+            };
         }
-        return {
-            protocol: 'nyxlink/guild-voice/2',
-            guildId,
-            fencingToken: lease.fencingToken,
-            sequence,
-            commandId: randomUUID(),
-            packet: data,
-        };
-    }
-
-    public async dispatch(
-        message: unknown,
-        deliver: (packet: GuildVoiceGatewayPacket) => void | Promise<void>
-    ): Promise<GuildVoiceDispatchStatus> {
-        if (!message || typeof message !== 'object' || Array.isArray(message)) {
-            throw new TypeError('Invalid IPC command envelope');
-        }
-        if (typeof deliver !== 'function') throw new TypeError('IPC delivery callback is required');
-        const entry = message as Record<string, unknown>;
-        if (entry.protocol !== 'nyxlink/guild-voice/2' ||
-            typeof entry.guildId !== 'string' || !snowflake.test(entry.guildId) ||
-            typeof entry.commandId !== 'string' || !uuid.test(entry.commandId) ||
-            typeof entry.fencingToken !== 'number' || !Number.isSafeInteger(entry.fencingToken) ||
-            entry.fencingToken <= 0 || typeof entry.sequence !== 'number' ||
-            !Number.isSafeInteger(entry.sequence) || entry.sequence <= 0 ||
-            Object.keys(entry).some(key =>
-                !['protocol', 'guildId', 'commandId', 'fencingToken', 'sequence', 'packet'].includes(key))) {
-            throw new TypeError('Invalid IPC command envelope');
-        }
-        const packet = validateVoicePacket(entry.guildId, entry.packet);
-        // Multiple IPC messages can arrive concurrently on one gateway
-        // receiver. Claim and deliver in receiver order to keep a slow
-        // callback from completing after a newer voice state was sent.
-        const previous = this.pendingByGuild.get(entry.guildId) ?? Promise.resolve();
-        const operation = previous.then(async (): Promise<GuildVoiceDispatchStatus> => {
-        const leaseKey = this.prefix + 'guild-lease.' + entry.guildId;
-        const replayKey = this.prefix + 'guild-ipc.' + entry.guildId + '.' + entry.commandId;
-        const lastKey = this.prefix + 'guild-ipc-last.' + entry.guildId;
-        const sequenceKey = this.prefix + 'guild-ipc-sequence.' + entry.guildId;
-        const result = Number(await this.client.sendCommand([
-            'EVAL', FENCE_AND_DEDUPE, '4', leaseKey, replayKey, lastKey, sequenceKey,
-            String(entry.fencingToken), String(this.dedupeTtlMs), String(entry.sequence),
-        ]));
-        if (result === 0) return 'stale';
-        if (result === 2) return 'duplicate';
-        if (result !== 1) throw new Error('Invalid Redis guild IPC fencing result');
-        // At-most-once callback invocation per commandId within the TTL.
-        // A thrown callback is surfaced and the command is NOT retried by us.
-        await deliver(packet);
-        return 'delivered';
+    
+        public async dispatch(
+            message: unknown,
+            deliver: (packet: GuildVoiceGatewayPacket) => void | Promise<void>
+        ): Promise<GuildVoiceDispatchStatus> {
+            if (!message || typeof message !== 'object' || Array.isArray(message)) {
+                throw new TypeError('Invalid IPC command envelope');
+            }
+            if (typeof deliver !== 'function') throw new TypeError('IPC delivery callback is required');
+            const entry = message as Record<string, unknown>;
+            if (entry.protocol !== 'nyxlink/guild-voice/2' ||
+                typeof entry.guildId !== 'string' || !snowflake.test(entry.guildId) ||
+                typeof entry.commandId !== 'string' || !uuid.test(entry.commandId) ||
+                typeof entry.fencingToken !== 'number' || !Number.isSafeInteger(entry.fencingToken) ||
+                entry.fencingToken <= 0 || typeof entry.sequence !== 'number' ||
+                !Number.isSafeInteger(entry.sequence) || entry.sequence <= 0 ||
+                Object.keys(entry).some(key =>
+                    !['protocol', 'guildId', 'commandId', 'fencingToken', 'sequence', 'packet'].includes(key))) {
+                throw new TypeError('Invalid IPC command envelope');
+            }
+            const packet = validateVoicePacket(entry.guildId, entry.packet);
+            const guildId: string = entry.guildId;
+            // Multiple IPC messages can arrive concurrently on one gateway
+            // receiver. Claim and deliver in receiver order to keep a slow
+            // callback from completing after a newer voice state was sent.
+            const previous = this.pendingByGuild.get(guildId) ?? Promise.resolve();
+            const operation = previous.then(async (): Promise<GuildVoiceDispatchStatus> => {
+            const leaseKey = this.prefix + 'guild-lease.' + guildId;
+            const replayKey = this.prefix + 'guild-ipc.' + guildId + '.' + entry.commandId;
+            const lastKey = this.prefix + 'guild-ipc-last.' + guildId;
+            const sequenceKey = this.prefix + 'guild-ipc-sequence.' + guildId;
+            const result = Number(await this.client.sendCommand([
+                'EVAL', FENCE_AND_DEDUPE, '4', leaseKey, replayKey, lastKey, sequenceKey,
+                String(entry.fencingToken), String(this.dedupeTtlMs), String(entry.sequence),
+            ]));
+            if (result === 0) return 'stale';
+            if (result === 2) return 'duplicate';
+            if (result !== 1) throw new Error('Invalid Redis guild IPC fencing result');
+            // At-most-once callback invocation per commandId within the TTL.
+            // A thrown callback is surfaced and the command is NOT retried by us.
+            await deliver(packet);
+            return 'delivered';
         });
         // A failed gateway send must not poison later commands in this guild.
         const barrier = operation.then(() => undefined, () => undefined);
-        this.pendingByGuild.set(entry.guildId, barrier);
+        this.pendingByGuild.set(guildId, barrier);
         void barrier.then(() => {
-            if (this.pendingByGuild.get(entry.guildId) === barrier) {
-                this.pendingByGuild.delete(entry.guildId);
+            if (this.pendingByGuild.get(guildId) === barrier) {
+                this.pendingByGuild.delete(guildId);
             }
         });
         return operation;
