@@ -61,7 +61,7 @@ Status: **in progress**, development branch `dev`. For the 38 original tasks, ph
 
 - [ ] CI pipelines are green at one immutable candidate commit. Record commit SHA and run URLs.
 - [ ] Run local-backend endurance for >= 600 seconds without leaks/regressions (short smoke tests are not sufficient).
-- [ ] Perform controlled real Discord voice playback/seek/skip/pause/volume/reconnect tests with authorized test infrastructure: `--armed --commands` on NodeLink and `NYXLINK_LIVE_BACKEND=lavalink --armed --commands` on Lavalink; use the default `--armed` mode for NodeLink crossfade.
+- [ ] Perform controlled real Discord voice tests with authorized infrastructure: `--armed --commands` and `--armed --reconnect` on NodeLink, `NYXLINK_LIVE_BACKEND=lavalink --armed --commands` and `NYXLINK_LIVE_BACKEND=lavalink --armed --reconnect` on Lavalink; use the default `--armed` mode for NodeLink crossfade. Preserve the private reports and independent audible observations.
 - [ ] Publish an *explicitly approved* candidate `5.3.0-rc.1` to npm `next` and verify a fresh installation.
 - [ ] Freeze candidate, address release blockers, and repeat all changed-area tests.
 - [ ] Create `v5.3` branch and `v5.3.0` Git tag/Release from the exact approved commit.
