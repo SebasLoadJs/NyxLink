@@ -288,6 +288,9 @@ async function run(config) {
   } finally {
     // Cancel a pending nodeReady listener if Discord login failed or shutdown began.
     readyWait?.cancel();
+    // Reject attribution to an immutable SHA if source changed during the run.
+    const revisionAfter = sourceRevision();
+    if (!report.sourceRevision || report.sourceRevision !== revisionAfter) report.sourceRevision = null;
     // Never persist bearer tokens, server URLs or encoded tracks to disk.
     delete report.firstEncoded;
     delete report.secondEncoded;
