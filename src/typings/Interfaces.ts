@@ -63,6 +63,8 @@ export interface IManagerEvents {
     playerRecoveryStarted: (player: Player) => void;
     playerRecoverySuccess: (player: Player) => void;
     playerRecoveryFailed: (player: Player) => void;
+    /** Emitted after renewal or verification loses ownership of a guild. */
+    guildOwnershipLost: (guildId: string, fencingToken: number, reason: string) => void;
     
     // Failover Events
     playersMoved: (players: Player[], oldNode: Node, newNode: Node) => void;
