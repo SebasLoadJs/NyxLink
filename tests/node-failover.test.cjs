@@ -282,3 +282,28 @@ test('eject leaves node registered if an orphan destroy fails', async t => {
   assert.equal(manager.nodes.nodes.get(source.identifier), source);
   assert.equal(source.draining, true);
 });
+
+test('eject reports a player stranded on an already disconnected destination', async t => {
+  const { NodeFailover } = require('../dist/src/nodes/NodeFailover');
+  const { manager, node: source, player } = createPlayer(t);
+  const [failedTarget] = candidates(manager);
+  failedTarget.connected = false;
+  failedTarget.state = NodeState.DISCONNECTED;
+  const originalMove = NodeFailover.move;
+  NodeFailover.move = async () => {
+    player.node = failedTarget;
+    return { status: 'failed', attempts: 1 };
+  };
+  t.after(() => { NodeFailover.move = originalMove; });
+  manager.options.node = {
+    ...manager.options.node,
+    failover: { preserveOnFailure: true },
+  };
+  const orphans = [];
+  manager.on('playersOrphaned', players => orphans.push(...players));
+
+  assert.equal(await manager.nodes.eject(source.identifier), true);
+  assert.deepEqual(orphans, [player]);
+  assert.equal(player.node, failedTarget);
+  assert.equal(player.destroyed, false);
+});
