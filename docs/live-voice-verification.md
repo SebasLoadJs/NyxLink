@@ -44,12 +44,24 @@ node scripts/test-live-voice.cjs --armed --commands
 ```
 
 The same dedicated test server, channel, credentials and two controlled
-15–120 second tracks are required. This mode **does not** enable crossfade,
-so it does not interfere with the default transition scenario. It checks
-REST-confirmed pause and resume state, backend volume 40, playback position
-after a 5-second seek, successful skip and the appearance of the second
-track-start event. Every backend acknowledgement has a bounded polling
-window, and failures are recorded only as an error category and stage.
+15–120 second tracks are required. The default backend is NodeLink. To test
+**Lavalink v4**, explicitly select the backend and run **commands mode only**:
+
+```bash
+NYXLINK_LIVE_BACKEND=lavalink node scripts/test-live-voice.cjs --armed --commands
+```
+
+`NYXLINK_LIVE_BACKEND` only accepts `lavalink` or `nodelink`;
+the live script checks that the connected backend matches the selected
+value. The default `--armed` crossfade acceptance mode requires NodeLink;
+Lavalink is not falsely advertised as having the NodeLink crossfade API.
+
+Commands mode **does not** enable crossfade, so it does not interfere with
+the default transition scenario. It checks REST-confirmed pause and resume,
+backend volume 40, playback position after a 5-second seek, successful skip
+and the second track-start event. Every backend acknowledgement has a bounded
+polling window, **including an HTTP request that never returns**. Failures
+are recorded only as an error category and stage.
 
 The local report includes `commandChecks` with the six accepted operations
 and whether the ordered start events were observed. It never records song
