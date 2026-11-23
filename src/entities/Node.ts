@@ -733,6 +733,18 @@ export class Node {
     if (this.destroyed || (this.state === NodeState.DISCONNECTED && !this.connected)) return;
     this.invalidateBackendRefresh();
     const closeGeneration = this.backendGeneration;
+    // Consumer callbacks are observational and must not interrupt disconnection
+    // cleanup. Report listener failures if a separate error observer is available.
+    const notify = (callback: () => void): void => {
+      try { callback(); } catch (error) {
+        try {
+          this.manager.emit("nodeError", this, error instanceof Error ? error : new Error(String(error)));
+        } catch { /* an error observer also threw */ }
+      }
+    };
+    const closingThisConnection = () => !this.destroyed &&
+      this.backendGeneration === closeGeneration && !this.connected &&
+      this.state === NodeState.DISCONNECTED;
     this.clearVoiceReconnects();
     if (this.readyTimeout) clearTimeout(this.readyTimeout);
     this.readyTimeout = undefined;
@@ -742,7 +754,7 @@ export class Node {
     this.resetResumeUpdateState();
     
     this.manager.emit("debug", `Moonlink.js > Node <- Disconnected from ${this.identifier}. Code: ${code}, Reason: ${reason}.`);
-    this.manager.emit("nodeDisconnect", this, code, reason);
+    notify(() => this.manager.emit("nodeDisconnect", this, code, reason));
 
     if (this.socket) {
       this.socket.close();
@@ -763,7 +775,7 @@ export class Node {
             // One failed recovery must not abort disconnection handling for
             // every other guild or skip the reconnect/orphan policy.
             const failure = error instanceof Error ? error : new Error(String(error));
-            this.manager.emit("nodeError", this, failure);
+            notify(() => this.manager.emit("nodeError", this, failure));
             return { status: 'failed' as const, attempts: 0 };
           }
         }));
@@ -780,7 +792,9 @@ export class Node {
             destinations.set(result.node, group);
           }
         });
-        for (const [target, players] of destinations) this.manager.emit('playersMoved', players, this, target);
+        for (const [target, players] of destinations) {
+          notify(() => this.manager.emit('playersMoved', players, this, target));
+        }
         // An ACKed transfer can still land on a node that disconnects
         // immediately. Such a player is not recovered and must be reported
         // as orphaned rather than silently omitted from cleanup.
@@ -792,8 +806,7 @@ export class Node {
 
     // A new connection may have opened while transfers were awaiting I/O.
     // Never apply the old disconnect's retry or destruction policy to it.
-    if (this.destroyed || this.backendGeneration !== closeGeneration ||
-        this.connected || this.state !== NodeState.DISCONNECTED) return;
+    if (!closingThisConnection()) return;
     if (this.authenticationFailed) this.reconnectAttempts = this.retryAmount;
     if (this.reconnectAttempts >= this.retryAmount) {
         if (!moved && orphanedPlayers.length > 0) {
@@ -810,10 +823,10 @@ export class Node {
                 }
               }
             }
-            this.manager.emit("playersOrphaned", orphanedPlayers, this);
+            notify(() => this.manager.emit("playersOrphaned", orphanedPlayers, this));
         }
 
-        if (this.reconnectAttempts >= this.retryAmount && !this.destroyed) {
+        if (this.reconnectAttempts >= this.retryAmount && closingThisConnection()) {
             await this.destroy();
         }
     } else {
