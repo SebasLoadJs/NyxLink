@@ -77,6 +77,7 @@ export class Voice extends EventEmitter<VoiceEvents> {
     }
 
     public connect(options: { selfDeaf: boolean; selfMute: boolean }): Promise<void> {
+        if (!this.isDestroyed()) this.manager.guildOwnership?.assertLocal(this.player.guildId);
         if (this.isDestroyed()) return Promise.reject(new Error('Voice is destroyed'));
         if (this.disconnectPromise) return this.disconnectPromise.then(() => this.connect(options));
         if (!this.player.voiceChannelId) return Promise.reject(new Error('Missing voiceChannelId'));
@@ -120,6 +121,7 @@ export class Voice extends EventEmitter<VoiceEvents> {
     }
 
     private disconnectWithReason(error?: Error): Promise<void> {
+        if (!this.isDestroyed()) this.manager.guildOwnership?.assertLocal(this.player.guildId);
         if (this.isDestroyed()) return Promise.resolve();
         if (this.disconnectPromise) return this.disconnectPromise;
         const active = this.state !== VoiceConnectionState.DISCONNECTED || this.connectPromise || this.sessionId;
