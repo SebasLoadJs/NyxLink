@@ -5,7 +5,7 @@ const { EventEmitter } = require('node:events');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
-const { validateConfiguration, errorCode, event, writePrivateReport, reportPath, safeBackendVersion, safeTrackEndReason } = require('../scripts/test-live-voice.cjs');
+const { validateConfiguration, errorCode, event, writePrivateReport, reportPath, sourceRevision, safeBackendVersion, safeTrackEndReason } = require('../scripts/test-live-voice.cjs');
 
 function config(){
  return {
@@ -146,4 +146,16 @@ test('each authorized live voice run receives its own private evidence file', ()
   assert.throws(() => reportPath({ backend: 'nodelink' }, new Date('bad'), first), TypeError);
   assert.throws(() => reportPath({ backend: 'nodelink' }, date, '../../escape'), TypeError);
   assert.doesNotMatch(crossfade + commands + reconnect, /password|Bearer|token/);
+});
+
+test('source revision is a canonical Git SHA or explicitly unavailable', () => {
+  const revision = sourceRevision();
+  assert.ok(revision === null || /^[0-9a-f]{40}$/.test(revision));
+  if (revision !== null) {
+    const result = spawnSync('git', ['rev-parse', '--verify', 'HEAD'], {
+      cwd: path.resolve(__dirname, '..'), encoding: 'utf8', timeout: 3000,
+    });
+    assert.equal(result.status, 0);
+    assert.equal(revision, result.stdout.trim());
+  }
 });
