@@ -41,6 +41,8 @@ export type { RedisCommandClient, RedisStorageOptions } from './src/database/Red
 export { RedisGuildLeaseCoordinator } from './src/database/RedisGuildLeaseCoordinator';
 export { GuildOwnership } from './src/cluster/GuildOwnership';
 export type { GuildOwnershipOptions } from './src/cluster/GuildOwnership';
+export { RedisGuildIpcRouter } from './src/cluster/RedisGuildIpcRouter';
+export type { RedisGuildIpcOptions, FencedGuildVoiceEnvelope, GuildVoiceGatewayPacket, GuildVoiceDispatchStatus } from './src/cluster/RedisGuildIpcRouter';
 export type { RedisGuildLease, RedisGuildLeaseOptions } from './src/database/RedisGuildLeaseCoordinator';
 export { Local } from './src/database/Local';
 export { PlayerSnapshotCodec, SnapshotConflictError, SnapshotValidationError } from './src/database/PlayerSnapshot';
