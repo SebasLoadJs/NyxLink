@@ -884,3 +884,39 @@ test('stop supersedes a pending replay without changing its original track posit
   assert.equal(player.playing, false);
   assert.deepEqual(player.queue.tracks, [queued]);
 });
+
+test('seek queued immediately after replay follows the acknowledged restart', async t => {
+  const { player, requests } = createPlayer(t);
+  const original = createTrack('replaying');
+  original.position = 39000;
+  player.current = original;
+  player.playing = true;
+
+  const replaying = player.replay();
+  const seeking = player.seek(9000);
+  assert.equal(await replaying, true);
+  await seeking;
+
+  assert.equal(player.current.position, 9000);
+  assert.equal(original.position, 39000);
+  assert.deepEqual(requests.map(r => r.payload.position), [0, 9000]);
+});
+
+test('seek following a rejected replay cannot move the old track', async t => {
+  const { player, node, requests } = createPlayer(t);
+  const original = createTrack('replaying');
+  original.position = 31000;
+  player.current = original;
+  player.playing = true;
+  const update = node.rest.updatePlayer;
+  node.rest.updatePlayer = async (guild, payload) =>
+    payload.track?.encoded ? null : update(guild, payload);
+
+  const replaying = player.replay();
+  const seeking = player.seek(9000);
+  assert.equal(await replaying, false);
+  await seeking;
+  assert.equal(player.current, original);
+  assert.equal(original.position, 31000);
+  assert.deepEqual(requests, []);
+});
