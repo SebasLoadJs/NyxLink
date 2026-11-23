@@ -728,7 +728,9 @@ export class Node {
   }
 
   protected async close(event: { code: number; reason: string }): Promise<void> {
-    if (this.destroyed) return;
+    // A socket can report close more than once while recovery awaits network I/O.
+    // Only the first notification owns disconnection and failover handling.
+    if (this.destroyed || (this.state === NodeState.DISCONNECTED && !this.connected)) return;
     this.invalidateBackendRefresh();
     this.clearVoiceReconnects();
     if (this.readyTimeout) clearTimeout(this.readyTimeout);
