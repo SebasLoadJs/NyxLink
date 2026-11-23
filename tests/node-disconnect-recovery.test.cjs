@@ -174,12 +174,17 @@ test('recovered result targeting an unconnected node is not reported as moved', 
   source.retryAmount = 0;
   source.reconnectAttempts = 0;
   const moved = [];
+  const orphaned = [];
+  manager.options.node.failover = { preserveOnFailure: true };
   manager.on('playersMoved', players => moved.push(...players));
+  manager.on('playersOrphaned', players => orphaned.push(...players));
 
   await source.close({ code: 1006, reason: 'destination-not-connected' });
 
   assert.deepEqual(moved, []);
+  assert.deepEqual(orphaned, [player], 'failed destination must not silently disappear');
   assert.equal(player.node, destination);
+  assert.equal(player.destroyed, false);
 });
 
 test('one rejected failover does not block recovery of other guilds', async t => {
