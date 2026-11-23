@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { inspectRegistry, fetchRegistry, parseArguments } = require('../scripts/check-npm-registry.cjs');
+const { inspectRegistry, fetchRegistry, parseArguments, isPublicationBlocked } = require('../scripts/check-npm-registry.cjs');
 
 const fixture = (version, channel) => ({
   name: 'nyxlink',
@@ -74,4 +74,14 @@ test('tag reruns use an explicit informational mode, while prepublish remains bl
   const occupied = inspectRegistry(fixture('0.1.0-dev.2', 'dev'), registry);
   assert.equal(occupied.versionAlreadyPublished, true);
   assert.equal(occupied.publicationApproved, false);
+});
+
+test('a published version blocks prepublish but never fails an informational tag rerun', () => {
+  const occupied = inspectRegistry(fixture('0.1.0-dev.2', 'dev'), registry);
+  const unused = inspectRegistry(fixture('5.3.0-rc.1', 'next'), registry);
+  assert.equal(isPublicationBlocked(occupied, parseArguments([])), true);
+  assert.equal(isPublicationBlocked(occupied, parseArguments(['--report-only'])), false);
+  assert.equal(isPublicationBlocked(unused, parseArguments([])), false);
+  assert.equal(isPublicationBlocked(unused, parseArguments(['--report-only'])), false);
+  assert.throws(() => isPublicationBlocked({}, { reportOnly: true }), TypeError);
 });
