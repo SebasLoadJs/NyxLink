@@ -72,7 +72,8 @@ export class NodeFailover {
             if (restored && player.node === target && target.connected && !target.destroyed) {
                 return { status: 'recovered', attempts, node: target };
             }
-            if (baseDelay && attempts < maxAttempts) await delay(retryDelay(baseDelay, 0, jitter, 60000));
+            // Exponential backoff: first failure uses baseDelay, subsequent failures grow.
+            if (baseDelay && attempts < maxAttempts) await delay(retryDelay(baseDelay, attempts - 1, jitter, 60000));
         }
         if (cancelled() || player.node !== source) return { status: 'cancelled', attempts };
         player.manager.emit('playerRecoveryFailed', player);
