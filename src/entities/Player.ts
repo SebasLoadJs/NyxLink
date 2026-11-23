@@ -1034,8 +1034,33 @@ export class Player {
                     if (!track) return false;
                     this.manager.emit("playerTriggeredSkip", this, this.current, track, position);
                     if (this.destroyed || !guard.isCurrent(ticket) || this.queue.get(position) !== track) return false;
-                    this.queue.remove(position);
-                    return await this.playNext({ track: track instanceof Track ? track : new Track(track, undefined, undefined, this.manager.options.trackPartial ?? []) }, ticket);
+                    // Keep a selected queue entry recoverable until playback is
+                    // acknowledged; an unsuccessful positional skip must not
+                    // silently change the order of the user's remaining tracks.
+                    const selected = this.queue.remove(position);
+                    if (!selected) return false;
+                    const playbackTrack = selected instanceof Track ? selected :
+                        new Track(selected, undefined, undefined, this.manager.options.trackPartial ?? []);
+                    let injectedTrackQueued = false;
+                    let played = false;
+                    try {
+                        played = await this.playNext({ track: playbackTrack }, ticket, () => true,
+                            queued => { injectedTrackQueued = queued; });
+                        return played;
+                    } finally {
+                        if (!played) {
+                            // playNext may have requeued its injected track after
+                            // a rejected REST response. Remove that insertion
+                            // before restoring the original position.
+                            if (injectedTrackQueued) {
+                                const injectedIndex = this.queue.tracks.indexOf(playbackTrack);
+                                if (injectedIndex >= 0) this.queue.remove(injectedIndex);
+                            }
+                            if (!this.destroyed && !this.manager.destroyed) {
+                                this.queue.insert(Math.min(position, this.queue.size), selected);
+                            }
+                        }
+                    }
                 } finally {
                     playbackAttempt(this).retain(ticket);
                 }
