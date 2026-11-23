@@ -39,6 +39,9 @@ async function verifyCommandSequence(player, node, tracks) {
   player.queue.add(tracks);
   if (!await player.play()) throw new Error('Live backend rejected initial play');
   checks.push('playAcknowledged');
+  await waitForSnapshot(node.rest, player.guildId, row => row.track?.encoded === tracks[0].encoded,
+    'first track');
+  checks.push('firstTrackConfirmed');
 
   await player.pause();
   await waitForSnapshot(node.rest, player.guildId, row => row.paused === true, 'pause');
@@ -60,6 +63,9 @@ async function verifyCommandSequence(player, node, tracks) {
 
   if (!await player.skip()) throw new Error('Live backend rejected skip');
   checks.push('skipAcknowledged');
+  await waitForSnapshot(node.rest, player.guildId, row => row.track?.encoded === tracks[1].encoded,
+    'second track');
+  checks.push('secondTrackConfirmed');
   return checks;
 }
 
