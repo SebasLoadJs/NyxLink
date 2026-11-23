@@ -86,6 +86,7 @@ export class DatabaseManager {
     if (parts.some(part => !part || ['__proto__', 'constructor', 'prototype'].includes(part)) || ['revision', 'schemaVersion'].includes(parts[0])) throw new TypeError('Invalid player storage path');
     const root = `${namespace}.${guildId}`;
     for (let attempt = 0; attempt < 8; attempt++) {
+      await this.manager.guildOwnership?.assertCurrent(guildId);
       const previous = await this.provider.get<Record<string, any>>(root);
       const revision = recordRevision(previous);
       if (deleting && previous === undefined) return false;
@@ -115,6 +116,7 @@ export class DatabaseManager {
         next.schemaVersion = 1;
         next.revision = randomUUID();
       }
+      await this.manager.guildOwnership?.assertCurrent(guildId);
       if (await this.replace(root, revision, next)) return true;
     }
     throw new SnapshotConflictError();
@@ -149,11 +151,13 @@ export class DatabaseManager {
     if (this.importing.has(guildId) || this.manager.players.has(guildId)) return Promise.reject(new SnapshotConflictError());
     this.importing.add(guildId);
     return this.mutate(async () => {
+      await this.manager.guildOwnership?.assertCurrent(guildId);
       const key = `players.${guildId}`;
       const previous = await this.provider.get(key);
       if (this.manager.players.has(guildId) || recordRevision(previous) !== expectedRevision) throw new SnapshotConflictError();
       const revision = randomUUID();
       const next = { ...snapshot.data, schemaVersion: 1, revision };
+      await this.manager.guildOwnership?.assertCurrent(guildId);
       if (!await this.replace(key, expectedRevision, next)) throw new SnapshotConflictError();
       return snapshotJSON({ ...snapshot, revision });
     }).finally(() => this.importing.delete(guildId));
@@ -170,6 +174,9 @@ export class DatabaseManager {
   }
 
   public clear(): Promise<void> {
+    if (this.manager.guildOwnership) {
+      return Promise.reject(new Error('Cannot clear shared storage while guild leases are active'));
+    }
     return this.mutate(() => this.provider.clear());
   }
 
