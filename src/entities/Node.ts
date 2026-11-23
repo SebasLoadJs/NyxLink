@@ -1398,8 +1398,12 @@ export class Node {
 
     if (reason === "finished" && player.loop === "queue" && player.current) {
       this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> Player ${player.guildId} is in queue loop mode. Adding current track to the end of the queue: ${player.current.title}.`);
-      player.current.position = 0;
-      player.queue.add(player.current);
+      // A completed song in queue-loop needs a new playback entry. The
+      // original Track may also enter history; sharing the same instance
+      // would allow later seeks and retries to mutate that history entry.
+      const loopTrack = player.current.clone();
+      loopTrack.position = 0;
+      player.queue.add(loopTrack);
       this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd << Queue size is now ${player.queue.size}.`);
     }
     
