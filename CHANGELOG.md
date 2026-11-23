@@ -16,6 +16,8 @@ This changelog describes the unreleased NyxLink 5.3 development line and its ver
 - Made `back()` transactional: previous history and the outgoing queue slot are committed only after backend acknowledgement; failed/aborted back attempts restore the original history and queue state.
 - Made positional `skip(index)` restore the selected entry to its original queue position on backend failure or a cancelled playback intent.
 - Preserved caller-owned and historical track positions on rejected `play()`, `back()` and positional `skip()` requests; malformed positional queue entries are rejected before removal.
+- Reworked `Queue.duplicate()` to create independent `Track` instances with isolated mutable metadata, preventing a seek or retry from changing other queued copies. Duplicate failures leave the original queue unchanged.
+- Added atomic input prevalidation for `Queue.add()` and `Queue.insert()`, plus guards for `unshift()` and `replace()`, to prevent invalid JavaScript entries from corrupting persisted queues.
 - Reworked `replay()` to use an independent track instance: rejected or cancelled restarts preserve the original playback position, successful restarts do not duplicate history, and immediately queued `seek()` commands retain their intended target.
 - Tightened recommendation seed validation for YouTube/YouTube Music and prevented failed or stale autoplay requests from deleting independently queued manual tracks.
 - Yielded in-flight autoplay recommendations when a listener queues music during asynchronous source resolution, including when the manually queued item is the same Track instance as the automatic candidate.
