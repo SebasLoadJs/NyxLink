@@ -69,4 +69,48 @@ async function verifyCommandSequence(player, node, tracks) {
   return checks;
 }
 
-module.exports = { waitForSnapshot, verifyCommandSequence };
+module.exports = { waitForSnapshot, verifyCommandSequence, verifyReconnectSequence };
+
+/**
+ * Controlled Discord voice leave/rejoin while track A is active. This checks
+ * SDK voice state and backend REST after a replay/restart, not audible output.
+ * The script caller must have explicit authorization for the voice channel.
+ */
+async function verifyReconnectSequence(player, node, track) {
+  if (!player || !node?.rest || typeof player.connect !== 'function' ||
+    typeof player.disconnect !== 'function' || typeof player.restart !== 'function' ||
+    !track || typeof track.encoded !== 'string' || !track.encoded) {
+    throw new TypeError('Voice reconnect smoke requires a player, node and an encoded track');
+  }
+  const checks = [];
+  player.queue.add([track]);
+  if (!await player.play()) throw new Error('Live backend rejected reconnect test playback');
+  await waitForSnapshot(node.rest, player.guildId, row => row.track?.encoded === track.encoded,
+    'reconnect initial track');
+  checks.push('initialTrackConfirmed');
+
+  // connect() is event-backed in NyxLink, rather than merely sending a
+  // gateway packet. A voice disconnect here is intentional and authorized.
+  await player.disconnect();
+  if (player.connected) throw new Error('Player remained locally connected after disconnect');
+  checks.push('disconnectConfirmed');
+
+  await player.connect();
+  if (!player.connected || !player.voice?.sessionId ||
+    !player.voice.token || !player.voice.endpoint) {
+    throw new Error('Voice credentials were not confirmed after reconnect');
+  }
+  checks.push('voiceReconnected');
+
+  // Preserve the original track and explicitly exercise the recovery path.
+  if (!await player.restart({ destroyOnFailure: false, startQueued: false })) {
+    throw new Error('Playback restart rejected after voice reconnect');
+  }
+  checks.push('restartAcknowledged');
+
+  await waitForSnapshot(node.rest, player.guildId,
+    row => row.track?.encoded === track.encoded && row.state?.connected === true,
+    'reconnected active track');
+  checks.push('backendVoiceAndTrackConfirmed');
+  return checks;
+}
