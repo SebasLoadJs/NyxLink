@@ -751,3 +751,66 @@ test('a stop during back acknowledgement cannot consume history or enqueue old p
   assert.deepEqual(player.queue.tracks, [queued]);
   assert.deepEqual(sent.map(p => p.track?.encoded), [prior.encoded, null]);
 });
+
+test('a rejected positional skip restores the original queue order', async t => {
+  const { node, player } = createPlayer(t);
+  const playing = createTrack('playing');
+  const first = createTrack('first');
+  const selected = createTrack('selected');
+  const last = createTrack('last');
+  player.current = playing;
+  player.playing = true;
+  player.queue.add([first, selected, last]);
+  node.rest.updatePlayer = async () => null;
+
+  assert.equal(await player.skip(1), false);
+  assert.equal(player.current, playing);
+  assert.equal(player.playing, true);
+  assert.deepEqual(player.queue.tracks, [first, selected, last]);
+});
+
+test('a successful positional skip consumes only the selected queue entry', async t => {
+  const { player, requests } = createPlayer(t);
+  const playing = createTrack('playing');
+  const first = createTrack('first');
+  const selected = createTrack('selected');
+  const last = createTrack('last');
+  player.current = playing;
+  player.playing = true;
+  player.queue.add([first, selected, last]);
+
+  assert.equal(await player.skip(1), true);
+  assert.equal(player.current, selected);
+  assert.deepEqual(player.queue.tracks, [first, last]);
+  assert.deepEqual(requests.filter(r => r.payload.track?.encoded).map(r => r.payload.track.encoded),
+    [selected.encoded]);
+});
+
+test('a concurrent stop does not lose a positional skip entry awaiting acknowledgement', async t => {
+  const { node, player } = createPlayer(t);
+  const playing = createTrack('playing');
+  const first = createTrack('first');
+  const selected = createTrack('selected');
+  const last = createTrack('last');
+  player.current = playing;
+  player.playing = true;
+  player.queue.add([first, selected, last]);
+  const entered = deferred();
+  const release = deferred();
+  node.rest.updatePlayer = async (_guild, payload) => {
+    if (payload.track?.encoded === selected.encoded) {
+      entered.resolve();
+      await release.promise;
+    }
+    return payload;
+  };
+
+  const skipping = player.skip(1);
+  await entered.promise;
+  const stopping = player.stop();
+  release.resolve();
+  assert.equal(await skipping, false);
+  await stopping;
+  assert.equal(player.current, null);
+  assert.deepEqual(player.queue.tracks, [first, selected, last]);
+});
