@@ -50,7 +50,7 @@ Referencia inicial CI: commit `2e2bc6bbfd1db20841cf658367c2c4956cc7915d` — [va
 | P3-034 | 5 (P3) | VoiceReceiver NodeLink opt-in | Implementado parcialmente | `src/entities/VoiceReceiver.ts`, `tests/voice-receiver-lifecycle.test.cjs` | Privacidad, consentimiento y recepción en vivo |
 | P3-035 | 5 (P3) | YouTube LiveChat | Implementado, lifecycle con regresiones | `src/entities/YouTubeLiveChat.ts`, `tests/youtube-livechat-lifecycle.test.cjs`, `docs/phase-3-nodelink.md` | Verificar chat real, permisos del proveedor y rate limits |
 | P3-036 | 5 (P3) | Storage externo y multi-proceso | Implementado parcialmente | `src/database/StorageAdapter.ts`, `tests/storage-adapter.test.cjs` | Concurrencia distribuida y contrato IPC/Redis opcional |
-| P3-037 | 5 (P3) | API privada de métricas opt-in | Pendiente de implementación | `docs/release-5.3-plan.md` | Diseño autenticado, contrato mínimo, pruebas de privacidad |
+| P3-037 | 5 (P3) | API privada de métricas opt-in | Implementado, CI final pendiente | `src/observability/PrivateMetricsServer.ts`, `tests/private-metrics.test.cjs`, `tests/types/public-api.ts`, `docs/private-metrics.md` | Verificar CI en HEAD, integración con panel autorizado y privacidad operativa real |
 | P3-038 | 5 (P3) | Refactor gradual Node/Player | Implementado parcialmente | `src/players/PlayerMigration.ts`, `src/nodes/SessionRecovery.ts` | Completar límites de módulos sin romper API |
 
 ## Ampliaciones acordadas después del plan original
