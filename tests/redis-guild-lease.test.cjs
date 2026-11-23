@@ -18,3 +18,19 @@ test('opt-in lease coordinator validates namespace, TTL, client and Discord guil
   await coordinator.close();
   await assert.rejects(coordinator.acquire(guild), /closed/);
 });
+
+test('a coordinator cannot be attached to two Managers at once', async t => {
+  const { Manager, RedisGuildLeaseCoordinator } = require('../dist');
+  const options = {
+    nodes: [{ host: '127.0.0.1', port: 2333, password: 'test' }],
+  };
+  const first = new Manager(options);
+  const second = new Manager(options);
+  const coordinator = new RedisGuildLeaseCoordinator({
+    client, namespace: 'exclusive_coordinator',
+  });
+  t.after(async () => Promise.allSettled([first.shutdown(), second.shutdown()]));
+  first.useGuildLeases({ coordinator });
+  assert.throws(() => second.useGuildLeases({ coordinator }), /only one Manager/);
+  assert.throws(() => first.useGuildLeases({ coordinator }), /before creating|once/);
+});
