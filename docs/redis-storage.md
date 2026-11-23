@@ -235,10 +235,24 @@ if (result === 'stale') {
 // Discord VOICE_STATE_UPDATE response or audible playback.
 ~~~
 
-The sender verifies its local lease against Redis and creates a fresh UUID
-command ID. The receiver validates the exact Discord voice opcode 4 packet
-shape, atomically compares the current Redis fencing generation and claims a
-deduplication key **before** invoking the gateway callback.
+The sender verifies its local lease against Redis, allocates a
+**monotonically increasing Redis sequence number per guild** and creates a
+fresh UUID command ID. The receiver validates the exact Discord voice opcode
+4 packet shape and atomically checks the current fencing generation, verifies
+that the sequence was allocated by Redis, and accepts it only if it is newer
+than the last accepted sequence. It then claims a deduplication key before
+invoking the gateway callback. The last accepted sequence is persistent,
+so old messages remain stale even when their replay keys expire.
+
+**Wire compatibility:** the IPC envelope protocol is now
+`nyxlink/guild-voice/2`, with a required integer `sequence` field.
+Old `nyxlink/guild-voice/1` envelopes are rejected. Upgrade both the
+sender and receiving workers together; do not mix IPC protocol versions.
+Within the same router instance, callbacks for one guild are serialized
+to prevent a delayed gateway send from finishing after the next one.
+Across **different receiver instances** or after external network sends,
+Discord ordering is not guaranteed; share an ownership-aware gateway
+dispatcher and validate real behavior.
 
 The possible return statuses are \`delivered\`, \`stale\` and \`duplicate\`.
 Invalid envelopes throw \`TypeError\`; Redis failures and callback failures
