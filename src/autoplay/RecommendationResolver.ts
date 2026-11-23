@@ -45,7 +45,10 @@ export class RecommendationResolver {
           searchSource = "youtubemusic";
           break;
         case "spotify":
-          if (node.isNodeLink && node.capabilities.has("source:spotify")) {
+          // A Spotify track ID is 22 base62 characters. Do not allow the
+          // identifier to inject extra query parameters into sprec searches.
+          if (node.isNodeLink && node.capabilities.has("source:spotify") &&
+              /^[A-Za-z0-9]{22}$/.test(identifier)) {
             uri = `seed_tracks=${identifier}`;
             searchSource = "sprec";
           }
