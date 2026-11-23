@@ -5,7 +5,7 @@ const { EventEmitter } = require('node:events');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
-const { validateConfiguration, errorCode, event, writePrivateReport } = require('../scripts/test-live-voice.cjs');
+const { validateConfiguration, errorCode, event, writePrivateReport, safeBackendVersion, safeTrackEndReason } = require('../scripts/test-live-voice.cjs');
 
 function config(){
  return {
@@ -104,4 +104,21 @@ test('live voice reports replace pre-existing public files with private atomic w
  if(process.platform!=='win32')assert.equal((await fs.stat(target)).mode&0o777,0o600);
  const files=await fs.readdir(path.dirname(target));
  assert.deepEqual(files,['report.json']);
+});
+
+
+test('live voice reports whitelist backend version and track-end reason', () => {
+  assert.equal(safeBackendVersion('3.10.0-dev.2026-11-15.8'), '3.10.0-dev.2026-11-15.8');
+  assert.equal(safeBackendVersion('4.2.2'), '4.2.2');
+  for (const value of [
+    '4.2.2 password=remote-secret',
+    '4.2.2\nAuthorization: Bearer leak',
+    'prefix-token-remote-secret',
+    'x'.repeat(100),
+  ]) {
+    assert.equal(safeBackendVersion(value), null);
+  }
+  assert.equal(safeTrackEndReason('crossfading'), 'crossfading');
+  assert.equal(safeTrackEndReason('finished'), 'finished');
+  assert.equal(safeTrackEndReason('malicious URL https://internal.test/secret'), 'unrecognized');
 });
