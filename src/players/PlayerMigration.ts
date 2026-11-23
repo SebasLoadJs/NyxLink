@@ -115,10 +115,15 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
         committed = true;
         rollback = undefined;
         const reason = await cleanup(source);
-        player.manager.emit('playerSwitchedNode', player, source, target);
-        report('recovered', reason);
+        // The destination is already committed. Observer exceptions must not
+        // turn a successful transfer into a rejected operation or a retry.
+        const notify = (callback: () => void): void => {
+            try { callback(); } catch { /* consumer listener failure */ }
+        };
+        notify(() => player.manager.emit('playerSwitchedNode', player, source, target));
+        notify(() => report('recovered', reason));
         if (original && !player.destroyed && guard.isCurrent(ticket) && player.node === target) {
-            player.manager.emit('playerResumed', player);
+            notify(() => player.manager.emit('playerResumed', player));
         }
         return true;
     } catch (error) {
