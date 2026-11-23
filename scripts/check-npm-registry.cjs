@@ -44,10 +44,22 @@ async function fetchRegistry(fetcher = fetch) {
   return result.json();
 }
 
+function parseArguments(args) {
+  if (!Array.isArray(args) || args.some(arg => typeof arg !== 'string')) {
+    throw new TypeError('Invalid npm preflight arguments');
+  }
+  if (args.length === 0) return Object.freeze({ reportOnly: false });
+  if (args.length === 1 && args[0] === '--report-only') {
+    return Object.freeze({ reportOnly: true });
+  }
+  throw new TypeError('Usage: check-npm-registry.cjs [--report-only]');
+}
+
 async function main() {
+  const { reportOnly } = parseArguments(process.argv.slice(2));
   const summary = inspectRegistry(manifest, await fetchRegistry());
-  console.log(JSON.stringify(summary, null, 2));
-  if (summary.versionAlreadyPublished) {
+  console.log(JSON.stringify({ ...summary, reportOnly }, null, 2));
+  if (summary.versionAlreadyPublished && !reportOnly) {
     console.error('This package version already exists on npm and must not be republished.');
     process.exitCode = 1;
   }
@@ -62,4 +74,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { inspectRegistry, fetchRegistry };
+module.exports = { inspectRegistry, fetchRegistry, parseArguments };
