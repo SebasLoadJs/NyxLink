@@ -1,5 +1,6 @@
 const { setTimeout: delay } = require('node:timers/promises');
 const fs = require('node:fs/promises');
+const { rmSync } = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { execFileSync, spawnSync } = require('node:child_process');
@@ -156,12 +157,14 @@ function buildForLiveVoice(directory = path.resolve(__dirname, '..')) {
     'NYXLINK_DISCORD_BOT_TOKEN', 'NYXLINK_NODE_PASSWORD',
     'NYXLINK_LIVE_TRACK_A', 'NYXLINK_LIVE_TRACK_B'
   ]) delete env[name];
-  const build = spawnSync(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-    ['run', 'build'], {
-      cwd: directory, env, encoding: 'utf8',
-      timeout: 120000, windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
+  // Equivalent to package.json's build script (clean dist/ then tsc),
+  // invoked through Node to work on Windows without invoking a command shell.
+  rmSync(path.join(directory, 'dist'), { recursive: true, force: true });
+  const build = spawnSync(process.execPath, [path.join(directory, 'node_modules', 'typescript', 'bin', 'tsc')], {
+    cwd: directory, env, encoding: 'utf8',
+    timeout: 120000, windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
   if (build.error || build.status !== 0 || sourceRevision(directory) !== revision) {
     throw new Error('Could not validate a clean TypeScript build for live voice acceptance');
   }
