@@ -33,11 +33,19 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
     const cleanup = async (node: Node): Promise<string | undefined> => {
         try { await node.rest.destroyPlayer(player.guildId, { timeoutMs: 10000 }); }
         catch (error) {
-            player.manager.emit('nodeError', node, error as Error);
-            return (error as Error).message;
+            const failure = error instanceof Error ? error : new Error(String(error));
+            // A user-supplied event listener must not abort rollback or re-enter
+            // cleanup after the backend has already rejected the request.
+            try { player.manager.emit('nodeError', node, failure); } catch { /* observer failure */ }
+            return failure.message;
         }
     };
     let rollback: (() => Promise<void>) | undefined;
+    const runRollback = async (): Promise<void> => {
+        const action = rollback;
+        rollback = undefined;
+        if (action) await action();
+    };
     let committed = false;
     try {
         if (!active() || source === target) return false;
@@ -78,8 +86,9 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
             player.set('lastKnownPosition', snapshot.lastKnownPosition);
             for (const [track, backend] of tagged) track.backend = backend;
             restoreAttempt(ticket);
-            await persist(true);
-            await cleanup(target);
+            // Storage observers can throw; target cleanup still must be attempted.
+            try { await persist(true); }
+            finally { await cleanup(target); }
         };
         player.node = target;
         player.current = resolved;
@@ -87,8 +96,7 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
         // Source acknowledgements cannot prove that the destination is synchronized.
         player.set('lastState', undefined);
         if (!await player.restart({ destroyOnFailure: false, startQueued: false, [migrationRestart]: true }) || !active()) {
-            await rollback();
-            rollback = undefined;
+            await runRollback();
             report(guard.isCurrent(ticket) ? 'failed' : 'cancelled');
             return false;
         }
@@ -100,8 +108,7 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
         }
         await persist();
         if (!active()) {
-            await rollback();
-            rollback = undefined;
+            await runRollback();
             report('cancelled');
             return false;
         }
@@ -116,7 +123,7 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
         return true;
     } catch (error) {
         if (committed) throw error;
-        if (rollback) await rollback();
+        if (rollback) await runRollback();
         report(guard.isCurrent(ticket) ? 'failed' : 'cancelled', (error as Error).message);
         return false;
     } finally {
