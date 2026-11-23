@@ -7,9 +7,10 @@ const { RedisGuildIpcRouter } = require('../dist');
 const GUILD = '123456789012345678';
 const VOICE = '223456789012345678';
 const validEnvelope = () => ({
-  protocol: 'nyxlink/guild-voice/1',
+  protocol: 'nyxlink/guild-voice/2',
   guildId: GUILD,
   fencingToken: 12,
+  sequence: 1,
   commandId: randomUUID(),
   packet: {
     op: 4,
@@ -45,6 +46,11 @@ test('IPC rejects malformed input before contacting Redis or invoking a gateway'
     { ...input, protocol: 'made-up' },
     { ...input, fencingToken: -1 },
     { ...input, fencingToken: Number.MAX_SAFE_INTEGER + 1 },
+    { ...input, sequence: 0 },
+    { ...input, sequence: 1.5 },
+    { ...input, sequence: Number.MAX_SAFE_INTEGER + 1 },
+    { ...input, sequence: undefined },
+    { ...input, protocol: 'nyxlink/guild-voice/1' },
     { ...input, commandId: 'test' },
     { ...input, packet: { op: 4, d: { ...input.packet.d, channel_id: 'invalid' } } },
     { ...input, packet: { op: 4, d: { ...input.packet.d, self_deaf: 1 } } },
@@ -60,7 +66,7 @@ test('IPC router fails closed on Redis stale status and suppresses duplicates', 
   const router = new RedisGuildIpcRouter({
     client: { sendCommand: async args => {
       assert.equal(args[0], 'EVAL');
-      assert.equal(args[2], '2');
+      assert.equal(args[2], '4');
       return code;
     } },
     namespace: 'safe',
@@ -95,5 +101,33 @@ test('IPC sender must verify a live local lease before preparing an envelope', a
   const prepared = await router.prepare(ownership, GUILD, validEnvelope().packet);
   assert.equal(prepared.guildId, GUILD);
   assert.equal(prepared.fencingToken, 17);
+  assert.equal(prepared.sequence, 1);
+  assert.equal(prepared.protocol, 'nyxlink/guild-voice/2');
   assert.equal(prepared.packet.op, 4);
+});
+
+test('preparation refuses a lease handoff between initial check and Redis sequencing', async () => {
+  const router = new RedisGuildIpcRouter({
+    client: { sendCommand: async () => 0 },
+    namespace: 'race',
+  });
+  const owner = {
+    assertCurrent: async () => undefined,
+    localLease: () => ({ guildId: GUILD, fencingToken: 19 }),
+  };
+  await assert.rejects(router.prepare(owner, GUILD, validEnvelope().packet), /lease changed/);
+});
+
+test('sequence allocation rejects unexpected Redis values and never creates an envelope', async () => {
+  const owner = {
+    assertCurrent: async () => undefined,
+    localLease: () => ({ guildId: GUILD, fencingToken: 19 }),
+  };
+  for (const value of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, 'not a number']) {
+    const router = new RedisGuildIpcRouter({
+      client: { sendCommand: async () => value },
+      namespace: 'bad_sequence',
+    });
+    await assert.rejects(router.prepare(owner, GUILD, validEnvelope().packet), /Invalid Redis/);
+  }
 });
