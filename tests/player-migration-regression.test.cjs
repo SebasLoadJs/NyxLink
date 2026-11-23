@@ -108,3 +108,38 @@ test('successful migration retains target when source cleanup fails', async t =>
   const saved = await manager.database.get(`players.${player.guildId}`);
   assert.equal(saved.node, target.identifier);
 });
+
+test('stop during in-flight migration cancels target commit and stops original player', async t => {
+  const { manager, node: source, player } = createPlayer(t);
+  const target = attachDestination(t, manager);
+  const current = createTrack('migration-stopped');
+  player.current = current;
+  player.playing = true;
+
+  let signalEntered;
+  let signalRelease;
+  const entered = new Promise(resolve => { signalEntered = resolve; });
+  const released = new Promise(resolve => { signalRelease = resolve; });
+  let targetCleanups = 0;
+  target.rest.destroyPlayer = async () => { targetCleanups++; };
+  player.restart = async () => {
+    signalEntered();
+    await released;
+    return true;
+  };
+
+  const migrating = player.transferNode(target);
+  await entered;
+  const stopping = player.stop();
+  signalRelease();
+  assert.equal(await migrating, false);
+  await stopping;
+
+  assert.equal(player.node, source);
+  assert.equal(player.current, null);
+  assert.equal(player.playing, false);
+  assert.equal(targetCleanups, 1);
+  const saved = await manager.database.get(`players.${player.guildId}`);
+  assert.equal(saved.node, source.identifier);
+  assert.equal(saved.current, null);
+});
