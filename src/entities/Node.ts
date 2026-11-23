@@ -1392,10 +1392,11 @@ export class Node {
       // A raw backend PATCH bypasses replay's acknowledged state transition:
       // after TrackEnd the local player would remain stopped and retain its
       // old position. Reuse the normal, history-safe replay command instead.
-      if (await player.replay()) return;
-      // Rejected replay must not strand the remaining manual queue. It can
-      // still advance normally below, without repeating the failed track.
-      if (!playbackGuard(player).isCurrent(intent) || player.destroyed) return;
+      // A failed restart leaves the original track and any manual queue
+      // intact. Do not send another play command here: replay itself advances
+      // the playback guard and a newer user command may already supersede it.
+      await player.replay();
+      return;
     }
 
     if (reason === "finished" && player.loop === "queue" && player.current) {
