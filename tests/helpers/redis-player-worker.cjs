@@ -1,6 +1,7 @@
 'use strict';
 const { connectRedis } = require('./redis-client.cjs');
 const { ownedManager, GUILD } = require('./owned-manager.cjs');
+const { RedisGuildIpcRouter } = require('../../dist');
 
 async function main() {
   if (!process.send) throw new Error('IPC is required');
@@ -14,7 +15,26 @@ async function main() {
   process.send({ event: 'acquired', fencingToken: lease.fencingToken });
   let exiting = false;
   process.on('message', async message => {
-    if (!message || message.event !== 'release' || exiting) return;
+    if (!message || exiting) return;
+    if (message.event === 'prepareVoiceIpc') {
+      try {
+        const router = new RedisGuildIpcRouter({ client, namespace });
+        const envelope = await router.prepare(manager.guildOwnership, GUILD, {
+          op: 4,
+          d: {
+            guild_id: GUILD,
+            channel_id: options.voiceChannelId,
+            self_deaf: true,
+            self_mute: false,
+          },
+        });
+        process.send({ event: 'voiceEnvelope', envelope });
+      } catch (error) {
+        process.send({ event: 'error', message: String(error?.message ?? error) });
+      }
+      return;
+    }
+    if (message.event !== 'release') return;
     exiting = true;
     try {
       await player.destroy('worker shutdown');
