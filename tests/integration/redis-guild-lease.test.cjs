@@ -67,11 +67,15 @@ test('lease ownership is independent per guild and per bot namespace', async t =
   const other = new RedisGuildLeaseCoordinator({
     client: clientA, namespace: namespace + '_other',
   });
-  t.after(() => other.close());
-  const independent = await other.acquire(guild);
-  assert.ok(independent);
-  assert.equal(await a.isCurrent(first), true);
-  assert.equal(await b.isCurrent(second), true);
+  try {
+    const independent = await other.acquire(guild);
+    assert.ok(independent);
+    assert.equal(await a.isCurrent(first), true);
+    assert.equal(await b.isCurrent(second), true);
+  } finally {
+    // Close the extra owner before setup's after hook closes its Redis socket.
+    await other.close();
+  }
 });
 
 test('closing during an in-flight acquisition cannot strand a Redis lease', async t => {
