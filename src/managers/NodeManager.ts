@@ -182,7 +182,8 @@ export class NodeManager {
             const result = results[index];
             return result.status === 'recovered' && !!result.node &&
                 registered(player) && player.node === result.node &&
-                result.node !== node && result.node.connected && !result.node.destroyed;
+                result.node !== node && this.nodes.get(result.node.identifier) === result.node &&
+                result.node.connected && !result.node.destroyed;
         };
         // A cancellation on the source represents a newer intent. The node
         // cannot be removed while that command still owns the player.
