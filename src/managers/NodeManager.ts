@@ -192,9 +192,10 @@ export class NodeManager {
                 result.node !== node && this.nodes.get(result.node.identifier) === result.node &&
                 result.node.connected && !result.node.destroyed;
         };
-        // A cancellation on the source represents a newer intent. The node
-        // cannot be removed while that command still owns the player.
-        if (players.some((player, index) => results[index].status === 'cancelled' && attached(player))) return false;
+        // A cancelled migration represents a newer playback or ownership
+        // intent, even if its destination has not connected yet. Never turn
+        // that cancellation into permission to destroy a user session.
+        if (players.some((player, index) => results[index].status === 'cancelled' && registered(player))) return false;
         // Inconsistent ACKs for an unrelated *live* owner are ambiguous:
         // do not destroy a potentially newer user session or eject its source.
         if (players.some((player, index) => results[index].status === 'recovered' &&
