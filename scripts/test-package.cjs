@@ -54,6 +54,7 @@ async function main() {
       for (const name of ${JSON.stringify(baseline)}) assert.ok(name in api, name);
       for (const name of ['PlayerSnapshotCodec', 'SnapshotConflictError', 'SnapshotValidationError']) assert.equal(typeof api[name], 'function');
       assert.equal(api.version, ${JSON.stringify(manifest.version)});
+      for (const name of ['RedisStorage', 'RedisGuildLeaseCoordinator', 'RedisGuildIpcRouter', 'PrivateMetricsServer']) assert.equal(typeof api[name], 'function');
       const m = new api.Manager({nodes:[{host:'127.0.0.1',port:2333,password:'local-fixture'}],options:{database:{type:'memory'}}});
       assert.ok(m.options.clientName.startsWith('NyxLink/'));
       m.shutdown().catch(error=>{console.error(error);process.exitCode=1});`;
@@ -62,9 +63,10 @@ async function main() {
     assert.equal(commonjs.stdout, ''); assert.equal(commonjs.stderr, '');
     checks.push('CommonJS public exports, metadata and silent lifecycle');
     await fs.writeFile(path.join(consumer, 'esm.mjs'), `import assert from 'node:assert/strict';
-      import { Manager, Track, TrackCodec, TrackResolver, Memory, PlayerSnapshotCodec, SnapshotConflictError, version } from ${specifier};
+      import { Manager, Track, TrackCodec, TrackResolver, Memory, PlayerSnapshotCodec, SnapshotConflictError, RedisStorage, RedisGuildLeaseCoordinator, RedisGuildIpcRouter, PrivateMetricsServer, version } from ${specifier};
       assert.equal(version, ${JSON.stringify(manifest.version)});
       assert.equal(typeof Track, 'function'); assert.equal(typeof TrackCodec.serialize, 'function'); assert.equal(typeof TrackResolver.resolve, 'function');
+      for (const component of [RedisStorage, RedisGuildLeaseCoordinator, RedisGuildIpcRouter, PrivateMetricsServer]) assert.equal(typeof component, 'function');
       const adapter = new Memory(); await adapter.set('fixture', 7); assert.equal(await adapter.get('fixture'), 7);
       assert.equal(await adapter.compareAndSet('record', null, { revision: 'installed-revision' }), true);
       assert.equal(PlayerSnapshotCodec.fromRecord({guildId:'123456789012345678',voiceChannelId:'223456789012345678'}).schemaVersion, 1);
