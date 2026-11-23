@@ -30,7 +30,7 @@ async function setup(t) {
     await cleaner.shutdown();
     await Promise.all([aClient.close(), bClient.close()]);
   });
-  return { a, b, sender, receiver };
+  return { a, b, sender, receiver, namespace, aClient, bClient };
 }
 
 test('owner prepares an IPC packet; receiver checks Redis and delivers only once', async t => {
@@ -228,19 +228,19 @@ test('IPC sender sequence is monotonic under concurrent preparation on separate 
 });
 
 test('an older sequence stays stale after deduplication key expiry', async t => {
-  const { a, receiver, sender } = await setup(t);
+  const { a, sender, namespace, bClient } = await setup(t);
   const shortReceiver = new RedisGuildIpcRouter({
-    client: { sendCommand: (...args) => receiver.client.sendCommand(...args) },
-    namespace: 'not-used',
+    client: bClient, namespace, dedupeTtlMs: 1000,
   });
-  // Both packets are prepared and routed through the regular namespace.
   const player = await a.manager.players.createOwned(a.options);
   player.stopHealthCheck();
   const first = await sender.prepare(a.manager.guildOwnership, GUILD, packet());
   const second = await sender.prepare(a.manager.guildOwnership, GUILD, packet());
   const delivered = [];
-  assert.equal(await receiver.dispatch(second, p => delivered.push(p)), 'delivered');
-  assert.equal(await receiver.dispatch(first, p => delivered.push(p)), 'stale');
+  assert.equal(await shortReceiver.dispatch(second, p => delivered.push(p)), 'delivered');
+  await new Promise(resolve => setTimeout(resolve, 1150));
+  // The old replay entry has expired, but the last accepted sequence persists.
+  assert.equal(await shortReceiver.dispatch(first, p => delivered.push(p)), 'stale');
+  assert.equal(await shortReceiver.dispatch(second, p => delivered.push(p)), 'stale');
   assert.equal(delivered.length, 1);
-  void shortReceiver; // the lasting sequence key is independent of replay dedupe TTL.
 });
