@@ -764,7 +764,10 @@ export class Node {
           }
         });
         for (const [target, players] of destinations) this.manager.emit('playersMoved', players, this, target);
-        orphanedPlayers = orphanedPlayers.filter((_, index) => transfers[index].status === 'failed');
+        // A cancelled recovery is not a successful transfer. Keep any player
+        // still owned by the disconnected node eligible for resume/cleanup.
+        orphanedPlayers = orphanedPlayers.filter((player, index) =>
+          !player.destroyed && player.node === this && transfers[index].status !== 'recovered');
         moved = orphanedPlayers.length === 0;
     }
 
