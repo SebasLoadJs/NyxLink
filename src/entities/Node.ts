@@ -781,10 +781,12 @@ export class Node {
           }
         });
         for (const [target, players] of destinations) this.manager.emit('playersMoved', players, this, target);
-        // A cancelled recovery is not a successful transfer. Keep any player
-        // still owned by the disconnected node eligible for resume/cleanup.
+        // An ACKed transfer can still land on a node that disconnects
+        // immediately. Such a player is not recovered and must be reported
+        // as orphaned rather than silently omitted from cleanup.
         orphanedPlayers = orphanedPlayers.filter(player =>
-          !player.destroyed && player.node === this);
+          !player.destroyed && (player.node === this ||
+            !player.node.connected || player.node.destroyed));
         moved = orphanedPlayers.length === 0;
     }
 
