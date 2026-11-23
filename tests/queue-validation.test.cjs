@@ -159,3 +159,23 @@ test('queue entry validation supports playable Track-compatible subclasses', asy
   assert.equal(player.queue.first, subclass);
   assert.equal(player.queue.size, 1);
 });
+
+test('custom track that throws during serialization cannot partially insert', async t => {
+  const { player, manager } = createPlayer(t);
+  const q = player.queue;
+  const good = createTrack('serialize-good');
+  const bad = {
+    encoded: 'encoded-serialize-bad',
+    getInfo: () => good.getInfo(),
+    toJSON: () => { throw new Error('untrusted serialization'); },
+  };
+  let adds = 0;
+  manager.on('queueAdd', () => adds++);
+
+  assert.throws(() => q.add([good, bad]), /playable Track/);
+  assert.throws(() => q.insert(0, [good, bad]), /playable Track/);
+  assert.throws(() => q.unshift(bad), /playable Track/);
+  assert.equal(q.replace(0, bad), false);
+  assert.deepEqual(q.tracks, []);
+  assert.equal(adds, 0);
+});
