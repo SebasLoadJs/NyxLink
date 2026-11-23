@@ -1,6 +1,29 @@
 const { setTimeout: delay } = require('node:timers/promises');
 
 /**
+ * Bound each backend/gateway command itself, not only its subsequent REST
+ * status polling. The underlying request may finish late; consumers must
+ * shut down the isolated test player after a timeout.
+ */
+async function withDeadline(operation, label, timeoutMs = 15000) {
+  if (typeof operation !== 'function' || typeof label !== 'string' || !/^[a-zA-Z0-9 -]{1,80}$/.test(label) ||
+      !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60000) {
+    throw new TypeError('A bounded live command needs a safe label and a timeout of 1..60000ms');
+  }
+  const timer = new AbortController();
+  try {
+    return await Promise.race([
+      Promise.resolve().then(operation),
+      delay(timeoutMs, undefined, { signal: timer.signal }).then(() => {
+        throw new Error('Live command timed out: ' + label);
+      }),
+    ]);
+  } finally {
+    timer.abort();
+  }
+}
+
+/**
  * Live backend command acceptance. Does not infer that listeners heard audio:
  * only acknowledged REST state and queue movement are measured.
  */
@@ -37,17 +60,17 @@ async function verifyCommandSequence(player, node, tracks) {
   }
   const checks = [];
   player.queue.add(tracks);
-  if (!await player.play()) throw new Error('Live backend rejected initial play');
+  if (!await withDeadline(() => player.play(), 'initial play', 30000)) throw new Error('Live backend rejected initial play');
   checks.push('playAcknowledged');
   await waitForSnapshot(node.rest, player.guildId, row => row.track?.encoded === tracks[0].encoded,
     'first track');
   checks.push('firstTrackConfirmed');
 
-  await player.pause();
+  await withDeadline(() => player.pause(), 'pause');
   await waitForSnapshot(node.rest, player.guildId, row => row.paused === true, 'pause');
   checks.push('pauseConfirmed');
 
-  await player.resume();
+  await withDeadline(() => player.resume(), 'resume');
   await waitForSnapshot(node.rest, player.guildId, row => row.paused === false, 'resume');
   checks.push('resumeConfirmed');
 
@@ -55,13 +78,13 @@ async function verifyCommandSequence(player, node, tracks) {
   await waitForSnapshot(node.rest, player.guildId, row => row.volume === 40, 'volume');
   checks.push('volumeConfirmed');
 
-  await player.seek(5000);
+  await withDeadline(() => player.seek(5000), 'seek');
   await waitForSnapshot(node.rest, player.guildId, row =>
     typeof row.state?.position === 'number' && row.state.position >= 4000,
     'seek');
   checks.push('seekConfirmed');
 
-  if (!await player.skip()) throw new Error('Live backend rejected skip');
+  if (!await withDeadline(() => player.skip(), 'skip')) throw new Error('Live backend rejected skip');
   checks.push('skipAcknowledged');
   await waitForSnapshot(node.rest, player.guildId, row => row.track?.encoded === tracks[1].encoded,
     'second track');
@@ -69,7 +92,7 @@ async function verifyCommandSequence(player, node, tracks) {
   return checks;
 }
 
-module.exports = { waitForSnapshot, verifyCommandSequence, verifyReconnectSequence };
+module.exports = { withDeadline, waitForSnapshot, verifyCommandSequence, verifyReconnectSequence };
 
 /**
  * Controlled Discord voice leave/rejoin while track A is active. This checks
@@ -84,18 +107,18 @@ async function verifyReconnectSequence(player, node, track) {
   }
   const checks = [];
   player.queue.add([track]);
-  if (!await player.play()) throw new Error('Live backend rejected reconnect test playback');
+  if (!await withDeadline(() => player.play(), 'reconnect initial play', 30000)) throw new Error('Live backend rejected reconnect test playback');
   await waitForSnapshot(node.rest, player.guildId, row => row.track?.encoded === track.encoded,
     'reconnect initial track');
   checks.push('initialTrackConfirmed');
 
   // connect() is event-backed in NyxLink, rather than merely sending a
   // gateway packet. A voice disconnect here is intentional and authorized.
-  await player.disconnect();
+  await withDeadline(() => player.disconnect(), 'voice disconnect', 20000);
   if (player.connected) throw new Error('Player remained locally connected after disconnect');
   checks.push('disconnectConfirmed');
 
-  await player.connect();
+  await withDeadline(() => player.connect(), 'voice reconnect', 45000);
   if (!player.connected || !player.voice?.sessionId ||
     !player.voice.token || !player.voice.endpoint) {
     throw new Error('Voice credentials were not confirmed after reconnect');
@@ -103,7 +126,7 @@ async function verifyReconnectSequence(player, node, track) {
   checks.push('voiceReconnected');
 
   // Preserve the original track and explicitly exercise the recovery path.
-  if (!await player.restart({ destroyOnFailure: false, startQueued: false })) {
+  if (!await withDeadline(() => player.restart({ destroyOnFailure: false, startQueued: false }), 'voice restart', 45000)) {
     throw new Error('Playback restart rejected after voice reconnect');
   }
   checks.push('restartAcknowledged');
