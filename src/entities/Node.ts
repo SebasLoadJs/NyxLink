@@ -632,7 +632,7 @@ export class Node {
       `Moonlink.js > Node >> Session not resumed for node ${this.identifier}. Starting disaster recovery (${reason}).`
     );
     const playersOnNode = this.manager.players.filter(
-      (p) => p.node.uuid === this.uuid
+      (p) => p.node === this
     );
     try {
       await Promise.all(playersOnNode.map(async player => {
@@ -764,7 +764,7 @@ export class Node {
     if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
     this.reconnectTimeout = undefined;
 
-    let orphanedPlayers = this.manager.players.filter((p) => p.node.uuid === this.uuid);
+    let orphanedPlayers = this.manager.players.filter((p) => p.node === this);
     let moved = false;
 
     if (orphanedPlayers.length > 0 && this.manager.options.node?.autoMovePlayers) {
