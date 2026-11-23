@@ -176,3 +176,18 @@ const sponsorClear: Promise<void> = node.rest.clearLavalinkSponsorBlockCategorie
 // @ts-expect-error Server-side categories are a closed official list.
 node.setLavalinkSponsorBlockCategories('123456789012345678', ['made_up']);
 void [sponsorRead, sponsorWrite, sponsorClear];
+
+
+const privateMetricsOptions: import('../../dist').PrivateMetricsOptions = {
+    token: 'test-secret-for-private-diagnostics-only-12345',
+    port: 0,
+};
+const metricsEndpoint: Promise<import('../../dist').PrivateMetricsServer> =
+    manager.startPrivateMetricsServer(privateMetricsOptions);
+const summary: import('../../dist').PrivateMetricsSnapshot | undefined = undefined;
+const nodeSummary: import('../../dist').PrivateMetricsNode | undefined = undefined;
+// @ts-expect-error Remote metrics binding is not supported by the core.
+manager.startPrivateMetricsServer({ token: 'x', host: '0.0.0.0' });
+// @ts-expect-error Remote dashboards cannot request arbitrary guild-identifying metrics.
+const personalGuildId: string = ({} as import('../../dist').PrivateMetricsNode).guildId;
+void [metricsEndpoint, summary, nodeSummary, personalGuildId];
