@@ -16,9 +16,21 @@ export class Queue {
     /** Accept custom Track subclasses while rejecting objects that cannot be stored or played. */
     private static validTrack(track: unknown): track is Track {
         if (!track || typeof track !== 'object') return false;
-        const candidate = track as Partial<Track>;
-        return typeof candidate.encoded === 'string' && candidate.encoded.length > 0 &&
-            typeof candidate.getInfo === 'function' && typeof candidate.toJSON === 'function';
+        try {
+            const candidate = track as Partial<Track>;
+            if (typeof candidate.encoded !== 'string' || !candidate.encoded ||
+                typeof candidate.getInfo !== 'function' || typeof candidate.toJSON !== 'function') {
+                return false;
+            }
+            // Some JavaScript consumers provide custom Track-compatible objects.
+            // Reject implementations whose serialization fails before mutating
+            // the queue; persistence immediately serializes these same entries.
+            const snapshot = TrackCodec.serialize(candidate as Track);
+            return snapshot?.encoded === candidate.encoded &&
+                !!snapshot.info && typeof snapshot.info === 'object';
+        } catch {
+            return false;
+        }
     }
 
     private _updateQueue(): void {
