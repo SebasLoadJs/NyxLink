@@ -1384,7 +1384,10 @@ export class Node {
       return;
     }
 
-    if (player.loop === "track" && player.current) {
+    // Looping is for normally completed songs. A failed load must respect
+    // the bounded retry policy above; otherwise track/queue loop can replay a
+    // permanently unavailable source forever, even after retries are exhausted.
+    if (reason === "finished" && player.loop === "track" && player.current) {
       this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> Player ${player.guildId} is in track loop mode. Replaying track: ${player.current.title}.`);
       await player.updatePlayer({
         track: { encoded: player.current.encoded },
@@ -1393,7 +1396,7 @@ export class Node {
       return;
     }
 
-    if (player.loop === "queue" && player.current) {
+    if (reason === "finished" && player.loop === "queue" && player.current) {
       this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> Player ${player.guildId} is in queue loop mode. Adding current track to the end of the queue: ${player.current.title}.`);
       player.current.position = 0;
       player.queue.add(player.current);
