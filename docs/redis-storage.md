@@ -180,6 +180,96 @@ of exactly-one-active-Discord-voice-session across a network partition.
 - The Redis 7 workflow runs on Node.js 22 and 24. A green workflow proves
   these isolated lifecycle contracts, not audio heard through Discord.
 
+## Optional fenced Discord voice gateway IPC
+
+For distributed bots, \`RedisGuildIpcRouter\` provides a **receiver-side
+fencing gate** for Discord voice-state commands. It is opt-in and does not
+start a broker or change \`Manager.send\`, which remains the bot's connector
+callback. The bot controls how to send and authenticate IPC messages.
+
+A guild owner must first hold an active lease via
+\`manager.useGuildLeases(...)\` and \`players.createOwned(...)\`.
+
+**Sender process** (the bot's voice/gateway-routing layer):
+
+~~~ts
+import { RedisGuildIpcRouter } from 'nyxlink';
+
+const router = new RedisGuildIpcRouter({
+  client: { sendCommand: args => redis.sendCommand(args) },
+  namespace: 'obey_staging',
+});
+
+const guildId = '123456789012345678';
+const envelope = await router.prepare(manager.guildOwnership!, guildId, {
+  op: 4,
+  d: {
+    guild_id: guildId,
+    channel_id: '223456789012345678',
+    self_deaf: true,
+    self_mute: false,
+  },
+});
+
+// Use an authenticated IPC channel to the worker that owns this Discord shard.
+await applicationIpc.send(envelope);
+~~~
+
+**Receiving gateway shard process** (must use the **same namespace** and Redis
+deployment, but need not own the lease itself):
+
+~~~ts
+const result = await router.dispatch(incomingEnvelope, async packet => {
+  // Route through the receiving application's actual Discord shard gateway.
+  await shardGateway.send(packet);
+});
+
+if (result === 'stale') {
+  // Lease expired or belongs to a newer owner; never deliver.
+} else if (result === 'duplicate') {
+  // Same commandId already claimed inside the dedupe TTL.
+}
+// 'delivered' means the provided callback resolved; it does not prove a
+// Discord VOICE_STATE_UPDATE response or audible playback.
+~~~
+
+The sender verifies its local lease against Redis and creates a fresh UUID
+command ID. The receiver validates the exact Discord voice opcode 4 packet
+shape, atomically compares the current Redis fencing generation and claims a
+deduplication key **before** invoking the gateway callback.
+
+The possible return statuses are \`delivered\`, \`stale\` and \`duplicate\`.
+Invalid envelopes throw \`TypeError\`; Redis failures and callback failures
+reject, rather than silently reporting success. Deduplication is
+**at most once per command ID within its configured TTL** (1..300 seconds).
+A callback that throws has still consumed its command ID: application
+retry logic must intentionally prepare a *new command* after checking
+ownership and current desired gateway state. Do not blindly replay packets.
+
+**Security and correctness boundary:**
+
+- The fencing generation is **not an authentication secret**. Authenticate
+  and authorize the IPC transport separately; Redis credentials never go
+  inside the envelope.
+- Redis checking and sending to Discord are **not one distributed
+  transaction**. A lease can transfer immediately after the check but
+  before an external gateway network send. True end-to-end fencing requires
+  cooperation from every downstream command consumer.
+- NyxLink's normal \`Manager.send\` remains public for backward compatibility.
+  Applications that need IPC guarantees must route their gateway sends
+  through this fenced path, not invoke a raw \`Manager.send\` from stale
+  workers.
+- The router validates *only* gateway voice opcode 4. Music-player REST
+  commands are protected separately by the player/REST lease checks; this
+  does not certify exactly-once audio.
+- Redis TTL and lease counter state are part of operational correctness.
+  Do not reset production counter keys or reuse namespaces across bots.
+
+The independent-process and real Redis integration tests live in
+\`tests/integration/redis-guild-ipc.test.cjs\` and
+\`tests/helpers/redis-player-worker.cjs\`. GitHub Actions runs the suite on
+Node.js 22 and 24.
+
 ## Testing
 
 An isolated, real Redis 7 integration job runs on both Node.js 22 and 24:
