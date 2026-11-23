@@ -41,6 +41,8 @@ GITHUB_REF=refs/tags/v5.3.0-rc.1 pnpm run release:check-tag
 
 The ref check is read-only and **only checks manifest/version/tag consistency**. It does not verify CI, npm account ownership, the tag's remote object, audio quality, or approval to publish. The CI workflow must supply an authentic `GITHUB_REF`; setting an environment variable manually is not evidence of a remote tag.
 
+When the RC/stable tag is pushed, [release-tag-gate.yml](../.github/workflows/release-tag-gate.yml) runs these package validations **automatically and without publishing anything**. It has read-only repository permissions and no npm publish step. Require its successful result on the exact tag SHA before manual publication, in addition to all baseline integration, security, endurance and real-voice acceptance evidence.
+
 ## Explicit RC publication and package acceptance
 
 After the user approves the RC, publish the tagged, reviewed package to **`next`**, not `latest`. The existing `.github/workflows/npm-publish.yml` deliberately does not publish; do not assume a green workflow has uploaded anything.
