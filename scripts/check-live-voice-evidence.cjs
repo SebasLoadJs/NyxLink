@@ -54,7 +54,8 @@ function inspectReports(revision, entries) {
     const actual = mode === 'commands' ? report.commandChecks :
       mode === 'reconnect' ? report.reconnectChecks : null;
     const protocol = expected ? JSON.stringify(actual) === JSON.stringify(expected) :
-      report.remainingQueue === 0 && Array.isArray(report.transitionReasons) &&
+      report.remainingQueue === 0 && report.crossfadeEventObserved === true &&
+      Array.isArray(report.transitionReasons) && report.transitionReasons.includes('crossfading') &&
       Array.isArray(report.events) && report.events.some(event => event.type === 'trackStart' && event.track === 'A') &&
       report.events.some(event => event.type === 'trackStart' && event.track === 'B');
     results[id] = base && protocol ? 'protocol-pass' : 'failed';
