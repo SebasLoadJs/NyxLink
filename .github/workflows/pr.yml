@@ -2,9 +2,9 @@ name: Validate NyxLink
 
 on:
   push:
-    branches: [dev, v5.2]
+    branches: [dev, v5.2, v5.3]
   pull_request:
-    branches: [dev, v5.2]
+    branches: [dev, v5.2, v5.3]
   workflow_dispatch:
 
 permissions:
