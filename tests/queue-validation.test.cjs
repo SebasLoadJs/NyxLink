@@ -150,10 +150,11 @@ test('invalid insertion, unshift, and replacement cannot poison the queue', asyn
 
 test('queue entry validation supports playable Track-compatible subclasses', async t => {
   const { player } = createPlayer(t);
+  const { Track } = require('../dist/index.js');
   const original = createTrack('queue-compatible');
-  const subclass = Object.create(original);
-  // Exercising structural compatibility rather than enforcing a concrete
-  // constructor identity supports existing custom Track implementations.
+  class ExtendedTrack extends Track {}
+  const subclass = new ExtendedTrack(original.toJSON());
+  // Accept an actual subclass with the internal Track metadata initialized.
   player.queue.add(subclass);
   assert.equal(player.queue.first, subclass);
   assert.equal(player.queue.size, 1);
