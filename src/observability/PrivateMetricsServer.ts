@@ -38,7 +38,7 @@ export class PrivateMetricsServer {
     private readonly bindHost: '127.0.0.1' | '::1';
     private readonly bindPort: number;
     private readonly server: Server;
-    private started = false;
+    private listenPromise?: Promise<this>;
     private closed = false;
 
     constructor(manager: Manager, options: PrivateMetricsOptions) {
@@ -68,28 +68,32 @@ export class PrivateMetricsServer {
         return 'http://' + hostname + ':' + address.port;
     }
 
-    public async listen(): Promise<this> {
-        if (this.closed || this.manager.destroyed) throw new Error('Private metrics server is closed');
-        if (this.started) return this;
-        this.started = true;
-        try {
-            await new Promise<void>((resolve, reject) => {
-                const error = (failure: Error) => { this.server.off('listening', ready); reject(failure); };
-                const ready = () => { this.server.off('error', error); resolve(); };
-                this.server.once('error', error);
-                this.server.once('listening', ready);
-                this.server.listen(this.bindPort, this.bindHost);
-            });
-            return this;
-        } catch (error) {
-            this.started = false;
-            throw error;
+    public listen(): Promise<this> {
+        if (this.closed || this.manager.destroyed) {
+            return Promise.reject(new Error('Private metrics server is closed'));
         }
+        if (this.listenPromise) return this.listenPromise;
+        const operation = new Promise<void>((resolve, reject) => {
+            const error = (failure: Error) => { this.server.off('listening', ready); reject(failure); };
+            const ready = () => { this.server.off('error', error); resolve(); };
+            this.server.once('error', error);
+            this.server.once('listening', ready);
+            this.server.listen(this.bindPort, this.bindHost);
+        }).then(() => this);
+        this.listenPromise = operation;
+        void operation.catch(() => {
+            if (this.listenPromise === operation) this.listenPromise = undefined;
+        });
+        return operation;
     }
 
     public async close(): Promise<void> {
         if (this.closed) return;
         this.closed = true;
+        // A concurrent close must wait for an in-flight bind before releasing it.
+        if (this.listenPromise) {
+            try { await this.listenPromise; } catch { /* already failed to bind */ }
+        }
         if (!this.server.listening) return;
         await new Promise<void>((resolve, reject) =>
             this.server.close(error => error ? reject(error) : resolve()));
