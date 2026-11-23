@@ -86,6 +86,20 @@ NYXLINK_CONTAINER_ENGINE=docker pnpm run test:endurance -- 600
 
 Read previous results at `docs/backend-compatibility.md`; historic green runs are not proof that the **latest** `dev` head passes.
 
+
+## Recovery stabilization checkpoint — 2026-11-22
+
+The following implementation changes are committed on `dev`, but their latest commit is **not yet certified by a full successful CI run**:
+
+- Node disconnect and disaster-recovery player selection now use **exact Node object ownership**, not a host/port-derived UUID. This prevents different Node instances sharing an endpoint from cross-recovering one another's players.
+- Socket-close recovery now isolates throwing event observers, duplicate closes and old callbacks that resume after a connection has been restored.
+- Session disaster recovery now distinguishes the real `restart()` outcome from an observer exception; a changed node owner does not receive an obsolete success event.
+- NodeManager eject isolates per-guild failover rejections and orphan cleanup rejections, keeping a node registered if cleanup is incomplete.
+- Ejection records failed transfers that left a player on a now-disconnected target, rather than hiding the orphan.
+- Regression tests were added in `tests/node-disconnect-recovery.test.cjs` and `tests/node-failover.test.cjs`.
+
+**Still required:** TypeScript build, all unit/contract tests, baseline and modern NodeLink labs, Lavalink plugin lab, endurance, security audit, package-consumer tests and controlled Discord voice acceptance for the final release commit. No release tag, npm stable version or publication is implied by this checkpoint.
+
 ### Stop conditions
 
 Do not tag or publish while any required CI job is failing or unverified, while known critical/high-severity problems remain, if a backend path is silently misreported as supported, or if the release package/installation does not pass. Every unchecked item requires evidence or an explicitly documented scope reduction before a stable release.
