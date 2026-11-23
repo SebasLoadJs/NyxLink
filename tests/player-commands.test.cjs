@@ -920,3 +920,79 @@ test('seek following a rejected replay cannot move the old track', async t => {
   assert.equal(original.position, 31000);
   assert.deepEqual(requests, []);
 });
+
+test('rejected back does not reset the previous track position', async t => {
+  const { node, player } = createPlayer(t);
+  const current = createTrack('back-current-position');
+  const previous = createTrack('back-previous-position');
+  previous.position = 38000;
+  player.current = current;
+  player.playing = true;
+  player.previous.push(previous);
+  node.rest.updatePlayer = async () => null;
+
+  assert.equal(await player.back(), false);
+  assert.deepEqual(player.previous, [previous]);
+  assert.equal(previous.position, 38000);
+  assert.equal(player.current, current);
+  assert.equal(player.get('isBackPlay'), false);
+});
+
+test('superseded back preserves history position and clears back mode', async t => {
+  const { node, player } = createPlayer(t);
+  const current = createTrack('back-cancel-current');
+  const previous = createTrack('back-cancel-previous');
+  previous.position = 27000;
+  player.current = current;
+  player.playing = true;
+  player.previous.push(previous);
+  const entered = deferred();
+  const release = deferred();
+  node.rest.updatePlayer = async (_guild, payload) => {
+    if (payload.track?.encoded === previous.encoded) {
+      entered.resolve();
+      await release.promise;
+    }
+    return payload;
+  };
+
+  const returning = player.back();
+  await entered.promise;
+  const stopping = player.stop();
+  release.resolve();
+  assert.equal(await returning, false);
+  await stopping;
+  assert.deepEqual(player.previous, [previous]);
+  assert.equal(previous.position, 27000);
+  assert.equal(player.get('isBackPlay'), false);
+});
+
+test('rejected positional skip restores the queued track position', async t => {
+  const { node, player } = createPlayer(t);
+  const playing = createTrack('skip-current-position');
+  const queued = createTrack('skip-selected-position');
+  queued.position = 51000;
+  player.current = playing;
+  player.playing = true;
+  player.queue.add(queued);
+  node.rest.updatePlayer = async () => null;
+
+  assert.equal(await player.skip(0), false);
+  assert.deepEqual(player.queue.tracks, [queued]);
+  assert.equal(queued.position, 51000);
+  assert.equal(player.current, playing);
+});
+
+test('malformed positional skip entry is not removed before it can be normalized', async t => {
+  const { player, requests } = createPlayer(t);
+  const first = createTrack('skip-first-valid');
+  const last = createTrack('skip-last-valid');
+  player.queue.add([first, last]);
+  const malformed = { encoded: 'untrusted-track' };
+  Object.defineProperty(malformed, 'backend', { get() { throw new Error('untrusted getter'); } });
+  player.queue.tracks.splice(1, 0, malformed);
+
+  assert.equal(await player.skip(1), false);
+  assert.deepEqual(player.queue.tracks, [first, malformed, last]);
+  assert.deepEqual(requests, []);
+});
