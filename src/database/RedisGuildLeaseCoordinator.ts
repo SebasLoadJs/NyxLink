@@ -48,6 +48,9 @@ export class RedisGuildLeaseCoordinator {
   private readonly acquiring = new Set<Promise<RedisGuildLease | null>>();
   private closed = false;
 
+  /** Maximum lease lifetime without a successful renewal. */
+  public get durationMs(): number { return this.ttlMs; }
+
   constructor(options: RedisGuildLeaseOptions) {
     if (!options?.client || typeof options.client.sendCommand !== 'function') {
       throw new TypeError('Guild leases require a Redis sendCommand client');
