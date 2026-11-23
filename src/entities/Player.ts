@@ -434,15 +434,15 @@ export class Player {
         });
     }
 
-    private async playNext(options: { track?: Track; encoded?: string, requester?: any, position?: number, noReplace?: boolean, audioTrackId?: string } | Track, ticket: number, allowed = () => true, onInjectedQueueChange?: (queued: boolean) => void): Promise<boolean> {
+    private async playNext(options: { track?: Track; encoded?: string, requester?: any, position?: number, noReplace?: boolean, audioTrackId?: string } | Track, ticket: number, allowed = () => true, onInjectedQueueChange?: (queued: boolean) => void, suppressHistory = false): Promise<boolean> {
         try {
-            return await this.applyPlayback(options, ticket, allowed, onInjectedQueueChange);
+            return await this.applyPlayback(options, ticket, allowed, onInjectedQueueChange, suppressHistory);
         } finally {
             playbackAttempt(this).retain(ticket);
         }
     }
 
-    private async applyPlayback(options: { track?: Track; encoded?: string, requester?: any, position?: number, noReplace?: boolean, audioTrackId?: string } | Track, ticket: number, allowed: () => boolean, onInjectedQueueChange?: (queued: boolean) => void): Promise<boolean> {
+    private async applyPlayback(options: { track?: Track; encoded?: string, requester?: any, position?: number, noReplace?: boolean, audioTrackId?: string } | Track, ticket: number, allowed: () => boolean, onInjectedQueueChange?: (queued: boolean) => void, suppressHistory = false): Promise<boolean> {
         const guard = playbackGuard(this);
         if (this.destroyed || !guard.isCurrent(ticket) || !allowed()) return false;
         this.recommendations = [];
@@ -576,7 +576,7 @@ export class Player {
             return false;
         }
 
-        if (previousTrack && !this.get("isBackPlay")) {
+        if (previousTrack && !suppressHistory && !this.get("isBackPlay")) {
             this.previous.push(previousTrack);
             const historyLimit = this.manager.options.queue?.historyLimit ?? this.historySize;
             if (this.previous.length > historyLimit) {
@@ -1438,16 +1438,32 @@ export class Player {
     }
 
     public async replay(): Promise<boolean> {
-        if (!this.current?.encoded) {
-            this.manager.emit("debug", `Moonlink.js > Player#replay >> No current track to replay for guild ${this.guildId}`);
-            return false;
-        }
+        if (!this.current?.encoded || this.destroyed) return false;
+        const guard = playbackGuard(this);
+        const ticket = guard.invalidate();
+        return this.commands.enqueue(async () => {
+            if (this.destroyed || !guard.isCurrent(ticket)) return false;
+            const original = this.current;
+            if (!original?.encoded) return false;
 
-        this.manager.emit("debug", `Moonlink.js > Player#replay -> Replaying track "${this.current.title}" for guild ${this.guildId}`);
-
-        return await this.play({
-            track: this.current,
-            position: 0,
+            // Replaying must not modify the live Track's position before the
+            // backend acknowledges the restart, or append a duplicate history
+            // entry for the same song.
+            const copy = new Track(original.toJSON(), original.requester, original.origin,
+                this.manager.options.trackPartial ?? []);
+            let injectedTrackQueued = false;
+            try {
+                return await this.playNext({ track: copy, position: 0 }, ticket, () => true,
+                    queued => { injectedTrackQueued = queued; }, true);
+            } finally {
+                // On an unsuccessful attempt the normal play path may leave
+                // its injected Track queued. Never turn replay into a future
+                // unsolicited song request.
+                if (injectedTrackQueued) {
+                    const index = this.queue.tracks.indexOf(copy);
+                    if (index >= 0) this.queue.remove(index);
+                }
+            }
         });
     }
 
