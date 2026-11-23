@@ -243,3 +243,22 @@ ownedManager.on('guildOwnershipLost', (guildId, generation, reason) => {
     void event;
 });
 void [ownedPlayer, restoredOwnedPlayer];
+
+
+const ipcRouter = new (require('../../dist').RedisGuildIpcRouter)({
+    client: redisCommands,
+    namespace: 'cluster_test',
+} as import('../../dist').RedisGuildIpcOptions) as import('../../dist').RedisGuildIpcRouter;
+const voiceGatewayPacket: import('../../dist').GuildVoiceGatewayPacket = {
+    op: 4,
+    d: { guild_id: '123456789012345678', channel_id: null, self_deaf: true, self_mute: false },
+};
+const outboundEnvelope: Promise<import('../../dist').FencedGuildVoiceEnvelope> =
+    ipcRouter.prepare(ownedManager.guildOwnership!, '123456789012345678', voiceGatewayPacket);
+const routedPacket: Promise<import('../../dist').GuildVoiceDispatchStatus> =
+    ipcRouter.dispatch({ invalid: true }, (_packet) => undefined);
+// @ts-expect-error Only Discord voice opcode 4 is accepted for fenced gateway commands.
+const badGatewayOpcode: import('../../dist').GuildVoiceGatewayPacket = { op: 5, d: voiceGatewayPacket.d };
+// @ts-expect-error Fenced voice IPC requires a boolean Discord self_mute flag.
+const invalidGatewayMute: import('../../dist').GuildVoiceGatewayPacket = { op: 4, d: { ...voiceGatewayPacket.d, self_mute: 'no' } };
+void [outboundEnvelope, routedPacket, badGatewayOpcode, invalidGatewayMute];
