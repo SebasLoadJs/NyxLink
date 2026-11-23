@@ -732,6 +732,7 @@ export class Node {
     // Only the first notification owns disconnection and failover handling.
     if (this.destroyed || (this.state === NodeState.DISCONNECTED && !this.connected)) return;
     this.invalidateBackendRefresh();
+    const closeGeneration = this.backendGeneration;
     this.clearVoiceReconnects();
     if (this.readyTimeout) clearTimeout(this.readyTimeout);
     this.readyTimeout = undefined;
@@ -773,7 +774,10 @@ export class Node {
         moved = orphanedPlayers.length === 0;
     }
 
-    if (this.destroyed) return;
+    // A new connection may have opened while transfers were awaiting I/O.
+    // Never apply the old disconnect's retry or destruction policy to it.
+    if (this.destroyed || this.backendGeneration !== closeGeneration ||
+        this.connected || this.state !== NodeState.DISCONNECTED) return;
     if (this.authenticationFailed) this.reconnectAttempts = this.retryAmount;
     if (this.reconnectAttempts >= this.retryAmount) {
         if (!moved && orphanedPlayers.length > 0) {
