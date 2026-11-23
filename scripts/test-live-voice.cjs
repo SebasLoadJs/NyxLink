@@ -32,10 +32,18 @@ function validateConfiguration(env, argv) {
   if (!/^[a-zA-Z0-9.-]+$/.test(env.NYXLINK_NODE_HOST)) throw new Error('Invalid NodeLink host');
   if (!address(env.NYXLINK_LIVE_TRACK_A) || !address(env.NYXLINK_LIVE_TRACK_B) ||
       env.NYXLINK_LIVE_TRACK_A === env.NYXLINK_LIVE_TRACK_B) throw new Error('Provide two different accessible HTTP(S) audio URLs');
+  const backend = env.NYXLINK_LIVE_BACKEND ?? 'nodelink';
+  if (backend !== 'nodelink' && backend !== 'lavalink') {
+    throw new Error('NYXLINK_LIVE_BACKEND must be nodelink or lavalink');
+  }
+  if (backend === 'lavalink' && !argv.includes('--commands')) {
+    throw new Error('Lavalink supports --commands acceptance; crossfade requires NodeLink');
+  }
   const crossfadeMs = env.NYXLINK_LIVE_CROSSFADE_MS === undefined ? 5000 : Number(env.NYXLINK_LIVE_CROSSFADE_MS);
   if (!Number.isSafeInteger(crossfadeMs) || crossfadeMs < 1000 || crossfadeMs > 15000) throw new Error('Crossfade duration must be 1000–15000 milliseconds');
   return {
     token: env.NYXLINK_DISCORD_BOT_TOKEN,
+    backend,
     guildId: env.NYXLINK_DISCORD_GUILD_ID,
     channelId: env.NYXLINK_DISCORD_VOICE_CHANNEL_ID,
     node: {
@@ -128,6 +136,8 @@ async function run(config) {
   const record = (type, extra = {}) => events.push({ type, at: new Date().toISOString(), ...extra });
   const report = {
     scope: 'opt-in real Discord gateway and voice integration',
+    backend: config.backend,
+    mode: config.commandSmoke ? 'commands' : 'crossfade',
     audioMeasured: false,
     operatorListeningRequired: true,
     observed: false,
@@ -152,7 +162,9 @@ async function run(config) {
     await client.login(config.token);
     stage = 'node-ready';
     const [node] = await readyWait.promise;
-    if (node.backend?.kind !== 'nodelink') throw new Error('Expected NodeLink backend');
+    if (node.backend?.kind !== config.backend) {
+      throw new Error('Configured audio backend does not match the connected node');
+    }
     record('nodeReady', { version: safeBackendVersion(node.backend.version) });
     const tracks = [];
     stage = 'track-resolution';
