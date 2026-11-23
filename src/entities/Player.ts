@@ -412,19 +412,37 @@ export class Player {
 
     /** @internal Automatic playback retains the intent that resolved its recommendations. */
     public async playAutoPlay(track: Track, ticket: number, automaticTicket: number): Promise<boolean> {
-        return this.commands.enqueue(() => this.playNext({ track }, ticket,
-            () => this.autoPlay && playbackGuard(this).isAutoCurrent(automaticTicket)));
+        return this.commands.enqueue(async () => {
+            // A user may enqueue music after autoplay chooses a candidate but
+            // before its command runs. Never insert an automatic track ahead of it.
+            if (this.queue.size > 0) return false;
+            let automaticTrackQueued = false;
+            const markAutomaticQueue = (queued: boolean) => { automaticTrackQueued = queued; };
+            try {
+                return await this.playNext({ track }, ticket,
+                    () => this.autoPlay && playbackGuard(this).isAutoCurrent(automaticTicket),
+                    markAutomaticQueue);
+            } finally {
+                // Remove only an insertion owned by this automatic attempt.
+                // Once shifted for playback, another reference to the same
+                // Track could have been manually queued and must be preserved.
+                if (automaticTrackQueued) {
+                    const index = this.queue.tracks.indexOf(track);
+                    if (index >= 0) this.queue.remove(index);
+                }
+            }
+        });
     }
 
-    private async playNext(options: { track?: Track; encoded?: string, requester?: any, position?: number, noReplace?: boolean, audioTrackId?: string } | Track, ticket: number, allowed = () => true): Promise<boolean> {
+    private async playNext(options: { track?: Track; encoded?: string, requester?: any, position?: number, noReplace?: boolean, audioTrackId?: string } | Track, ticket: number, allowed = () => true, onAutomaticQueueChange?: (queued: boolean) => void): Promise<boolean> {
         try {
-            return await this.applyPlayback(options, ticket, allowed);
+            return await this.applyPlayback(options, ticket, allowed, onAutomaticQueueChange);
         } finally {
             playbackAttempt(this).retain(ticket);
         }
     }
 
-    private async applyPlayback(options: { track?: Track; encoded?: string, requester?: any, position?: number, noReplace?: boolean, audioTrackId?: string } | Track, ticket: number, allowed: () => boolean): Promise<boolean> {
+    private async applyPlayback(options: { track?: Track; encoded?: string, requester?: any, position?: number, noReplace?: boolean, audioTrackId?: string } | Track, ticket: number, allowed: () => boolean, onAutomaticQueueChange?: (queued: boolean) => void): Promise<boolean> {
         const guard = playbackGuard(this);
         if (this.destroyed || !guard.isCurrent(ticket) || !allowed()) return false;
         this.recommendations = [];
@@ -474,6 +492,7 @@ export class Player {
 
         if (track) {
             this.queue.unshift(track);
+            onAutomaticQueueChange?.(true);
             this.manager.emit("debug", `Moonlink.js > Player#play >> Added track "${track.title}" to front of queue for guild ${this.guildId}`);
         }
 
@@ -498,6 +517,7 @@ export class Player {
         }
         if (this.destroyed || !guard.isCurrent(ticket) || !allowed() || this.queue.first !== queuedTrack) return false;
         this.queue.shift();
+        onAutomaticQueueChange?.(false);
 
         const oldTrackTitle = this.current?.title ?? "null";
         this.current = nextTrack instanceof Track ? nextTrack : new Track(nextTrack, undefined, undefined, this.manager.options.trackPartial ?? []);
@@ -552,6 +572,7 @@ export class Player {
             this.updateData("playing", oldPlaying);
             this.updateData("paused", oldPaused);
             this.queue.unshift(queuedTrack);
+            onAutomaticQueueChange?.(true);
             return false;
         }
 
