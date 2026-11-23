@@ -150,3 +150,50 @@ test('fallback accepts nested wire metadata and case-normalized YouTube sources'
     `https://www.youtube.com/watch?v=${youtube.identifier}&list=RD${youtube.identifier}`);
   assert.deepEqual(player.recommendations, [recommendation]);
 });
+
+test('valid Spotify identifiers use the native NodeLink recommendation source', async () => {
+  const { node, player, calls } = fixture([
+    { loadType: 'playlist', tracks: [recommendation] },
+  ]);
+  node.isNodeLink = true;
+  node.capabilities = new Set(['source:spotify']);
+  const id = '4uLU6hMCjMI75M1A2tKUQC';
+  await RecommendationResolver.update(node, player, {
+    sourceName: 'spotify', identifier: id, title: 'Song', author: 'Artist',
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].source, 'sprec');
+  assert.equal(calls[0].query, `seed_tracks=${id}`);
+  assert.deepEqual(player.recommendations, [recommendation]);
+});
+
+test('malformed Spotify IDs cannot append NodeLink sprec query parameters', async () => {
+  const { node, player, calls, seed } = fixture([
+    { loadType: 'search', tracks: [youtube] },
+    { loadType: 'playlist', tracks: [recommendation] },
+  ]);
+  node.isNodeLink = true;
+  node.capabilities = new Set(['source:spotify']);
+  await RecommendationResolver.update(node, player, {
+    ...seed, identifier: '4uLU6hMCjMI75M1A2tKUQC&limit=999',
+  });
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].source, 'youtube');
+  assert.equal(calls[1].source, 'youtube');
+  assert.equal(calls[1].query, `https://www.youtube.com/watch?v=${youtube.identifier}&list=RD${youtube.identifier}`);
+  assert.deepEqual(player.recommendations, [recommendation]);
+});
+
+test('Spotify IDs with unexpected length take the safe YouTube fallback', async () => {
+  const { node, player, calls, seed } = fixture([
+    { loadType: 'empty', tracks: [] },
+  ]);
+  node.isNodeLink = true;
+  node.capabilities = new Set(['source:spotify']);
+  await RecommendationResolver.update(node, player, {
+    ...seed, identifier: 'short',
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].source, 'youtube');
+  assert.deepEqual(player.recommendations, []);
+});
