@@ -13,6 +13,14 @@ export class Queue {
         this.manager = player.manager;
     }
 
+    /** Accept custom Track subclasses while rejecting objects that cannot be stored or played. */
+    private static validTrack(track: unknown): track is Track {
+        if (!track || typeof track !== 'object') return false;
+        const candidate = track as Partial<Track>;
+        return typeof candidate.encoded === 'string' && candidate.encoded.length > 0 &&
+            typeof candidate.getInfo === 'function' && typeof candidate.toJSON === 'function';
+    }
+
     private _updateQueue(): void {
         this.player.updateData('queue', this.tracks.map(t => TrackCodec.serialize(t)));
         this.player.requestQueuePreload?.();
@@ -52,6 +60,11 @@ export class Queue {
 
     public add(track: Track | Track[]): void {
         const tracksToAdd = Array.isArray(track) ? track : [track];
+        // Validate the entire batch first: a bad later item must not leave the
+        // earlier items inserted with persistence unexpectedly failing.
+        if (tracksToAdd.some(item => item != null && !Queue.validTrack(item))) {
+            throw new TypeError('Queue.add requires playable Track entries');
+        }
         const maxSize = this.manager.options.queue?.maxSize ?? 1000;
         const allowDuplicates = this.manager.options.queue?.allowDuplicates ?? true;
 
@@ -83,6 +96,9 @@ export class Queue {
     public insert(index: number, track: Track | Track[]): void {
         if (!Number.isSafeInteger(index) || index < 0 || index > this.tracks.length) return;
         const tracksToAdd = (Array.isArray(track) ? track : [track]).filter(t => t != null);
+        if (tracksToAdd.some(item => !Queue.validTrack(item))) {
+            throw new TypeError('Queue.insert requires playable Track entries');
+        }
         const allowDuplicates = this.manager.options.queue?.allowDuplicates ?? true;
         const seen = new Set(this.tracks.map(t => t.encoded));
         const accepted = allowDuplicates ? tracksToAdd : tracksToAdd.filter(t => {
@@ -131,6 +147,7 @@ export class Queue {
     }
 
     public unshift(track: Track): void {
+        if (!Queue.validTrack(track)) throw new TypeError('Queue.unshift requires a playable Track');
         this.tracks.unshift(track);
         this.manager.emit("queueAdd", this.player, track);
         this._updateQueue();
@@ -340,7 +357,7 @@ export class Queue {
     }
 
     public replace(index: number, track: Track): boolean {
-        if (!Number.isSafeInteger(index) || index < 0 || index >= this.tracks.length || !track) return false;
+        if (!Number.isSafeInteger(index) || index < 0 || index >= this.tracks.length || !Queue.validTrack(track)) return false;
         if (this.manager.options.queue?.allowDuplicates === false && this.tracks.some((existing, i) => i !== index && existing.encoded === track.encoded)) return false;
 
         this.tracks[index] = track;
