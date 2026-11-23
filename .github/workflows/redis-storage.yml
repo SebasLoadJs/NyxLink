@@ -38,4 +38,4 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
       - name: Test Redis-backed StorageAdapter against Redis 7
-        run: node --test tests/integration/redis-storage.test.cjs tests/integration/redis-guild-lease.test.cjs tests/integration/redis-player-ownership.test.cjs
+        run: node --test tests/integration/redis-storage.test.cjs tests/integration/redis-guild-lease.test.cjs tests/integration/redis-player-ownership.test.cjs tests/integration/redis-guild-ipc.test.cjs
