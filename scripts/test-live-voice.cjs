@@ -36,8 +36,13 @@ function validateConfiguration(env, argv) {
   if (backend !== 'nodelink' && backend !== 'lavalink') {
     throw new Error('NYXLINK_LIVE_BACKEND must be nodelink or lavalink');
   }
-  if (backend === 'lavalink' && !argv.includes('--commands')) {
-    throw new Error('Lavalink supports --commands acceptance; crossfade requires NodeLink');
+  const commandSmoke = argv.includes('--commands');
+  const reconnectSmoke = argv.includes('--reconnect');
+  if (commandSmoke && reconnectSmoke) {
+    throw new Error('Select exactly one live voice acceptance mode');
+  }
+  if (backend === 'lavalink' && !commandSmoke && !reconnectSmoke) {
+    throw new Error('Lavalink supports --commands or --reconnect; crossfade requires NodeLink');
   }
   const crossfadeMs = env.NYXLINK_LIVE_CROSSFADE_MS === undefined ? 5000 : Number(env.NYXLINK_LIVE_CROSSFADE_MS);
   if (!Number.isSafeInteger(crossfadeMs) || crossfadeMs < 1000 || crossfadeMs > 15000) throw new Error('Crossfade duration must be 1000–15000 milliseconds');
@@ -55,7 +60,8 @@ function validateConfiguration(env, argv) {
     },
     urls: [env.NYXLINK_LIVE_TRACK_A, env.NYXLINK_LIVE_TRACK_B],
     crossfadeMs,
-    commandSmoke: argv.includes('--commands')
+    commandSmoke,
+    reconnectSmoke
   };
 }
 
@@ -137,7 +143,7 @@ async function run(config) {
   const report = {
     scope: 'opt-in real Discord gateway and voice integration',
     backend: config.backend,
-    mode: config.commandSmoke ? 'commands' : 'crossfade',
+    mode: config.reconnectSmoke ? 'reconnect' : config.commandSmoke ? 'commands' : 'crossfade',
     audioMeasured: false,
     operatorListeningRequired: true,
     observed: false,
@@ -184,7 +190,16 @@ async function run(config) {
     stage = 'voice-connect';
     await player.connect();
     record('gatewayVoiceRequested');
-    if (config.commandSmoke) {
+    if (config.reconnectSmoke) {
+      stage = 'reconnect-smoke';
+      const { verifyReconnectSequence } = require('./live-voice-commands.cjs');
+      report.reconnectChecks = await verifyReconnectSequence(player, node, tracks[0]);
+      report.observed = report.reconnectChecks.length === 5 &&
+        events.some(e => e.type === 'trackStart' && e.track === 'A');
+      report.success = report.observed;
+      if (!report.success) throw new Error('Live reconnect did not confirm track A and backend voice restoration');
+      record('reconnectSequencePassed');
+    } else if (config.commandSmoke) {
       stage = 'command-smoke';
       const { verifyCommandSequence } = require('./live-voice-commands.cjs');
       report.commandChecks = await verifyCommandSequence(player, node, tracks);
