@@ -47,6 +47,7 @@ function inspectReports(revision, entries) {
     }
     const base = report.scope === 'opt-in real Discord gateway and voice integration' &&
       report.success === true && report.observed === true &&
+      report.buildValidated === true &&
       report.audioMeasured === false && report.operatorListeningRequired === true &&
       !report.errorCode;
     const expected = mode === 'commands' ? COMMAND_CHECKS :
