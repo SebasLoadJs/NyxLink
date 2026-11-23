@@ -56,8 +56,10 @@ function inspectReports(revision, entries) {
     const protocol = expected ? JSON.stringify(actual) === JSON.stringify(expected) :
       report.remainingQueue === 0 && report.crossfadeEventObserved === true &&
       Array.isArray(report.transitionReasons) && report.transitionReasons.includes('crossfading') &&
-      Array.isArray(report.events) && report.events.some(event => event.type === 'trackStart' && event.track === 'A') &&
-      report.events.some(event => event.type === 'trackStart' && event.track === 'B');
+      Array.isArray(report.events) &&
+      JSON.stringify(report.events.filter(e => e?.type === 'trackStart').map(e => e.track)) ===
+        JSON.stringify(['A', 'B']) &&
+      report.events.some(e => e?.type === 'trackEnd' && e.track === 'A' && e.reason === 'crossfading');
     results[id] = base && protocol ? 'protocol-pass' : 'failed';
   }
   const protocolEvidenceComplete = Object.values(results).every(status => status === 'protocol-pass');
