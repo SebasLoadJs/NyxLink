@@ -87,6 +87,24 @@ NYXLINK_CONTAINER_ENGINE=docker pnpm run test:endurance -- 600
 Read previous results at `docs/backend-compatibility.md`; historic green runs are not proof that the **latest** `dev` head passes.
 
 
+## Verified CI checkpoint — 2026-11-23
+
+**Reference commit:** `7fd5c143ab00d82a1d03bdd8c4509898987ff4df` (the `dev` head when these checks ran). These are executed checks, not merely test files or syntax validation.
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| Strict TypeScript, Node.js 22 and 24 | Passed | [Validate NyxLink](https://github.com/SebasLoadJs/NyxLink/actions/runs/45103453543) |
+| Automated coverage, public TypeScript API, isolated npm package consumer, pack contents and production dependency audit | Passed on both versions | [Validate NyxLink](https://github.com/SebasLoadJs/NyxLink/actions/runs/45103453543) |
+| Lavalink and baseline NodeLink protocol/extension labs | Passed | [Backend integration](https://github.com/SebasLoadJs/NyxLink/actions/runs/45103453608) |
+| Pinned modern NodeLink protocol and extension labs | Passed | [Backend integration](https://github.com/SebasLoadJs/NyxLink/actions/runs/45103453608) |
+| Real pinned Lavalink plugin integration | Passed | [Backend integration](https://github.com/SebasLoadJs/NyxLink/actions/runs/45103453608) |
+| CodeQL | Passed | [CodeQL](https://github.com/SebasLoadJs/NyxLink/actions/runs/45103453601) |
+| Local backend endurance and extended stabilization workflow | Passed | [Extended endurance](https://github.com/SebasLoadJs/NyxLink/actions/runs/45103453662) |
+
+**Scope limitations:** isolated backend protocol tests do **not** certify audible playback in Discord voice, quality of live crossfade, AutoMix recommendation relevance, every external provider, or a published npm stable installation. For exact supported endpoint behavior, use `docs/backend-compatibility.md` and the uploaded evidence artifacts.
+
+**Remaining release blockers:** run and document controlled real Discord voice tests (play, seek, skip, pause, volume, reconnect, crossfade where supported); finish documentation and migration/release notes; review license/attributions; prepare an explicitly approved release candidate; validate the candidate package from npm `next`; repeat acceptance checks for its immutable commit; then publish the approved GitHub and npm stable artifacts. Do not substitute successful workflows on an older SHA for the final candidate.
+
 ## Recovery stabilization checkpoint — 2026-11-22
 
 The following implementation changes are committed on `dev`, but their latest commit is **not yet certified by a full successful CI run**:
