@@ -47,7 +47,8 @@ const FENCE_AND_DEDUPE = [
     "if redis.call('EXISTS', KEYS[2]) == 1 then return 2 end",
     "local previous = tonumber(redis.call('GET', KEYS[3]) or '0')",
     "local next = tonumber(ARGV[3])",
-    "if next <= previous then return 0 end",
+    "local allocated = tonumber(redis.call('GET', KEYS[4]) or '0')",
+    "if next <= previous or next > allocated then return 0 end",
     "local stored = redis.call('SET', KEYS[2], '1', 'NX', 'PX', ARGV[2])",
     "if not stored then return 2 end",
     "redis.call('SET', KEYS[3], ARGV[3])",
@@ -172,8 +173,9 @@ export class RedisGuildIpcRouter {
         const leaseKey = this.prefix + 'guild-lease.' + entry.guildId;
         const replayKey = this.prefix + 'guild-ipc.' + entry.guildId + '.' + entry.commandId;
         const lastKey = this.prefix + 'guild-ipc-last.' + entry.guildId;
+        const sequenceKey = this.prefix + 'guild-ipc-sequence.' + entry.guildId;
         const result = Number(await this.client.sendCommand([
-            'EVAL', FENCE_AND_DEDUPE, '3', leaseKey, replayKey, lastKey,
+            'EVAL', FENCE_AND_DEDUPE, '4', leaseKey, replayKey, lastKey, sequenceKey,
             String(entry.fencingToken), String(this.dedupeTtlMs), String(entry.sequence),
         ]));
         if (result === 0) return 'stale';
