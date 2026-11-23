@@ -20,9 +20,18 @@ function delayRecommendations(manager, candidate) {
 
 const playbackRequests = requests => requests.filter(({ payload }) => payload.track?.encoded != null);
 
+// Provider tests use an actual 11-character YouTube identifier. Free-form labels
+// are appropriate for queue fixtures, but the resolver must reject them as IDs.
+function youtubeSeed(label = 'previous') {
+  const track = createTrack('dQw4w9WgXcQ');
+  track.title = `Track ${label}`;
+  return track;
+}
+
+
 test('autoplay does not restart music after stop while recommendation search is pending', async t => {
   const { manager, node, player, requests } = createPlayer(t);
-  const previous = createTrack('previous');
+  const previous = youtubeSeed();
   player.current = previous;
   const search = delayRecommendations(manager, createTrack('recommended'));
   const autoplay = node.handleAutoPlay(player, previous);
@@ -38,7 +47,7 @@ test('autoplay does not restart music after stop while recommendation search is 
 
 test('disabling autoplay cancels a pending recommendation search', async t => {
   const { manager, node, player, requests } = createPlayer(t);
-  const previous = createTrack('previous');
+  const previous = youtubeSeed();
   player.current = previous;
   const search = delayRecommendations(manager, createTrack('recommended'));
   const autoplay = node.handleAutoPlay(player, previous);
@@ -53,7 +62,7 @@ test('disabling autoplay cancels a pending recommendation search', async t => {
 
 test('disabling then re-enabling autoplay does not revive an older search', async t => {
   const { manager, node, player, requests } = createPlayer(t);
-  const previous = createTrack('previous');
+  const previous = youtubeSeed();
   player.current = previous;
   const search = delayRecommendations(manager, createTrack('recommended'));
   const autoplay = node.handleAutoPlay(player, previous);
@@ -68,7 +77,7 @@ test('disabling then re-enabling autoplay does not revive an older search', asyn
 
 test('destroy cancels autoplay without issuing a later play request', async t => {
   const { manager, node, player, requests } = createPlayer(t);
-  const previous = createTrack('previous');
+  const previous = youtubeSeed();
   player.current = previous;
   const search = delayRecommendations(manager, createTrack('recommended'));
   const autoplay = node.handleAutoPlay(player, previous);
@@ -83,7 +92,7 @@ test('destroy cancels autoplay without issuing a later play request', async t =>
 
 test('explicit playback wins over an older pending autoplay search', async t => {
   const { manager, node, player, requests } = createPlayer(t);
-  const previous = createTrack('previous');
+  const previous = youtubeSeed();
   const explicit = createTrack('requested');
   player.current = previous;
   const search = delayRecommendations(manager, createTrack('recommended'));
@@ -99,7 +108,7 @@ test('explicit playback wins over an older pending autoplay search', async t => 
 
 test('fetching autoplay recommendations never temporarily replaces the current track', async t => {
   const { manager, node, player } = createPlayer(t);
-  const previous = createTrack('previous');
+  const previous = youtubeSeed();
   player.current = null;
   const search = delayRecommendations(manager, createTrack('recommended'));
   const autoplay = node.handleAutoPlay(player, previous);
@@ -114,7 +123,7 @@ test('fetching autoplay recommendations never temporarily replaces the current t
 
 test('autoplay returns failure and emits no success when the play request fails', async t => {
   const { manager, node, player } = createPlayer(t);
-  const previous = createTrack('previous');
+  const previous = youtubeSeed();
   player.current = previous;
   player.recommendations = [createTrack('recommended')];
   node.rest.updatePlayer = async () => { throw new Error('audio backend unavailable'); };
@@ -128,7 +137,7 @@ test('autoplay returns failure and emits no success when the play request fails'
 
 test('autoplay plays a recommendation and emits success after the backend accepts it', async t => {
   const { manager, node, player, requests } = createPlayer(t);
-  const previous = createTrack('previous');
+  const previous = youtubeSeed();
   const recommended = createTrack('recommended');
   player.current = previous;
   player.recommendations = [recommended];
@@ -143,7 +152,7 @@ test('autoplay plays a recommendation and emits success after the backend accept
 
 test('autoplay reports no recommendation without changing playback when search is empty', async t => {
   const { node, player, requests } = createPlayer(t);
-  const previous = createTrack('previous');
+  const previous = youtubeSeed();
   player.current = previous;
 
   assert.equal(await node.handleAutoPlay(player, previous), false);
@@ -153,7 +162,7 @@ test('autoplay reports no recommendation without changing playback when search i
 
 test('a cancelled track-end autoplay cannot clear a newer explicit track or emit queueEnd', async t => {
   const { manager, node, player } = createPlayer(t);
-  const previous = createTrack('previous');
+  const previous = youtubeSeed();
   const explicit = createTrack('explicit');
   player.current = previous;
   player.playing = true;
@@ -172,7 +181,7 @@ test('a cancelled track-end autoplay cannot clear a newer explicit track or emit
 
 test('autoplay does not claim success when REST returns an empty acknowledgement', async t => {
   const { manager, node, player } = createPlayer(t);
-  player.current = createTrack('previous');
+  player.current = youtubeSeed();
   player.recommendations = [createTrack('recommended')];
   node.rest.updatePlayer = async () => null;
   const successes = [];
@@ -185,7 +194,7 @@ test('autoplay does not claim success when REST returns an empty acknowledgement
 test('an older recommendation response cannot replace results from a newer lookup', async t => {
   const { manager, node, player } = createPlayer(t);
   const old = deferred();
-  const seed = createTrack('seed');
+  const seed = youtubeSeed('seed');
   const latest = createTrack('latest');
   let requests = 0;
   manager.search = async () => ++requests === 1 ? old.promise : { tracks: [latest] };
@@ -208,7 +217,7 @@ test('a late finished event for an old track cannot stop a new current track', a
 
 test('a genuine autoplay playback failure still emits queueEnd after fetching recommendations', async t => {
   const { manager, node, player } = createPlayer(t);
-  const previous = createTrack('previous');
+  const previous = youtubeSeed();
   player.current = previous;
   manager.search = async () => ({ tracks: [createTrack('recommended')] });
   node.rest.updatePlayer = async () => { throw new Error('play failed'); };
@@ -221,7 +230,7 @@ test('a genuine autoplay playback failure still emits queueEnd after fetching re
 
 test('duplicate track-end events share one recommendation transition', async t => {
   const { manager, node, player } = createPlayer(t);
-  const previous = createTrack('previous');
+  const previous = youtubeSeed();
   const latest = createTrack('latest');
   player.current = previous;
   const firstResponse = deferred();
@@ -250,7 +259,7 @@ test('duplicate track-end events share one recommendation transition', async t =
 for (const loop of ['off', 'track', 'queue']) {
   test(`cleanup never advances the queue or autoplay with loop=${loop}`, async t => {
     const { manager, node, player, requests } = createPlayer(t);
-    const previous = createTrack('previous');
+    const previous = youtubeSeed();
     const queued = createTrack('queued');
     player.current = previous;
     player.playing = true;
@@ -271,7 +280,7 @@ for (const loop of ['off', 'track', 'queue']) {
 for (const hasRecommendation of [true, false]) {
   test(`a manual track queued during autoplay search takes priority with recommendation=${hasRecommendation}`, async t => {
     const { manager, node, player, requests } = createPlayer(t);
-    const previous = createTrack('previous');
+    const previous = youtubeSeed();
     const manual = createTrack('manual');
     player.current = previous;
     const started = deferred();
@@ -294,7 +303,7 @@ for (const hasRecommendation of [true, false]) {
 
 test('a user stop still prevents a newly queued track from starting after an obsolete search', async t => {
   const { manager, node, player, requests } = createPlayer(t);
-  const previous = createTrack('previous');
+  const previous = youtubeSeed();
   const manual = createTrack('manual');
   player.current = previous;
   const started = deferred();
@@ -315,7 +324,7 @@ test('a user stop still prevents a newly queued track from starting after an obs
 
 test('a manually queued identical Track survives an obsolete autoplay acknowledgement', async t => {
   const { node, player, requests } = createPlayer(t);
-  const previous = createTrack('previous');
+  const previous = youtubeSeed();
   const candidate = createTrack('recommended');
   player.current = previous;
   player.recommendations = [candidate];
@@ -347,7 +356,7 @@ test('a manually queued identical Track survives an obsolete autoplay acknowledg
 
 test('a failed autoplay REST request removes its rollback but keeps a manual identical Track', async t => {
   const { node, player } = createPlayer(t);
-  const previous = createTrack('previous');
+  const previous = youtubeSeed();
   const candidate = createTrack('recommended');
   player.current = previous;
   player.recommendations = [candidate];
@@ -371,7 +380,7 @@ test('a failed autoplay REST request removes its rollback but keeps a manual ide
 
 test('a manual queue entry wins while an automatic command is waiting for its turn', async t => {
   const { node, player, requests } = createPlayer(t);
-  const previous = createTrack('previous');
+  const previous = youtubeSeed();
   const manual = createTrack('manual');
   player.current = previous;
   player.recommendations = [createTrack('recommended')];
