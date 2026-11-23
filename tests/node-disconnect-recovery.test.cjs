@@ -91,3 +91,39 @@ test('duplicate close notifications run only one failover and one disconnect eve
   assert.equal(moveCalls, 1);
   assert.equal(disconnectEvents, 1);
 });
+
+test('reconnected node is not destroyed by an earlier pending close', async t => {
+  const { manager, node } = createPlayer(t);
+  const { NodeState } = require('../dist/src/typings/types.js');
+  const originalMove = NodeFailover.move;
+  let signalStarted;
+  let releaseMove;
+  const started = new Promise(resolve => { signalStarted = resolve; });
+  const release = new Promise(resolve => { releaseMove = resolve; });
+  NodeFailover.move = async () => {
+    signalStarted();
+    await release;
+    return { status: 'cancelled', attempts: 0 };
+  };
+  t.after(() => { NodeFailover.move = originalMove; });
+  manager.options.node = { ...manager.options.node, autoMovePlayers: true };
+  node.retryAmount = 0;
+  node.reconnectAttempts = 0;
+  let destroyedEvents = 0;
+  manager.on('nodeDestroy', () => destroyedEvents++);
+
+  const closing = node.close({ code: 1006, reason: 'old-connection' });
+  try {
+    await started;
+    // Simulate a new ready connection while the old failover is pending.
+    node.connected = true;
+    node.state = NodeState.READY;
+  } finally {
+    releaseMove();
+  }
+  await closing;
+  assert.equal(node.connected, true);
+  assert.equal(node.state, NodeState.READY);
+  assert.equal(node.destroyed, false);
+  assert.equal(destroyedEvents, 0);
+});
