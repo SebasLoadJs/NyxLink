@@ -7,7 +7,9 @@ const requests = new WeakMap<Player, object>();
 
 // Legacy callers may supply a track-shaped object; actual Tracks retain complete metadata.
 function trackInfo(track: Track): { sourceName?: string; identifier?: string } {
-  return track instanceof Track ? track.getInfo() : track;
+  if (track instanceof Track) return track.getInfo();
+  const record = track as Track & { info?: { sourceName?: string; identifier?: string } };
+  return record.info ?? record;
 }
 
 /** Searches against an explicit seed without changing playback state. */
@@ -17,9 +19,12 @@ export class RecommendationResolver {
     requests.set(player, request);
     const guard = playbackGuard(player);
     const ticket = guard.ticket;
-    if (!track) return;
+    // A failed/empty lookup must not leave recommendations from an older seed.
+    if (guard.isCurrent(ticket) && !player.destroyed) player.recommendations = [];
+    if (!track || player.destroyed) return;
     const info = trackInfo(track);
-    if (!info.sourceName || !info.identifier) return;
+    if (typeof info.sourceName !== 'string' || !info.sourceName ||
+        typeof info.identifier !== 'string' || !info.identifier) return;
 
     try {
       let uri: string | null = null;
@@ -71,10 +76,11 @@ export class RecommendationResolver {
             source: "youtube",
           });
           // A configured fallback or a custom resolver may still return another source.
-          const seed = res?.loadType !== "error" && res?.tracks?.map(trackInfo).find(candidate =>
-            (candidate.sourceName === "youtube" || candidate.sourceName === "youtubemusic") &&
-            typeof candidate.identifier === "string" && /^[A-Za-z0-9_-]{11}$/.test(candidate.identifier)
-          );
+          const seed = res?.loadType !== "error" && res?.tracks?.map(trackInfo).find(candidate => {
+            const source = typeof candidate.sourceName === 'string' ? candidate.sourceName.toLowerCase() : '';
+            return (source === 'youtube' || source === 'youtubemusic') &&
+              typeof candidate.identifier === 'string' && /^[A-Za-z0-9_-]{11}$/.test(candidate.identifier);
+          });
           if (!seed) return;
           uri = `https://www.youtube.com/watch?v=${seed.identifier}&list=RD${seed.identifier}`;
           searchSource = "youtube";
@@ -128,7 +134,7 @@ export class RecommendationResolver {
 
       if (guard.isCurrent(ticket) && !player.destroyed && requests.get(player) === request) player.recommendations = candidates;
     } catch (error) {
-      node.manager.emit("debug", `Moonlink.js > Node#updateRecommendations >> Error fetching recommendations: ${error instanceof Error ? error.message : String(error)}`);
+      node.manager.emit("debug", `NyxLink > RecommendationResolver > Lookup failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
