@@ -164,3 +164,64 @@ test('partial search results retain complete wire metadata for persistence and s
   manager.options.sources.disabledSources=['http'];
   assert.deepEqual((await manager.search({query:'blocked'})).tracks,[]);
 });
+
+test('cached search results never cross node instances sharing an endpoint and session', async t => {
+  const { manager, node: first } = fixture(t, { cache: { ttlMs: 60000 } });
+  const second = new Node(manager, {
+    identifier: 'same-endpoint-second',
+    host: first.host, port: first.port, password: 'fixture',
+  });
+  second.connected = true;
+  second.state = NodeState.READY;
+  second.sessionId = first.sessionId;
+  manager.nodes.nodes.set(second.identifier, second);
+  assert.equal(first.uuid, second.uuid);
+  let firstCalls = 0, secondCalls = 0;
+  first.rest.loadTracks = async () => {
+    firstCalls++;
+    return { loadType: 'track', data: { ...record(), encoded: 'first-node-encoded' } };
+  };
+  second.rest.loadTracks = async () => {
+    secondCalls++;
+    return { loadType: 'track', data: { ...record(), encoded: 'second-node-encoded' } };
+  };
+
+  const a = await manager.search({ query: 'shared song', node: first.identifier });
+  const b = await manager.search({ query: 'shared song', node: second.identifier });
+  const repeated = await manager.search({ query: 'shared song', node: first.identifier });
+
+  assert.equal(a.tracks[0].encoded, 'first-node-encoded');
+  assert.equal(b.tracks[0].encoded, 'second-node-encoded');
+  assert.equal(repeated.tracks[0].encoded, 'first-node-encoded');
+  assert.equal(firstCalls, 1);
+  assert.equal(secondCalls, 1);
+});
+
+test('node replacement never inherits the previous instance search cache', async t => {
+  const { manager, node: original } = fixture(t, { cache: { ttlMs: 60000 } });
+  let oldCalls = 0;
+  original.rest.loadTracks = async () => {
+    oldCalls++;
+    return { loadType: 'track', data: { ...record(), encoded: 'old-node-record' } };
+  };
+  await manager.search({ query: 'same song', node: original.identifier });
+
+  const replacement = new Node(manager, {
+    identifier: original.identifier,
+    host: original.host, port: original.port, password: 'fixture',
+  });
+  replacement.connected = true;
+  replacement.state = NodeState.READY;
+  replacement.sessionId = original.sessionId;
+  manager.nodes.nodes.set(replacement.identifier, replacement);
+  let newCalls = 0;
+  replacement.rest.loadTracks = async () => {
+    newCalls++;
+    return { loadType: 'track', data: { ...record(), encoded: 'replacement-record' } };
+  };
+
+  const result = await manager.search({ query: 'same song', node: replacement.identifier });
+  assert.equal(result.tracks[0].encoded, 'replacement-record');
+  assert.equal(oldCalls, 1);
+  assert.equal(newCalls, 1);
+});
