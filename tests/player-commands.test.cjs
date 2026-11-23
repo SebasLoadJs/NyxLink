@@ -565,3 +565,42 @@ test('autoLeave preserves an idle player when queueEnd handler enqueues without 
   assert.equal(player.queue.first, next);
   assert.equal(player.current, null);
 });
+
+test('failed autoplay recommendation lookup still emits queueEnd', async t => {
+  const { manager, node, player } = createPlayer(t);
+  const previous = createTrack('autoplay-provider-failure');
+  player.current = previous;
+  player.playing = true;
+  player.autoPlay = true;
+  player.autoLeave = false;
+  const events = [];
+  manager.on('queueEnd', (_player, track) => events.push(track.encoded));
+  node.updateRecommendations = async () => { throw new Error('recommendations unavailable'); };
+
+  await node.handleTrackEnd(player, {
+    track: previous.toJSON(),
+    reason: 'finished',
+  });
+
+  assert.deepEqual(events, [previous.encoded]);
+  assert.equal(player.current, null);
+  assert.equal(player.playing, false);
+  assert.equal(player.destroyed, false);
+});
+
+test('failed autoplay recommendation lookup still permits autoLeave', async t => {
+  const { node, player } = createPlayer(t);
+  const previous = createTrack('autoplay-auto-leave');
+  player.current = previous;
+  player.playing = true;
+  player.autoPlay = true;
+  player.autoLeave = true;
+  node.updateRecommendations = async () => { throw new Error('provider unavailable'); };
+
+  await node.handleTrackEnd(player, {
+    track: previous.toJSON(),
+    reason: 'finished',
+  });
+
+  assert.equal(player.destroyed, true);
+});
