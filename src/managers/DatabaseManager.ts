@@ -41,6 +41,9 @@ export class DatabaseManager {
       return;
     }
     
+    if (this.dbConfig.type === 'external') {
+      throw new TypeError('External storage requires options.database.adapter');
+    }
     switch (this.dbConfig.type) {
       case 'local':
         this.provider = new Local();
