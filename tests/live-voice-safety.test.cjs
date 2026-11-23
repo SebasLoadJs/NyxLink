@@ -5,7 +5,7 @@ const { EventEmitter } = require('node:events');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
-const { validateConfiguration, errorCode, event, writePrivateReport, reportPath, sourceRevision, safeBackendVersion, safeTrackEndReason, evaluateCrossfadeEvents } = require('../scripts/test-live-voice.cjs');
+const { validateConfiguration, errorCode, event, writePrivateReport, reportPath, sourceRevision, buildForLiveVoice, safeBackendVersion, safeTrackEndReason, evaluateCrossfadeEvents } = require('../scripts/test-live-voice.cjs');
 
 function config(){
  return {
@@ -258,4 +258,34 @@ test('generated TypeScript output must not invalidate a clean source revision', 
   assert.equal(sourceRevision(directory), revision);
   await fs.writeFile(path.join(directory, 'index.ts'), 'export const value = 2;\n');
   assert.equal(sourceRevision(directory), null, 'modified source must invalidate revision evidence');
+});
+
+test('live voice compiles fresh JavaScript from a clean source revision before returning its SHA', async t => {
+  if (spawnSync('git', ['--version'], { encoding: 'utf8' }).status !== 0) {
+    t.skip('Git binary unavailable');
+    return;
+  }
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'nyxlink-live-rebuild-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const git = (...args) => {
+    const result = spawnSync('git', ['-C', directory, ...args], { encoding: 'utf8', timeout: 10000 });
+    assert.equal(result.status, 0, result.stderr || result.error?.message);
+    return result.stdout.trim();
+  };
+  const bin = path.join(directory, 'node_modules', 'typescript', 'bin');
+  await fs.mkdir(bin, { recursive: true });
+  await fs.mkdir(path.join(directory, 'dist'), { recursive: true });
+  await fs.writeFile(path.join(directory, 'index.ts'), 'fresh-source');
+  await fs.writeFile(path.join(directory, 'dist', 'index.js'), 'stale-compiled-code');
+  await fs.writeFile(path.join(bin, 'tsc'),
+    "const fs=require('node:fs'); fs.writeFileSync('dist/index.js',fs.readFileSync('index.ts','utf8'));\n");
+  git('init', '-q');
+  git('add', '.');
+  git('-c', 'user.name=NyxLink Test', '-c', 'user.email=test@example.invalid',
+    'commit', '-qm', 'fixture');
+  const revision = git('rev-parse', 'HEAD');
+  assert.equal(buildForLiveVoice(directory), revision);
+  assert.equal(await fs.readFile(path.join(directory, 'dist', 'index.js'), 'utf8'), 'fresh-source');
+  await fs.writeFile(path.join(directory, 'index.ts'), 'uncommitted source');
+  assert.throws(() => buildForLiveVoice(directory), /dirty or unverifiable source checkout/);
 });
