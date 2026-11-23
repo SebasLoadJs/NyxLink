@@ -244,3 +244,49 @@ test('an older sequence stays stale after deduplication key expiry', async t => 
   assert.equal(await shortReceiver.dispatch(second, p => delivered.push(p)), 'stale');
   assert.equal(delivered.length, 1);
 });
+
+
+test('a slow gateway callback cannot finish after a newer voice state on the same router', async t => {
+  const { a, sender, receiver } = await setup(t);
+  const player = await a.manager.players.createOwned(a.options);
+  player.stopHealthCheck();
+  const join = await sender.prepare(a.manager.guildOwnership, GUILD, packet());
+  const leave = await sender.prepare(a.manager.guildOwnership, GUILD, {
+    op: 4,
+    d: { guild_id: GUILD, channel_id: null, self_deaf: true, self_mute: false },
+  });
+  let enteredResolve, releaseResolve;
+  const entered = new Promise(resolve => { enteredResolve = resolve; });
+  const release = new Promise(resolve => { releaseResolve = resolve; });
+  const order = [];
+  const first = receiver.dispatch(join, async () => {
+    order.push('join-start');
+    enteredResolve();
+    await release;
+    order.push('join-end');
+  });
+  await entered;
+  const second = receiver.dispatch(leave, async () => { order.push('leave'); });
+  await Promise.resolve();
+  assert.deepEqual(order, ['join-start']);
+  releaseResolve();
+  assert.deepEqual(await Promise.all([first, second]), ['delivered', 'delivered']);
+  assert.deepEqual(order, ['join-start', 'join-end', 'leave']);
+});
+
+test('a failing gateway callback does not block the following guild command', async t => {
+  const { a, sender, receiver } = await setup(t);
+  const player = await a.manager.players.createOwned(a.options);
+  player.stopHealthCheck();
+  const first = await sender.prepare(a.manager.guildOwnership, GUILD, packet());
+  const next = await sender.prepare(a.manager.guildOwnership, GUILD, packet());
+  const runs = [];
+  const rejected = receiver.dispatch(first, async () => {
+    runs.push('failed');
+    throw new Error('Discord gateway disconnected');
+  });
+  const later = receiver.dispatch(next, async () => { runs.push('succeeded'); });
+  await assert.rejects(rejected, /gateway disconnected/);
+  assert.equal(await later, 'delivered');
+  assert.deepEqual(runs, ['failed', 'succeeded']);
+});
