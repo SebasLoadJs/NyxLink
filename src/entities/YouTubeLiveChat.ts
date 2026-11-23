@@ -53,17 +53,30 @@ export class YouTubeLiveChat extends EventEmitter<YouTubeLiveChatEvents> {
     private readonly reconnectDelay: number;
     private readonly maxReconnectAttempts: number;
     private closedByUser = false;
+    private reconnectTimer?: ReturnType<typeof setTimeout>;
 
     constructor(node: Node, identifier: string, options: YouTubeLiveChatOptions = {}) {
         super();
         if (!node.isNodeLink) {
             throw nodeLinkOnlyError("youtubeLiveChat");
         }
+        if (typeof identifier !== "string" || !identifier.trim()) {
+            throw new TypeError("YouTube live chat identifier must be a non-empty string");
+        }
+        if (options.autoReconnect !== undefined && typeof options.autoReconnect !== "boolean") {
+            throw new TypeError("YouTube live chat autoReconnect must be a boolean");
+        }
+        const reconnectDelay = options.reconnectDelay ?? 5000;
+        const maxReconnectAttempts = options.maxReconnectAttempts ?? 5;
+        if (!Number.isInteger(reconnectDelay) || reconnectDelay < 0 || reconnectDelay > 300000 ||
+            !Number.isInteger(maxReconnectAttempts) || maxReconnectAttempts < 0 || maxReconnectAttempts > 20) {
+            throw new TypeError("Invalid YouTube live chat reconnect limits");
+        }
         this.node = node;
         this.identifier = identifier;
         this.autoReconnect = options.autoReconnect ?? true;
-        this.reconnectDelay = options.reconnectDelay ?? 5000;
-        this.maxReconnectAttempts = options.maxReconnectAttempts ?? 5;
+        this.reconnectDelay = reconnectDelay;
+        this.maxReconnectAttempts = maxReconnectAttempts;
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
@@ -71,6 +84,12 @@ export class YouTubeLiveChat extends EventEmitter<YouTubeLiveChatEvents> {
         if (!this.node.manager.clientId) {
             throw new Error("YouTube live chat requires an initialized manager clientId.");
         }
+        if (this.node.destroyed || this.node.manager.destroyed) {
+            throw new Error("Cannot connect live chat after node or manager destruction.");
+        }
+        if (this.ws && !this.closedByUser) return this;
+        if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = undefined;
         this.closedByUser = false;
         const protocol = this.node.secure ? "wss" : "ws";
         const encodedId = encodeURIComponent(this.identifier);
@@ -88,24 +107,28 @@ export class YouTubeLiveChat extends EventEmitter<YouTubeLiveChatEvents> {
 
     public close(code: number = 1000, reason: string = "closed"): void {
         this.closedByUser = true;
+        if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = undefined;
         this.ws?.close(code, reason);
     }
 
     private attachSocket(socket: WebSocket): void {
         socket.on("open", () => {
+            if (this.ws !== socket || this.closedByUser) return;
             this.reconnectAttempts = 0;
             this.emit("open");
         });
 
         socket.on("message", ({ data }) => {
+            if (this.ws !== socket || this.closedByUser) return;
             const text = typeof data === "string" ? data : data.toString("utf8");
             if (!text) return;
             let payload: YouTubeLiveChatPayload;
             try {
                 payload = JSON.parse(text);
-            } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                this.emit("error", new Error(`YouTube live chat parse error: ${message}`));
+            } catch {
+                // JSON parser diagnostics can embed untrusted message contents.
+                this.emit("error", new Error("YouTube live chat parse error: invalid JSON payload"));
                 return;
             }
 
@@ -118,24 +141,36 @@ export class YouTubeLiveChat extends EventEmitter<YouTubeLiveChatEvents> {
         });
 
         socket.on("error", ({ error }) => {
+            if (this.ws !== socket || this.closedByUser) return;
             const err = error instanceof Error ? error : new Error(String(error));
             this.emit("error", err);
         });
 
         socket.on("close", ({ code, reason }) => {
+            if (this.ws !== socket) return;
+            this.ws = undefined;
             this.emit("close", code, reason);
-            if (!this.closedByUser && this.autoReconnect) {
+            if (!this.closedByUser && !this.ws && this.autoReconnect) {
                 this.scheduleReconnect();
             }
         });
     }
 
     private scheduleReconnect(): void {
+        if (this.closedByUser || this.reconnectTimer || this.node.destroyed || this.node.manager.destroyed) return;
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
             this.emit("error", new Error("YouTube live chat max reconnect attempts reached."));
             return;
         }
         this.reconnectAttempts++;
-        setTimeout(() => this.connect(), this.reconnectDelay);
+        this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = undefined;
+            if (this.closedByUser || this.ws || this.node.destroyed || this.node.manager.destroyed) return;
+            try { this.connect(); }
+            catch (error) {
+                this.emit("error", error instanceof Error ? error : new Error(String(error)));
+            }
+        }, this.reconnectDelay);
+        this.reconnectTimer.unref?.();
     }
 }
