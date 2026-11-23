@@ -67,11 +67,9 @@ export class Manager extends EventEmitter<IManagerEvents> {
         validate(config.nodes, (value) => Array.isArray(value) && value.length > 0, "Manager config requires a non-empty nodes array.");
         validate(config.options, (value) => value == null || (typeof value === "object" && !Array.isArray(value)), "Manager config 'options' must be a plain object if provided.");
 
-        const gatewaySend = config.send ?? this.missingSend;
-        this.send = (guildId, payload) => {
-            this.guildOwnership?.assertLocal(guildId);
-            gatewaySend(guildId, payload);
-        };
+        // Preserve the public send callback identity for connector injection.
+        // Voice.connect/disconnect enforce ownership at the call site.
+        this.send = config.send ?? this.missingSend;
         
         this.options = { 
             clientName: `NyxLink/${version} (https://github.com/SebasLoadJs/NyxLink)`,
