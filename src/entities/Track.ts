@@ -150,8 +150,16 @@ export class Track {
     }
 
     public clone(): Track {
-        const newTrack = new (Structure.get("Track"))(this.toJSON(), this.requester, this.origin, this.#partialTrackOptions);
-        newTrack.userData = JSON.parse(JSON.stringify(this.userData));
+        // Do not share mutable provider/user metadata between separate queue
+        // entries. This also makes unsupported cyclic data fail before the
+        // caller can insert a partially cloned playback entry.
+        const record = this.toJSON();
+        const userData = JSON.parse(JSON.stringify(this.userData));
+        const pluginInfo = JSON.parse(JSON.stringify(this.pluginInfo));
+        const newTrack = new (Structure.get("Track"))(
+            { ...record, userData, pluginInfo }, this.requester, this.origin, this.#partialTrackOptions
+        );
+        newTrack.retries = this.retries;
         return newTrack;
     }
 
