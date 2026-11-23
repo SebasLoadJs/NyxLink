@@ -205,3 +205,39 @@ still be handled by the downstream reader. The preexisting pinned
 NodeLink container suite continues checking real PCM audio and signal
 levels, while isolated protocol fixtures test wrong media types and
 legacy passthrough behavior.
+
+
+## YouTube LiveChat — optional NodeLink connection lifecycle
+
+`node.createYouTubeLiveChat(identifier, options)` creates a NodeLink-only chat
+client. This is an optional WebSocket stream; it is not a Discord voice receiver
+and is not part of the mandatory audio playback path.
+
+```ts
+const chat = node.createYouTubeLiveChat('authorized-live-video-id', {
+  autoReconnect: true,
+  reconnectDelay: 5000,
+  maxReconnectAttempts: 5,
+});
+chat.on('message', message => console.log(message.content));
+chat.on('error', error => console.error(error.message));
+chat.connect();
+// Later, when no longer needed:
+chat.close();
+```
+
+Reconnect policy is bounded (delay 0..300000 ms, attempts 0..20). A manual
+`close()` cancels pending reconnect timers and suppresses automatic reconnection.
+Duplicate `connect()` calls do not create parallel sockets, while callbacks
+belonging to old sockets cannot deliver messages or schedule additional attempts.
+Opening a new healthy socket resets the reconnect budget. Invalid JSON errors
+do not quote untrusted message content.
+
+**Evidence:** `tests/youtube-livechat-lifecycle.test.cjs` checks stale-event
+fencing, manual close during retry, retry exhaustion, option validation and
+diagnostic sanitization using a fake local transport.
+
+**Still unverified:** source permissions, live NodeLink YouTube chat availability,
+provider rate limits, network authentication under a real deployment, and
+consent or moderation requirements for storing messages. Do not call this
+feature production-verified until those conditions are tested.
