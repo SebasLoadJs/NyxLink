@@ -996,3 +996,34 @@ test('malformed positional skip entry is not removed before it can be normalized
   assert.deepEqual(player.queue.tracks, [first, malformed, last]);
   assert.deepEqual(requests, []);
 });
+
+test('rejected explicit playback leaves caller-owned track position intact', async t => {
+  const { node, player } = createPlayer(t);
+  const previous = createTrack('playing-before-rejection');
+  const requested = createTrack('rejected-with-position');
+  requested.position = 44000;
+  player.current = previous;
+  player.playing = true;
+  node.rest.updatePlayer = async () => null;
+
+  assert.equal(await player.play({ track: requested, position: 0 }), false);
+  assert.equal(player.current, previous);
+  assert.equal(player.playing, true);
+  assert.equal(requested.position, 44000);
+  assert.deepEqual(player.queue.tracks, [requested]);
+});
+
+test('successful explicit playback starts at requested position and preserves its queue semantics', async t => {
+  const { player, requests } = createPlayer(t);
+  const previous = createTrack('playing-before-replacement');
+  const requested = createTrack('requested-with-position');
+  requested.position = 44000;
+  player.current = previous;
+  player.playing = true;
+
+  assert.equal(await player.play({ track: requested, position: 5000 }), true);
+  assert.equal(player.current, requested);
+  assert.equal(requested.position, 5000);
+  assert.equal(requests.at(-1).payload.position, 5000);
+  assert.deepEqual(player.previous, [previous]);
+});
