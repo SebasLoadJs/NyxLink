@@ -31,7 +31,7 @@ pnpm run build
 node scripts/test-live-voice.cjs --armed
 ```
 
-The script sends voice connection requests and plays the two tracks with `setCrossfade({enabled:true,mode:'smart'})` plus `setQueuePreload({enabled:true})`. It requires two ordered `trackStart` events and an empty queue at handoff. It separately records whether `trackEnd` was tagged `crossfading`, `gapless`, or another reason. Its output is `.runtime/live-voice/report.json` with private mode 0600; credentials and source URLs are omitted.
+The script sends voice connection requests and plays the two tracks with `setCrossfade({enabled:true,mode:'smart'})` plus `setQueuePreload({enabled:true})`. It requires two ordered `trackStart` events and an empty queue at handoff. It separately records whether `trackEnd` was tagged `crossfading`, `gapless`, or another reason. Each run now writes a **separate private JSON report** in `.runtime/live-voice/`, named with the backend, acceptance mode, UTC time and a unique run identifier (mode 0600). Previous run evidence is preserved. Credentials and source URLs are omitted. The terminal prints the exact new report path.
 
 ## Separate playback-command acceptance mode
 
@@ -71,6 +71,12 @@ and whether the ordered start events were observed. It never records song
 URLs, bearer tokens, encoded tracks or gateway voice tokens. Neither mode
 certifies audible fidelity: a human observer must confirm actual voice
 output, pause/resume audibility, seek precision and lack of dropouts.
+
+To review a release candidate, keep the corresponding separate reports
+for all selected modes and both backends. Do not use a report from a different
+code revision as proof for the candidate. Even when each report says
+`protocolPassed: true`, its `audioMeasured: false` field means a person still
+needs to verify audio quality and dropout behavior.
 
 **CI coverage:** `tests/live-voice-commands.test.cjs` verifies the command
 sequence with a fake backend and failure cases; CI deliberately does
