@@ -118,6 +118,68 @@ verify exclusivity, expiry, monotonically increasing tokens, stale release
 protection, multiple guilds and shutdown races. They run together with
 storage CAS tests in the Redis 7 GitHub Actions workflow.
 
+## Integrating ownership with Player and voice lifecycle
+
+Calling \`manager.useGuildLeases({ coordinator, renewIntervalMs })\` **before**
+creating any players enables lease enforcement for that Manager. Without this
+opt-in, all existing synchronous \`players.create()\` / \`restore()\` APIs and
+non-Redis storage behaviors remain unchanged.
+
+When enabled, acquiring ownership requires Redis I/O, so use the **async**
+APIs \`players.createOwned(config)\` and \`players.restoreOwned(config)\`.
+The synchronous \`create()/restore()\` paths reject unowned guilds instead of
+racing another shard. Backend PATCH/DELETE, Player.connect(), Voice.connect(),
+Voice.disconnect() and player snapshot mutations check the current lease or
+its local fence, preventing stale routine operations after ownership loss.
+
+~~~js
+const coordinator = new RedisGuildLeaseCoordinator({
+  client: { sendCommand: args => client.sendCommand(args) },
+  namespace: 'obey_staging',
+  ttlMs: 30000,
+});
+manager.useGuildLeases({ coordinator, renewIntervalMs: 10000 });
+manager.on('guildOwnershipLost', (guildId, fencingToken, reason) => {
+  // Mark this guild unavailable to this worker.
+  // Cancel in-flight jobs and route commands to the new owner.
+});
+const player = await manager.players.createOwned({
+  guildId: '123456789012345678',
+  voiceChannelId: '223456789012345678',
+});
+await player.pause();
+await player.destroy('handoff'); // releases the lease after cleanup
+await manager.shutdown();        // closes the coordinator
+~~~
+
+\`SessionRecovery\` uses \`restoreOwned()\` automatically when ownership is
+enabled. The Manager's shutdown closes the lease controller and Redis leases,
+but not the caller-owned Redis client. A renewal heartbeat is enabled only
+for configured Managers. Lease loss is fail-closed for subsequent Player and
+Rest operations; stale destruction skips removing newer persisted snapshots.
+Calls to \`database.clear()\` are refused while distributed guild ownership
+is active to prevent accidental namespace-wide deletion.
+
+**Boundary:** the public \`manager.send\` callback remains the calling bot's
+Discord connector contract. Direct calls to that callback, raw gateway
+connections, third-party side effects and in-flight backend HTTP requests
+cannot be cryptographically fenced by NyxLink. Only the built-in Player,
+Voice and backend REST lifecycle has ownership checks. Operators must route
+gateway commands through an ownership-aware dispatcher and validate
+fencing tokens in downstream IPC. Do not interpret these guards as proof
+of exactly-one-active-Discord-voice-session across a network partition.
+
+### Acceptance and scenarios
+
+- \`tests/integration/redis-player-ownership.test.cjs\`: two real Redis clients
+  and separate Manager instances; competing create/restore; successful
+  command; rejected stale command; snapshot preservation and shutdown.
+- \`tests/helpers/redis-player-worker.cjs\`: a separate Node.js **OS process**
+  creates a Player, hands ownership to another process and verifies a newer
+  fencing token and usable playback commands.
+- The Redis 7 workflow runs on Node.js 22 and 24. A green workflow proves
+  these isolated lifecycle contracts, not audio heard through Discord.
+
 ## Testing
 
 An isolated, real Redis 7 integration job runs on both Node.js 22 and 24:
