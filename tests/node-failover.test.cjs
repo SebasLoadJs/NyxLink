@@ -307,3 +307,113 @@ test('eject reports a player stranded on an already disconnected destination', a
   assert.equal(player.node, failedTarget);
   assert.equal(player.destroyed, false);
 });
+
+test('drain rejects a recovery ACK that leaves the player on the source', async t => {
+  const { NodeFailover } = require('../dist/src/nodes/NodeFailover');
+  const { manager, node: source, player } = createPlayer(t);
+  candidates(manager);
+  const original = NodeFailover.move;
+  NodeFailover.move = async () => ({ status: 'recovered', attempts: 1, node: source });
+  t.after(() => { NodeFailover.move = original; });
+
+  assert.equal(await manager.nodes.drain(source.identifier), false);
+  assert.equal(player.node, source);
+  assert.equal(source.draining, true);
+});
+
+test('drain verifies actual ownership and succeeds on a live registered target', async t => {
+  const { NodeFailover } = require('../dist/src/nodes/NodeFailover');
+  const { manager, node: source, player } = createPlayer(t);
+  const [target] = candidates(manager);
+  const original = NodeFailover.move;
+  NodeFailover.move = async () => {
+    player.node = target;
+    return { status: 'recovered', attempts: 1, node: target };
+  };
+  t.after(() => { NodeFailover.move = original; });
+
+  assert.equal(await manager.nodes.drain(source.identifier), true);
+  assert.equal(player.node, target);
+  assert.equal(source.destroyed, false);
+});
+
+test('drain cannot succeed when the destination is not registered', async t => {
+  const { NodeFailover } = require('../dist/src/nodes/NodeFailover');
+  const { manager, node: source, player } = createPlayer(t);
+  const [target] = candidates(manager);
+  manager.nodes.nodes.delete(target.identifier);
+  const original = NodeFailover.move;
+  NodeFailover.move = async () => {
+    player.node = target;
+    return { status: 'recovered', attempts: 1, node: target };
+  };
+  t.after(() => { NodeFailover.move = original; });
+
+  assert.equal(await manager.nodes.drain(source.identifier), false);
+  assert.equal(player.node, target);
+});
+
+test('eject treats false recovery on original owner as an orphan', async t => {
+  const { NodeFailover } = require('../dist/src/nodes/NodeFailover');
+  const { manager, node: source, player } = createPlayer(t);
+  candidates(manager);
+  const original = NodeFailover.move;
+  NodeFailover.move = async () => ({ status: 'recovered', attempts: 1, node: source });
+  t.after(() => { NodeFailover.move = original; });
+  manager.options.node = { ...manager.options.node, failover: { preserveOnFailure: false } };
+  const orphaned = [];
+  manager.on('playersOrphaned', players => orphaned.push(...players));
+
+  assert.equal(await manager.nodes.eject(source.identifier), true);
+  assert.deepEqual(orphaned, [player]);
+  assert.equal(player.destroyed, true);
+});
+
+test('eject does not delete source when stranded destination cleanup rejects', async t => {
+  const { NodeFailover } = require('../dist/src/nodes/NodeFailover');
+  const { manager, node: source, player } = createPlayer(t);
+  const [target] = candidates(manager);
+  target.connected = false;
+  target.state = NodeState.DISCONNECTED;
+  const original = NodeFailover.move;
+  NodeFailover.move = async () => {
+    player.node = target;
+    return { status: 'failed', attempts: 1 };
+  };
+  t.after(() => { NodeFailover.move = original; });
+  manager.options.node = { ...manager.options.node, failover: { preserveOnFailure: false } };
+  let attempts = 0;
+  player.destroy = async () => {
+    attempts++;
+    throw new Error('offline destination refuses deletion');
+  };
+  const errors = [];
+  manager.on('nodeError', (_node, error) => errors.push(error.message));
+
+  assert.equal(await manager.nodes.eject(source.identifier), false);
+  assert.equal(attempts, 1);
+  assert.equal(source.destroyed, false);
+  assert.equal(manager.nodes.nodes.get(source.identifier), source);
+  assert.deepEqual(errors, ['offline destination refuses deletion']);
+});
+
+test('eject preserves source when recovered ACK points to an unregistered live owner', async t => {
+  const { NodeFailover } = require('../dist/src/nodes/NodeFailover');
+  const { manager, node: source, player } = createPlayer(t);
+  const [target] = candidates(manager);
+  manager.nodes.nodes.delete(target.identifier);
+  const original = NodeFailover.move;
+  NodeFailover.move = async () => {
+    player.node = target;
+    return { status: 'recovered', attempts: 1, node: target };
+  };
+  t.after(() => { NodeFailover.move = original; });
+  manager.options.node = { ...manager.options.node, failover: { preserveOnFailure: false } };
+  let destroyCalls = 0;
+  player.destroy = async () => { destroyCalls++; };
+
+  assert.equal(await manager.nodes.eject(source.identifier), false);
+  assert.equal(destroyCalls, 0);
+  assert.equal(source.destroyed, false);
+  assert.equal(manager.nodes.nodes.get(source.identifier), source);
+});
