@@ -10,6 +10,8 @@ Status: **in progress**, development branch `dev`. For the 38 original tasks, ph
 - None of these version changes or publications should be executed before all required gates pass.
 - A version number or green unit test alone **does not** certify audible Discord playback, crossfade quality, AutoMix, or every NodeLink provider.
 
+For the exact sequence of RC tag creation, npm `next` installation checks, human voice approval and final `latest` publication, follow [the 5.3 candidate release runbook](release-5.3-rc-runbook.md). Its steps do not authorize publication or waive the gates below.
+
 ## Phase 1 — Playback correctness
 
 - [ ] TypeScript strict build and all automated regression tests pass on Node.js 22 and 24.
