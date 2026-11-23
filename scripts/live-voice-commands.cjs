@@ -5,13 +5,30 @@ const { setTimeout: delay } = require('node:timers/promises');
  * only acknowledged REST state and queue movement are measured.
  */
 async function waitForSnapshot(rest, guildId, matches, label, timeoutMs = 4000) {
-  const end = Date.now() + timeoutMs;
-  while (Date.now() < end) {
-    const snapshot = await rest.getPlayer(guildId);
-    if (snapshot && matches(snapshot)) return;
-    await delay(100);
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60000) {
+    throw new TypeError('Snapshot polling timeout must be 1..60000 milliseconds');
   }
-  throw new Error('Live backend did not confirm ' + label);
+  const errorMessage = 'Live backend did not confirm ' + label;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const remaining = Math.max(1, deadline - Date.now());
+    const timer = new AbortController();
+    try {
+      // A stalled HTTP status request must not hang a live-voice acceptance run.
+      const snapshot = await Promise.race([
+        Promise.resolve().then(() => rest.getPlayer(guildId)),
+        delay(remaining, undefined, { signal: timer.signal }).then(() => {
+          throw new Error(errorMessage);
+        }),
+      ]);
+      if (snapshot && matches(snapshot)) return;
+    } finally {
+      timer.abort();
+    }
+    const pause = Math.min(100, Math.max(0, deadline - Date.now()));
+    if (pause) await delay(pause);
+  }
+  throw new Error(errorMessage);
 }
 
 async function verifyCommandSequence(player, node, tracks) {
