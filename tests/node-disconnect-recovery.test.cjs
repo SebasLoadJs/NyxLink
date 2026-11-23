@@ -181,3 +181,56 @@ test('recovered result targeting an unconnected node is not reported as moved', 
   assert.deepEqual(moved, []);
   assert.equal(player.node, destination);
 });
+
+test('one rejected failover does not block recovery of other guilds', async t => {
+  const { manager, node: source, player: first } = createPlayer(t);
+  const { Node, Player } = require('../dist');
+  const { NodeState } = require('../dist/src/typings/types.js');
+  const second = new Player(manager, source, {
+    guildId: '123456789012345679',
+    voiceChannelId: '223456789012345679',
+    autoPlay: false,
+  });
+  second.stopHealthCheck();
+  manager.players.players.set(second.guildId, second);
+  t.after(() => second.stopHealthCheck());
+
+  const destination = new Node(manager, {
+    identifier: 'partial-failover-destination', host: '127.0.0.1',
+    port: 2777, password: 'test-only',
+  });
+  destination.connected = true;
+  destination.state = NodeState.READY;
+  manager.nodes.nodes.set(destination.identifier, destination);
+  t.after(async () => { await destination.destroy(); });
+
+  const originalMove = NodeFailover.move;
+  NodeFailover.move = async player => {
+    if (player === first) throw new Error('simulated failover exception');
+    player.node = destination;
+    return { status: 'recovered', attempts: 1, node: destination };
+  };
+  t.after(() => { NodeFailover.move = originalMove; });
+
+  manager.options.node = {
+    ...manager.options.node,
+    autoMovePlayers: true,
+    failover: { preserveOnFailure: true },
+  };
+  source.retryAmount = 0;
+  source.reconnectAttempts = 0;
+  const orphaned = [];
+  const moved = [];
+  const errors = [];
+  manager.on('playersOrphaned', players => orphaned.push(...players));
+  manager.on('playersMoved', players => moved.push(...players));
+  manager.on('nodeError', (_node, error) => errors.push(error));
+
+  await source.close({ code: 1006, reason: 'partial-recovery-error' });
+  assert.deepEqual(orphaned, [first]);
+  assert.deepEqual(moved, [second]);
+  assert.equal(second.node, destination);
+  assert.equal(first.node, source);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0].message, /simulated failover exception/);
+});
