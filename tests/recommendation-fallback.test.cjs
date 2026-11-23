@@ -106,3 +106,47 @@ test('direct YouTube Music seed accepts valid identifiers', async () => {
     `https://music.youtube.com/watch?v=${youtube.identifier}&list=RD${youtube.identifier}`);
   assert.deepEqual(player.recommendations, [recommendation]);
 });
+
+test('empty seed lookup discards recommendations from the previous track', async () => {
+  const { node, player, calls } = fixture([{ loadType: 'empty', tracks: [] }]);
+  player.recommendations = [recommendation];
+  await RecommendationResolver.update(node, player, youtube);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(player.recommendations, []);
+});
+
+test('provider error leaves no stale recommendations available for autoplay', async () => {
+  const { node, player } = fixture([{ loadType: 'error', tracks: [] }]);
+  player.recommendations = [recommendation];
+  await RecommendationResolver.update(node, player, youtube);
+  assert.deepEqual(player.recommendations, []);
+});
+
+test('invalid seed cancels older lookup and clears its candidates', async () => {
+  const { node, player, calls } = fixture([]);
+  let resolveOld;
+  node.manager.search = async query => {
+    calls.push(query);
+    return new Promise(resolve => { resolveOld = resolve; });
+  };
+  const oldLookup = RecommendationResolver.update(node, player, youtube);
+  await RecommendationResolver.update(node, player, { ...youtube, identifier: 'invalid' });
+  resolveOld({ loadType: 'playlist', tracks: [recommendation] });
+  await oldLookup;
+  assert.equal(calls.length, 1);
+  assert.deepEqual(player.recommendations, []);
+});
+
+test('fallback accepts nested wire metadata and case-normalized YouTube sources', async () => {
+  const { node, player, seed, calls } = fixture([
+    { loadType: 'search', tracks: [
+      { info: { sourceName: 'YouTube', identifier: youtube.identifier } },
+    ] },
+    { loadType: 'playlist', tracks: [recommendation] },
+  ]);
+  await RecommendationResolver.update(node, player, seed);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].query,
+    `https://www.youtube.com/watch?v=${youtube.identifier}&list=RD${youtube.identifier}`);
+  assert.deepEqual(player.recommendations, [recommendation]);
+});
