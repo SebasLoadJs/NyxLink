@@ -118,15 +118,20 @@ function errorCode(error) {
 
 /** Store every controlled run separately; never overwrite earlier evidence. */
 /** Bind acceptance evidence to an exact checked-out commit when Git exists. */
-function sourceRevision() {
+function sourceRevision(directory = path.resolve(__dirname, '..')) {
+  const options = {
+    cwd: directory,
+    encoding: 'utf8',
+    timeout: 3000,
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  };
   try {
-    const revision = execFileSync('git', ['rev-parse', '--verify', 'HEAD'], {
-      cwd: path.resolve(__dirname, '..'),
-      encoding: 'utf8',
-      timeout: 3000,
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
+    // A report cannot certify HEAD when uncommitted or untracked source
+    // changes could have affected the actual code under test.
+    const changes = execFileSync('git', ['status', '--porcelain', '--untracked-files=normal'], options);
+    if (changes.trim()) return null;
+    const revision = execFileSync('git', ['rev-parse', '--verify', 'HEAD'], options).trim();
     return /^[0-9a-f]{40}$/.test(revision) ? revision : null;
   } catch {
     return null;
