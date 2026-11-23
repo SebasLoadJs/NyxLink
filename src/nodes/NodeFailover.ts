@@ -54,10 +54,11 @@ export class NodeFailover {
         }
         const guard = playbackGuard(player);
         let ticket = guard.ticket;
+        let owner = source;
         const cancelled = () => player.destroyed || source.destroyed || player.manager.destroyed || !guard.isCurrent(ticket);
         let attempts = 0;
         while (attempts < maxAttempts) {
-            if (cancelled() || player.node !== source) return { status: 'cancelled', attempts };
+            if (cancelled() || player.node !== owner) return { status: 'cancelled', attempts };
             const target = player.manager.nodes.findNode({ ...player.nodeSelection, exclude: [...excluded], allowUnhealthyFallback: false });
             if (!target) break;
             excluded.add(target.identifier);
@@ -69,13 +70,22 @@ export class NodeFailover {
             let restored = false;
             try { restored = await transferring; } catch { /* A different candidate may still recover the snapshot. */ }
             if (player.destroyed || source.destroyed || player.manager.destroyed || !guard.isCurrent(ticket)) return { status: 'cancelled', attempts };
-            if (restored && player.node === target && target.connected && !target.destroyed) {
-                return { status: 'recovered', attempts, node: target };
+            if (restored && player.node === target) {
+                if (target.connected && !target.destroyed) {
+                    return { status: 'recovered', attempts, node: target };
+                }
+                // A target may fail immediately after its restoration ACK.
+                // It owns the player now: continue failover from that owner
+                // rather than cancelling and leaving the player stranded.
+                owner = target;
+            } else if (player.node !== owner) {
+                // A different command changed ownership. Do not steal it.
+                return { status: 'cancelled', attempts };
             }
             // Exponential backoff: first failure uses baseDelay, subsequent failures grow.
             if (baseDelay && attempts < maxAttempts) await delay(retryDelay(baseDelay, attempts - 1, jitter, 60000));
         }
-        if (cancelled() || player.node !== source) return { status: 'cancelled', attempts };
+        if (cancelled() || player.node !== owner) return { status: 'cancelled', attempts };
         player.manager.emit('playerRecoveryFailed', player);
         return { status: 'failed', attempts };
     }
