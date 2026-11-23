@@ -370,3 +370,72 @@ test('throwing playersMoved subscriber cannot abort node closure', async t => {
   assert.equal(player.node, destination);
   assert.deepEqual(errors, ['move subscriber failed']);
 });
+
+test('two node instances sharing one endpoint do not share orphaned players', async t => {
+  const { manager, node: source, player: first } = createPlayer(t);
+  const { Node, Player, NodeState } = require('../dist');
+  const peer = new Node(manager, {
+    identifier: 'same-endpoint-peer', host: source.host, port: source.port,
+    password: 'test-only',
+  });
+  peer.connected = true;
+  peer.state = NodeState.READY;
+  manager.nodes.nodes.set(peer.identifier, peer);
+  t.after(async () => { await peer.destroy(); });
+  assert.equal(peer.uuid, source.uuid, 'the endpoint-based UUID intentionally collides');
+
+  const second = new Player(manager, peer, {
+    guildId: '123456789012345679',
+    voiceChannelId: '223456789012345679',
+    autoPlay: false,
+  });
+  second.stopHealthCheck();
+  manager.players.players.set(second.guildId, second);
+  t.after(() => second.stopHealthCheck());
+
+  manager.options.node = {
+    ...manager.options.node,
+    autoMovePlayers: false,
+    failover: { preserveOnFailure: true },
+  };
+  source.retryAmount = 0;
+  source.reconnectAttempts = 0;
+  const orphans = [];
+  manager.on('playersOrphaned', players => orphans.push(...players));
+  await source.close({ code: 1006, reason: 'same-host-independent-node' });
+
+  assert.deepEqual(orphans, [first]);
+  assert.equal(second.node, peer);
+  assert.equal(second.destroyed, false);
+  assert.equal(peer.destroyed, false);
+});
+
+test('disaster recovery only restarts players owned by the exact node', async t => {
+  const { manager, node: source, player: first } = createPlayer(t);
+  const { Node, Player, NodeState } = require('../dist');
+  const peer = new Node(manager, {
+    identifier: 'same-endpoint-recovery-peer',
+    host: source.host, port: source.port, password: 'test-only',
+  });
+  peer.connected = true;
+  peer.state = NodeState.READY;
+  manager.nodes.nodes.set(peer.identifier, peer);
+  t.after(async () => { await peer.destroy(); });
+  const second = new Player(manager, peer, {
+    guildId: '123456789012345679',
+    voiceChannelId: '223456789012345679',
+    autoPlay: false,
+  });
+  second.stopHealthCheck();
+  manager.players.players.set(second.guildId, second);
+  t.after(() => second.stopHealthCheck());
+  assert.equal(peer.uuid, source.uuid);
+
+  const restarts = [];
+  first.restart = async () => { restarts.push('first'); return true; };
+  second.restart = async () => { restarts.push('second'); return true; };
+  await source.startDisasterRecovery('test-identity-scope');
+
+  assert.deepEqual(restarts, ['first']);
+  assert.equal(second.node, peer);
+});
