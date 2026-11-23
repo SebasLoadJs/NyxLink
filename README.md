@@ -454,4 +454,4 @@ Las integraciones locales con servidores se ejecutan mediante `pnpm run test:bac
 
 Mantenido por [SebasLoadJs](https://github.com/SebasLoadJs). Distribuido bajo [OSL-3.0](LICENSE).
 
-Derivado de Moonlink.js, de 1Lucas1.apk y sus colaboradores. Se conservan la licencia y los avisos de origen.
+Derivado de [Moonlink.js](https://github.com/Ecliptia/moonlink.js), de 1Lucas1apk y sus colaboradores. La procedencia y las modificaciones se describen en [NOTICE.md](NOTICE.md), que también se incluye en el paquete npm. La revisión de atribuciones y requisitos de publicación sigue documentada en [license-attribution-review.md](docs/license-attribution-review.md); estas medidas no constituyen una certificación jurídica.
