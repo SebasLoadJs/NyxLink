@@ -151,3 +151,11 @@ Do not tag or publish while any required CI job is failing or unverified, while 
 **More recent release safety implementation:** read-only npm version-collision preflight is now included in both manual package validation and RC/stable tag validation; automated workflow regression tests assert tag matching, 600-second gate wiring, and no automatic publication. These commits require their own completed GitHub CI check before being considered verified. Recording this checkpoint triggers a fresh extended stabilization run for the updated development source.
 
 **Unchanged stop conditions:** no `v5.3.0-rc.1` Git tag or npm publication before final same-SHA CI, candidate 600-second endurance, authorized and independently heard real Discord playback (NodeLink and Lavalink), package/license attribution sign-off, npm owner/write permission and explicit publication approval.
+
+## Queue isolation and recovery checkpoint — 2026-11-23
+
+**Fully green pre-recovery checkpoint:** commit `8b030bfb4cf28a0eb4ca1ff2b49f9fbf44639a84` completed **11/11** GitHub Actions checks. This includes the Node 22/24 package validation, baseline and modern NodeLink, Lavalink plugins, Redis 7, CodeQL and automated endurance. This result applies only to that commit.
+
+**Subsequent changes awaiting same-SHA acceptance:** `Player.play()` now constructs any resolved Track before removing its queued source entry; malformed external resolver data can be retried instead of silently consumed. Queue ingress additionally validates JSON serializability to reject cyclic user metadata before mutating persistent queue state. Regression tests cover malformed resolution, recovery by retry, circular metadata, and successful nested metadata persistence.
+
+**Extended-gate recheck:** this documentation update intentionally triggers the standalone 600-second `stabilization / endurance` workflow on the resulting `dev` commit. Await its actual conclusion and the other checks before describing the updated HEAD as green. The RC tag and npm packages remain unpublished, and authenticated Discord voice acceptance, license/asset attribution sign-off, and authorized npm publisher verification are still mandatory.
