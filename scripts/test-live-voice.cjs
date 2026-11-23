@@ -2,7 +2,7 @@ const { setTimeout: delay } = require('node:timers/promises');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawnSync } = require('node:child_process');
 const { withDeadline } = require('./live-voice-commands.cjs');
 
 const snowflake = value => typeof value === 'string' && /^\d{17,20}$/.test(value);
@@ -130,13 +130,42 @@ function sourceRevision(directory = path.resolve(__dirname, '..')) {
   try {
     // A report cannot certify HEAD when uncommitted or untracked source
     // changes could have affected the actual code under test.
-    const changes = execFileSync('git', ['status', '--porcelain', '--untracked-files=normal'], options);
+    // TypeScript builds generate dist/, which is tracked in this repository and
+    // differs from older checked-in JavaScript. Exclude ONLY this build output;
+    // other modified/untracked source files still invalidate the SHA.
+    const changes = execFileSync('git', ['status', '--porcelain', '--untracked-files=normal', '--', '.', ':(exclude)dist'], options);
     if (changes.trim()) return null;
     const revision = execFileSync('git', ['rev-parse', '--verify', 'HEAD'], options).trim();
     return /^[0-9a-f]{40}$/.test(revision) ? revision : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * A live test must execute freshly compiled TypeScript from its recorded
+ * clean source commit. dist/ is tracked but can be stale after checkout;
+ * building here avoids accidentally testing outdated JavaScript.
+ * Never pass voice/backend secrets into the compiler process.
+ */
+function buildForLiveVoice(directory = path.resolve(__dirname, '..')) {
+  const revision = sourceRevision(directory);
+  if (!revision) throw new Error('Cannot run live acceptance from a dirty or unverifiable source checkout');
+  const env = { ...process.env };
+  for (const name of [
+    'NYXLINK_DISCORD_BOT_TOKEN', 'NYXLINK_NODE_PASSWORD',
+    'NYXLINK_LIVE_TRACK_A', 'NYXLINK_LIVE_TRACK_B'
+  ]) delete env[name];
+  const build = spawnSync(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+    ['run', 'build'], {
+      cwd: directory, env, encoding: 'utf8',
+      timeout: 120000, windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+  if (build.error || build.status !== 0 || sourceRevision(directory) !== revision) {
+    throw new Error('Could not validate a clean TypeScript build for live voice acceptance');
+  }
+  return revision;
 }
 
 function reportPath(config, instant = new Date(), id = randomUUID()) {
@@ -185,6 +214,7 @@ function evaluateCrossfadeEvents(events, remainingQueue) {
 }
 
 async function run(config) {
+  const verifiedRevision = buildForLiveVoice();
   const { Client, GatewayIntentBits } = require('discord.js');
   const { Manager, Connectors } = require('../dist');
   const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
@@ -200,7 +230,8 @@ async function run(config) {
     mode: config.reconnectSmoke ? 'reconnect' : config.commandSmoke ? 'commands' : 'crossfade',
     audioMeasured: false,
     operatorListeningRequired: true,
-    sourceRevision: sourceRevision(),
+    sourceRevision: verifiedRevision,
+    buildValidated: true,
     observed: false,
     events
   };
@@ -337,4 +368,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { validateConfiguration, errorCode, event, writePrivateReport, reportPath, sourceRevision, safeBackendVersion, safeTrackEndReason, evaluateCrossfadeEvents };
+module.exports = { validateConfiguration, errorCode, event, writePrivateReport, reportPath, sourceRevision, buildForLiveVoice, safeBackendVersion, safeTrackEndReason, evaluateCrossfadeEvents };
