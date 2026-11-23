@@ -278,7 +278,7 @@ test('live voice compiles fresh JavaScript from a clean source revision before r
   await fs.writeFile(path.join(directory, 'index.ts'), 'fresh-source');
   await fs.writeFile(path.join(directory, 'dist', 'index.js'), 'stale-compiled-code');
   await fs.writeFile(path.join(bin, 'tsc'),
-    "const fs=require('node:fs'); fs.writeFileSync('dist/index.js',fs.readFileSync('index.ts','utf8'));\n");
+    "const fs=require('node:fs'); fs.mkdirSync('dist',{recursive:true}); fs.writeFileSync('dist/index.js',fs.readFileSync('index.ts','utf8'));\n");
   git('init', '-q');
   git('add', '.');
   git('-c', 'user.name=NyxLink Test', '-c', 'user.email=test@example.invalid',
