@@ -1,6 +1,6 @@
 # NyxLink 5.3 — master completion and stable release gate
 
-Status: **in progress**, development branch `dev`. This document is the acceptance contract; it is **not** a claim that the release is ready. Stable branch `v5.2` must remain unchanged during stabilization.
+Status: **in progress**, development branch `dev`. For the 38 original tasks, phase mapping and evidence see [Master plan reconciliation](master-plan-reconciliation.md); the present document is the stable-release acceptance gate. This document is the acceptance contract; it is **not** a claim that the release is ready. Stable branch `v5.2` must remain unchanged during stabilization.
 
 ## Target and versioning
 
