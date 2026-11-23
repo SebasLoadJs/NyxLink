@@ -99,3 +99,15 @@ test('coordinator shutdown removes held locks but preserves Redis connection', a
   assert.ok(await b.acquire(guild));
   assert.ok(await b.acquire(secondGuild));
 });
+
+test('same coordinator can reacquire an expired lease without a stale local lock', async t => {
+  const { a } = await setup(t, 1000);
+  const first = await a.acquire(guild);
+  assert.ok(first);
+  await pause(1200);
+  const replacement = await a.acquire(guild);
+  assert.ok(replacement);
+  assert.ok(replacement.fencingToken > first.fencingToken);
+  assert.equal(await a.release(first), false);
+  assert.equal(await a.isCurrent(replacement), true);
+});
