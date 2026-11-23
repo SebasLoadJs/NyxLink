@@ -143,3 +143,37 @@ test('stop during in-flight migration cancels target commit and stops original p
   assert.equal(saved.node, source.identifier);
   assert.equal(saved.current, null);
 });
+
+test('explicit play during in-flight migration rolls back target before replacing track', async t => {
+  const { manager, node: source, player, requests } = createPlayer(t);
+  const target = attachDestination(t, manager);
+  const original = createTrack('migration-before-new-play');
+  const replacement = createTrack('migration-user-replacement');
+  player.current = original;
+  player.playing = true;
+  let targetCleanups = 0;
+  target.rest.destroyPlayer = async () => { targetCleanups++; };
+  let signalEntered;
+  let signalRelease;
+  const entered = new Promise(resolve => { signalEntered = resolve; });
+  const released = new Promise(resolve => { signalRelease = resolve; });
+  player.restart = async () => {
+    signalEntered();
+    await released;
+    return true;
+  };
+
+  const migrating = player.transferNode(target);
+  await entered;
+  const playing = player.play({ track: replacement });
+  signalRelease();
+  assert.equal(await migrating, false);
+  assert.equal(await playing, true);
+  assert.equal(player.node, source);
+  assert.equal(player.current, replacement);
+  assert.equal(targetCleanups, 1);
+  assert.equal(requests.at(-1).payload.track.encoded, replacement.encoded);
+  const saved = await manager.database.get(`players.${player.guildId}`);
+  assert.equal(saved.node, source.identifier);
+  assert.equal(saved.current.encoded, replacement.encoded);
+});
