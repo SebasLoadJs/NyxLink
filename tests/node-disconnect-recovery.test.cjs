@@ -580,3 +580,64 @@ test('throwing nodeStateChange listener does not skip disconnect policy', async 
   assert.equal(orphaned.length, 1);
   assert.deepEqual(errors, ['node state observer crashed']);
 });
+
+test('legacy session is readable only when no other node shares the endpoint', async t => {
+  const { manager, node } = createPlayer(t);
+  const legacyKey = `nodes.${node.uuid}`;
+  await manager.database.set(legacyKey, { sessionId: 'legacy-session' });
+  assert.equal(await node.loadStoredSessionId(), 'legacy-session');
+
+  const { Node } = require('../dist');
+  const peer = new Node(manager, {
+    identifier: 'same-endpoint-session-peer', host: node.host,
+    port: node.port, password: 'test-only',
+  });
+  manager.nodes.nodes.set(peer.identifier, peer);
+  t.after(async () => { await peer.destroy(); });
+  assert.equal(peer.uuid, node.uuid);
+  assert.equal(await node.loadStoredSessionId(), undefined);
+  assert.equal(await peer.loadStoredSessionId(), undefined);
+});
+
+test('scoped sessions stay independent for nodes using the same endpoint', async t => {
+  const { manager, node } = createPlayer(t);
+  const { Node } = require('../dist');
+  const { generateUUID } = require('../dist/src/Util.js');
+  const peer = new Node(manager, {
+    identifier: 'second-session-owner', host: node.host,
+    port: node.port, password: 'test-only',
+  });
+  manager.nodes.nodes.set(peer.identifier, peer);
+  t.after(async () => { await peer.destroy(); });
+  const firstKey = `nodes.${node.uuid}.sessions.${generateUUID(node.identifier, 0)}`;
+  const secondKey = `nodes.${peer.uuid}.sessions.${generateUUID(peer.identifier, 0)}`;
+  assert.notEqual(firstKey, secondKey);
+  await manager.database.set(firstKey, { sessionId: 'source-session' });
+  await manager.database.set(secondKey, { sessionId: 'peer-session' });
+  assert.equal(await node.loadStoredSessionId(), 'source-session');
+  assert.equal(await peer.loadStoredSessionId(), 'peer-session');
+  await manager.database.set(`nodes.${node.uuid}`, {
+    ...(await manager.database.get(`nodes.${node.uuid}`)),
+    sessionId: 'stale-legacy-session',
+  });
+  assert.equal(await node.loadStoredSessionId(), 'source-session');
+  assert.equal(await peer.loadStoredSessionId(), 'peer-session');
+});
+
+test('ready payload persists to scoped session key rather than overwriting legacy owner', async t => {
+  const { manager, node } = createPlayer(t);
+  const { NodeState } = require('../dist/src/typings/types.js');
+  const { generateUUID } = require('../dist/src/Util.js');
+  manager.options.resume = false;
+  await manager.database.set(`nodes.${node.uuid}`, { sessionId: 'legacy-stays' });
+  node.socket = { close() {} };
+  node.connected = true;
+  node.state = NodeState.CONNECTED;
+  await node.message({
+    data: JSON.stringify({ op: 'ready', sessionId: 'new-owner-session', resumed: false }),
+  });
+
+  const scoped = `nodes.${node.uuid}.sessions.${generateUUID(node.identifier, 0)}`;
+  assert.equal((await manager.database.get(scoped)).sessionId, 'new-owner-session');
+  assert.equal((await manager.database.get(`nodes.${node.uuid}`)).sessionId, 'legacy-stays');
+});
