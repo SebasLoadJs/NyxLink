@@ -12,7 +12,14 @@ export class AutoPlayManager {
         const active = () => guard.isCurrent(ticket) && guard.isAutoCurrent(automaticTicket) && player.autoPlay && !player.destroyed;
 
         if (!player.recommendations.length) {
-            await node.updateRecommendations(player, previous);
+            try {
+                await node.updateRecommendations(player, previous);
+            } catch (error) {
+                // Recommendation providers are optional. A failed lookup must
+                // not reject TrackEnd handling or suppress queueEnd/autoLeave.
+                player.manager.emit('debug', `NyxLink > AutoPlay > Recommendation lookup failed for guild ${player.guildId}: ${error instanceof Error ? error.message : String(error)}`);
+                return false;
+            }
         }
         if (!active() || player.queue.size > 0) return false;
 
