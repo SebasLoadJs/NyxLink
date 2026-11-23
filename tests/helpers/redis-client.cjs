@@ -70,32 +70,7 @@ class RedisTestClient {
       return Promise.reject(new TypeError('Commands must be strings'));
     }
     const encoded = Buffer.from('*' + args.length + '\r\n' +
-      args.map(value => '
-        '\r\n' + value + '\r\n').join(''));
-    return new Promise((resolve, reject) => {
-      this.pending.push({ resolve, reject });
-      this.socket.write(encoded, error => {
-        if (error) reject(error);
-      });
-    });
-  }
-
-  async close() {
-    this.socket.destroy();
-  }
-}
-
-async function connectRedis(host = '127.0.0.1', port = 6379) {
-  const socket = net.createConnection({ host, port });
-  await new Promise((resolve, reject) => {
-    socket.once('connect', resolve);
-    socket.once('error', reject);
-  });
-  return new RedisTestClient(socket);
-}
-module.exports = { connectRedis };
- + Buffer.byteLength(value) +
-        '\r\n' + value + '\r\n').join(''));
+      args.map(value => '$' + Buffer.byteLength(value) + '\r\n' + value + '\r\n').join(''));
     return new Promise((resolve, reject) => {
       this.pending.push({ resolve, reject });
       this.socket.write(encoded, error => {
