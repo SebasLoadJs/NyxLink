@@ -191,3 +191,18 @@ manager.startPrivateMetricsServer({ token: 'x', host: '0.0.0.0' });
 // @ts-expect-error Remote dashboards cannot request arbitrary guild-identifying metrics.
 const personalGuildId: string = ({} as import('../../dist').PrivateMetricsNode).guildId;
 void [metricsEndpoint, summary, nodeSummary, personalGuildId];
+
+
+const redisCommands: import('../../dist').RedisCommandClient = {
+    sendCommand: async (args: string[]): Promise<unknown> => args[0] === 'PING' ? 'PONG' : null,
+};
+const redisStorage: import('../../dist').RedisStorage =
+    new (require('../../dist').RedisStorage)({
+        client: redisCommands, namespace: 'my_bot',
+    } as import('../../dist').RedisStorageOptions);
+const externalDatabaseOptions: import('../../dist').IManagerOptionsConfig['database'] = {
+    type: 'external', adapter: redisStorage,
+};
+// @ts-expect-error Redis storage namespaces cannot be omitted from the public API.
+const invalidRedisOptions: import('../../dist').RedisStorageOptions = { client: redisCommands };
+void [redisStorage, externalDatabaseOptions, invalidRedisOptions];
