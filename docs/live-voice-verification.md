@@ -57,11 +57,13 @@ value. The default `--armed` crossfade acceptance mode requires NodeLink;
 Lavalink is not falsely advertised as having the NodeLink crossfade API.
 
 Commands mode **does not** enable crossfade, so it does not interfere with
-the default transition scenario. It checks REST-confirmed pause and resume,
-backend volume 40, playback position after a 5-second seek, successful skip
-and the second track-start event. Every backend acknowledgement has a bounded
-polling window, **including an HTTP request that never returns**. Failures
-are recorded only as an error category and stage.
+the default transition scenario. It requires eight checkpoints: the initial
+play acknowledgement, **backend confirmation of track A**, paused state,
+resumed state, backend volume 40, a 5-second seek, skip acknowledgement and
+**backend confirmation of track B**. It separately observes ordered track-start
+events. Every backend acknowledgement has a bounded polling window,
+**including an HTTP request that never returns**. Failures are recorded only
+as an error category and stage.
 
 The local report includes `commandChecks` with the six accepted operations
 and whether the ordered start events were observed. It never records song
