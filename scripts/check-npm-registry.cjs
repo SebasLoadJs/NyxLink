@@ -55,11 +55,19 @@ function parseArguments(args) {
   throw new TypeError('Usage: check-npm-registry.cjs [--report-only]');
 }
 
+function isPublicationBlocked(summary, options) {
+  if (!summary || typeof summary.versionAlreadyPublished !== 'boolean' ||
+      !options || typeof options.reportOnly !== 'boolean') {
+    throw new TypeError('Invalid npm collision decision input');
+  }
+  return summary.versionAlreadyPublished && !options.reportOnly;
+}
+
 async function main() {
-  const { reportOnly } = parseArguments(process.argv.slice(2));
+  const options = parseArguments(process.argv.slice(2));
   const summary = inspectRegistry(manifest, await fetchRegistry());
-  console.log(JSON.stringify({ ...summary, reportOnly }, null, 2));
-  if (summary.versionAlreadyPublished && !reportOnly) {
+  console.log(JSON.stringify({ ...summary, reportOnly: options.reportOnly }, null, 2));
+  if (isPublicationBlocked(summary, options)) {
     console.error('This package version already exists on npm and must not be republished.');
     process.exitCode = 1;
   }
@@ -74,4 +82,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { inspectRegistry, fetchRegistry, parseArguments };
+module.exports = { inspectRegistry, fetchRegistry, parseArguments, isPublicationBlocked };
