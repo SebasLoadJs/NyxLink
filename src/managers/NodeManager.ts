@@ -195,6 +195,11 @@ export class NodeManager {
         // A cancellation on the source represents a newer intent. The node
         // cannot be removed while that command still owns the player.
         if (players.some((player, index) => results[index].status === 'cancelled' && attached(player))) return false;
+        // Inconsistent ACKs for an unrelated *live* owner are ambiguous:
+        // do not destroy a potentially newer user session or eject its source.
+        if (players.some((player, index) => results[index].status === 'recovered' &&
+            registered(player) && !recovered(player, index) &&
+            !attached(player) && !stranded(player))) return false;
         // A claimed recovery is not evidence of success if the target is dead,
         // unregistered or no longer owns that guild. Keep those cases visible.
         const failed = players.filter((player, index) => registered(player) &&
