@@ -32,7 +32,11 @@ test('live voice harness requires valid IDs, safe URLs and bounded test configur
  assert.equal(valid.backend,'nodelink');
  assert.equal(validateConfiguration(config(),['--armed','--commands']).commandSmoke,true);
  assert.equal(validateConfiguration({...config(),NYXLINK_LIVE_BACKEND:'lavalink'},['--armed','--commands']).backend,'lavalink');
+ assert.equal(validateConfiguration({...config(),NYXLINK_LIVE_BACKEND:'lavalink'},['--armed','--reconnect']).reconnectSmoke,true);
+ assert.equal(validateConfiguration(config(),['--armed','--reconnect']).reconnectSmoke,true);
+ assert.throws(()=>validateConfiguration(config(),['--reconnect']),/--armed/);
  assert.throws(()=>validateConfiguration(config(),['--commands']),/--armed/);
+ assert.throws(()=>validateConfiguration(config(),['--armed','--commands','--reconnect']),/exactly one/);
  assert.throws(()=>validateConfiguration({...config(),NYXLINK_LIVE_BACKEND:'lavalink'},['--armed']),/crossfade requires NodeLink/);
  assert.throws(()=>validateConfiguration({...config(),NYXLINK_LIVE_BACKEND:'unknown'},['--armed','--commands']),/NYXLINK_LIVE_BACKEND/);
  for(const patch of [
