@@ -143,3 +143,17 @@ host owns SDK start/shutdown. No default remote export or global registration
 occurs in the NyxLink library. The integration fixture uses a loopback HTTP
 receiver and checks actual nonempty trace/metric requests and one Pino
 record. CI must verify the pinned versions, including Pino 10 support.
+
+## Terminal acceptance and benchmark increment
+
+The packed consumer now runs six Linux pseudo-terminal sessions, captures
+actual ANSI streams at 40/80/120 columns, checks NO_COLOR, persistent log
+clear/restore and Ink keyboard navigation. These are execution transcripts
+of simulated inputs, not recordings of a live music session. The benchmark
+compares disabled, silent, JSON, Pretty and Aurora with 2,000 events and
+three repeats each. It checks exact delivery counts and records elapsed
+time, throughput and output bytes without imposing a hardware-specific
+throughput threshold. GitHub Actions uploads the transcripts and JSON
+measurements per Node version even on failure. Consola repeat throttling
+is disabled on the canonical event route to avoid collapsing events.
+CI results are still required; no benchmark numbers are assumed.
