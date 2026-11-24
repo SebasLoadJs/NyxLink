@@ -86,7 +86,12 @@ export class AuroraPresentation {
         const backend = context.backend === 'lavalink' || context.backend === 'nodelink' ? context.backend.toUpperCase() : '';
         const duration = typeof event.durationMs === 'number' && Number.isFinite(event.durationMs) && event.durationMs >= 0
             ? this.tools.duration(event.durationMs) : '';
-        const detail = [definition.message, backend, duration].filter(Boolean).join(this.unicode ? ' · ' : ' | ');
+        const counts = event.eventCode === 'DASHBOARD_SNAPSHOT'
+            ? [['Nodes', context.nodeCount], ['Players', context.playerCount], ['Playing', context.playingCount], ['Queue', context.queuedTracks], ['Sources', context.sourceCount]]
+                .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isSafeInteger(entry[1]) && entry[1] >= 0)
+                .map(([label, value]) => label + ': ' + value)
+            : [];
+        const detail = [definition.message, backend, duration, ...counts].filter(Boolean).join(this.unicode ? ' · ' : ' | ');
         const label = this.paint(definition.level.toUpperCase().padEnd(5), severity[definition.level]);
         const category = this.paint(definition.category.padEnd(10), '#818CF8');
         const prefix = [time, label, marker, category].join(' ');

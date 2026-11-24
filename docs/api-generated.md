@@ -47,6 +47,12 @@ export declare class AuroraCapabilityExplorer {
 
 ```ts
 export declare const auroraCatalog: {
+    readonly DASHBOARD_SNAPSHOT: {
+        readonly category: "TELEMETRY";
+        readonly level: "info";
+        readonly outcome: "observed";
+        readonly message: "Cluster dashboard observed";
+    };
     readonly MANAGER_INITIALIZED: {
         readonly category: "CORE";
         readonly level: "info";
@@ -347,6 +353,11 @@ export type AuroraContext = {
     stage?: MigrationStage;
     stageStatus?: MigrationStageObservation['status'];
     httpStatus?: number;
+    nodeCount?: number;
+    playerCount?: number;
+    playingCount?: number;
+    queuedTracks?: number;
+    sourceCount?: number;
 };
 ```
 
@@ -409,6 +420,7 @@ export declare class AuroraEvents {
     };
     constructor(options: AuroraEventOptions);
     observe<T>(kind: 'search' | 'rest' | 'stream', run: () => Promise<T>, input?: AuroraContext, classify?: (result: T) => 'completed' | 'empty' | 'failed'): Promise<T>;
+    recordDashboard(input: Pick<AuroraContext, 'nodeCount' | 'playerCount' | 'playingCount' | 'queuedTracks' | 'sourceCount'>): void;
     recordInitialized(): void;
     recordExtensionFailure(): void;
     recordMigrationStage(player: Player, stage: MigrationStage, status: MigrationStageObservation['status']): void;
@@ -753,18 +765,6 @@ export declare const Connectors: {
 };
 ```
 
-## ConsoleReporter
-
-[Source declaration](../src/logging/ConsoleReporter.ts)
-
-```ts
-export declare class ConsoleReporter implements ConsolaReporter {
-    constructor(options?: FormatterOptions, sink?: StructuredLogSink | undefined, consoleEnabled?: boolean);
-    writePanel(content: string): void;
-    log(logObject: LogObject): void;
-}
-```
-
 ## createAuroraPinoEngine
 
 [Source declaration](../src/logging/AuroraEvents.ts)
@@ -782,14 +782,6 @@ export declare function createAuroraPinoEngine(level: AuroraLevel, consume: (rec
 
 ```ts
 export declare function createBanner(color?: boolean): string;
-```
-
-## createPinoSink
-
-[Source declaration](../src/logging/ConsoleReporter.ts)
-
-```ts
-export declare function createPinoSink(target: PinoLogTarget): StructuredLogSink;
 ```
 
 ## CrossfadeOptions
@@ -833,7 +825,15 @@ export declare class DeezerSource {
 [Source declaration](../src/logging/ErrorDiagnostics.ts)
 
 ```ts
-export declare function diagnoseError(error: unknown, context?: LogContext): ErrorDiagnostic;
+export declare function diagnoseError(error: unknown, context?: DiagnosticContext): ErrorDiagnostic;
+```
+
+## DiagnosticContext
+
+[Source declaration](../src/logging/SafeDiagnostics.ts)
+
+```ts
+export type DiagnosticContext = Readonly<Record<string, unknown>>;
 ```
 
 ## DurationSummary
@@ -861,7 +861,7 @@ export interface ErrorDiagnostic {
     message: string;
     action: string;
     retryable?: boolean;
-    context: LogContext;
+    context: DiagnosticContext;
     error: unknown;
 }
 ```
@@ -1104,14 +1104,6 @@ export declare function formatEntry(entry: LogEntry, options?: FormatterOptions)
 
 ```ts
 export declare function formatFailover(event: FailoverReport, options?: FormatterOptions): string;
-```
-
-## formatPlayerTrace
-
-[Source declaration](../src/logging/PlayerTrace.ts)
-
-```ts
-export declare function formatPlayerTrace(guildId: string, records: readonly StructuredLogRecord[], options?: FormatterOptions): string;
 ```
 
 ## formatSystemStatus
@@ -2311,17 +2303,6 @@ export interface IVoiceConnectionOptions {
 }
 ```
 
-## JsonLogTransport
-
-[Source declaration](../src/logging/JsonLogTransport.ts)
-
-```ts
-export declare class JsonLogTransport implements LogTransport {
-    constructor(stream?: Writable);
-    write(record: StructuredLogRecord): Promise<void>;
-}
-```
-
 ## LavalinkAdapter
 
 [Source declaration](../src/backends/LavalinkAdapter.ts)
@@ -2394,20 +2375,6 @@ export interface LavaLyricsOptions {
 }
 ```
 
-## LegacyStructuredLogRecord
-
-[Source declaration](../src/logging/ConsoleReporter.ts)
-
-```ts
-export type StructuredLogRecord = {
-    level: number;
-    type: string;
-    module: string;
-    timestamp: string;
-    message: string;
-};
-```
-
 ## LoadType
 
 [Source declaration](../src/typings/types.ts)
@@ -2440,120 +2407,6 @@ export declare class Local extends Memory {
     has(key: string): Promise<boolean>;
     flush(): Promise<void>;
     shutdown(): Promise<void>;
-}
-```
-
-## LogContext
-
-[Source declaration](../src/logging/StructuredLog.ts)
-
-```ts
-export type LogContext = Readonly<Record<string, unknown>>;
-```
-
-## Logger
-
-[Source declaration](../src/logging/Logger.ts)
-
-```ts
-export declare class Logger {
-    constructor(options?: LoggerOptions);
-    setLevel(level: NyxLogLevel): void;
-    isEnabled(level: Exclude<NyxLogLevel, 'silent'>): boolean;
-    event(level: StructuredLogRecord['level'], component: string, event: string, context?: LogContext, message?: string): void;
-    child(context: LogContext): Logger;
-    getStats(): Readonly<import("./StructuredLog").LogPipelineStats>;
-    timeline(filter?: {
-        traceId?: string;
-        guildId?: string;
-        limit?: number;
-    }): StructuredLogRecord[];
-    playerTrace(guildId: string, options?: PlayerTraceOptions): StructuredLogRecord[];
-    flush(): Promise<void>;
-    reportError(error: unknown, context?: LogContext): ErrorDiagnostic;
-    close(): Promise<void>;
-    traceOperation<T>(name: string, operation: (logger: Logger) => T | Promise<T>, context?: LogContext): Promise<T>;
-    for(module: string): import("consola").ConsolaInstance;
-    info(module: string, message: string, ...args: unknown[]): void;
-    success(module: string, message: string, ...args: unknown[]): void;
-    warn(module: string, message: string, ...args: unknown[]): void;
-    error(module: string, message: string, ...args: unknown[]): void;
-    debug(module: string, message: string, ...args: unknown[]): void;
-    trace(module: string, message: string, ...args: unknown[]): void;
-    box(module: string, title: string, fields: Record<string, unknown>): void;
-    banner(): void;
-    systemStatus(nodes: AudioNodeStatus[]): void;
-    failover(event: FailoverReport): void;
-    attachLegacyDebug(source: DebugSource): () => void;
-    startup(manager: Manager): void;
-    managerStatus(manager: Manager): void;
-}
-```
-
-## LoggerOptions
-
-[Source declaration](../src/logging/Logger.ts)
-
-```ts
-export type LoggerOptions = {
-    colorDepth?: 4 | 24;
-    startup?: boolean;
-    level?: NyxLogLevel;
-    color?: boolean;
-    timestamps?: boolean;
-    width?: number;
-    profile?: LogProfile;
-    mode?: 'pretty' | 'json';
-    unicode?: boolean;
-    context?: LogContext;
-    transports?: readonly LogTransport[];
-    sink?: StructuredLogSink;
-    console?: boolean;
-    maxQueue?: number;
-    timelineLimit?: number;
-    transportTimeoutMs?: number;
-    onTransportError?: (error: Error) => void;
-    sampleRate?: number;
-    deduplicateMs?: number;
-    layout?: 'compact' | 'standard' | 'detailed' | 'diagnostic';
-};
-```
-
-## LogPipelineStats
-
-[Source declaration](../src/logging/StructuredLog.ts)
-
-```ts
-export interface LogPipelineStats {
-    accepted: number;
-    written: number;
-    dropped: number;
-    droppedCritical: number;
-    transportErrors: number;
-    sampled: number;
-    suppressed: number;
-    queued: number;
-    closed: boolean;
-}
-```
-
-## LogProfile
-
-[Source declaration](../src/logging/Logger.ts)
-
-```ts
-export type LogProfile = 'silent' | 'minimal' | 'standard' | 'verbose' | 'debug' | 'trace' | 'diagnostic';
-```
-
-## LogTransport
-
-[Source declaration](../src/logging/StructuredLog.ts)
-
-```ts
-export interface LogTransport {
-    write(record: StructuredLogRecord): void | Promise<void>;
-    flush?(): void | Promise<void>;
-    close?(): void | Promise<void>;
 }
 ```
 
@@ -3062,14 +2915,6 @@ export interface NyxExtension {
 }
 ```
 
-## NyxLogLevel
-
-[Source declaration](../src/logging/LogLevels.ts)
-
-```ts
-export type NyxLogLevel = 'silent' | 'error' | 'warn' | 'info' | 'debug' | 'trace';
-```
-
 ## OpenTelemetry
 
 [Source declaration](../src/observability/OpenTelemetry.ts)
@@ -3081,17 +2926,6 @@ export declare class OpenTelemetry {
     operation<T>(name: TelemetryOperation, operation: () => Promise<T>, classify?: (result: T) => TelemetryOutcome): Promise<T>;
     syncOperation<T>(name: TelemetryOperation, operation: () => T, classify?: (result: T) => TelemetryOutcome): T;
     close(): void;
-}
-```
-
-## OpenTelemetryLogTransport
-
-[Source declaration](../src/logging/ExternalTransports.ts)
-
-```ts
-export declare class OpenTelemetryLogTransport implements LogTransport {
-    constructor(tracer: TelemetryTracerLike, counter?: TelemetryCounterLike | undefined);
-    write(record: StructuredLogRecord): void;
 }
 ```
 
@@ -3174,47 +3008,6 @@ export interface PerformanceSnapshot {
         managerListeners: number;
         activeTypes: Record<string, number>;
     };
-}
-```
-
-## PinoLoggerLike
-
-[Source declaration](../src/logging/ExternalTransports.ts)
-
-```ts
-export interface PinoLoggerLike {
-    trace(fields: object, message: string): unknown;
-    debug(fields: object, message: string): unknown;
-    info(fields: object, message: string): unknown;
-    warn(fields: object, message: string): unknown;
-    error(fields: object, message: string): unknown;
-    flush?(callback: (error?: Error) => void): void;
-}
-```
-
-## PinoLogTarget
-
-[Source declaration](../src/logging/ConsoleReporter.ts)
-
-```ts
-export type PinoLogTarget = {
-    error: (record: PinoLogFields, message: string) => unknown;
-    warn: (record: PinoLogFields, message: string) => unknown;
-    info: (record: PinoLogFields, message: string) => unknown;
-    debug: (record: PinoLogFields, message: string) => unknown;
-    trace: (record: PinoLogFields, message: string) => unknown;
-};
-```
-
-## PinoLogTransport
-
-[Source declaration](../src/logging/ExternalTransports.ts)
-
-```ts
-export declare class PinoLogTransport implements LogTransport {
-    constructor(logger: PinoLoggerLike);
-    write(record: StructuredLogRecord): void;
-    flush(): Promise<void>;
 }
 ```
 
@@ -3443,17 +3236,6 @@ export type PlayerSnapshotData = Omit<IPlayerConfig, 'current' | 'queue' | 'prev
     loop: 'off' | 'track' | 'queue';
     filters?: Record<string, unknown>;
 };
-```
-
-## PlayerTraceOptions
-
-[Source declaration](../src/logging/PlayerTrace.ts)
-
-```ts
-export interface PlayerTraceOptions {
-    traceId?: string;
-    limit?: number;
-}
 ```
 
 ## PlayerTrackUpdate
@@ -4139,41 +3921,6 @@ export interface StorageAdapter {
 }
 ```
 
-## StructuredLogRecord
-
-[Source declaration](../src/logging/StructuredLog.ts)
-
-```ts
-export interface StructuredLogRecord {
-    readonly schemaVersion: 1;
-    readonly sequence: number;
-    readonly timestamp: string;
-    readonly level: Exclude<NyxLogLevel, 'silent'>;
-    readonly component: string;
-    readonly event: string;
-    readonly message: string;
-    readonly context: LogContext;
-}
-```
-
-## StructuredLogSink
-
-[Source declaration](../src/logging/ConsoleReporter.ts)
-
-```ts
-export type StructuredLogSink = (record: StructuredLogRecord) => void;
-```
-
-## TelemetryCounterLike
-
-[Source declaration](../src/logging/ExternalTransports.ts)
-
-```ts
-export interface TelemetryCounterLike {
-    add(value: number, attributes?: Record<string, string | number | boolean>): void;
-}
-```
-
 ## TelemetryGauge
 
 [Source declaration](../src/observability/OpenTelemetry.ts)
@@ -4245,20 +3992,6 @@ export interface TelemetrySpan {
 }
 ```
 
-## TelemetrySpanLike
-
-[Source declaration](../src/logging/ExternalTransports.ts)
-
-```ts
-export interface TelemetrySpanLike {
-    setStatus(status: {
-        code: number;
-        message?: string;
-    }): unknown;
-    end(endTime?: number): void;
-}
-```
-
 ## TelemetryTracer
 
 [Source declaration](../src/observability/OpenTelemetry.ts)
@@ -4267,19 +4000,6 @@ export interface TelemetrySpanLike {
 export interface TelemetryTracer {
     startSpan(name: string): TelemetrySpan;
     startActiveSpan?<T>(name: string, callback: (span: TelemetrySpan) => T): T;
-}
-```
-
-## TelemetryTracerLike
-
-[Source declaration](../src/logging/ExternalTransports.ts)
-
-```ts
-export interface TelemetryTracerLike {
-    startSpan(name: string, options?: {
-        startTime?: number;
-        attributes?: Record<string, string | number | boolean>;
-    }): TelemetrySpanLike;
 }
 ```
 
@@ -4304,7 +4024,7 @@ export declare class TerminalCoordinator {
 
 ```ts
 export declare class TerminalDashboard {
-    constructor(manager: Manager, logger: Logger, options?: TerminalDashboardOptions);
+    constructor(manager: Manager, options?: TerminalDashboardOptions);
     snapshot(): TerminalDashboardSnapshot;
     render(): TerminalDashboardSnapshot;
     start(): () => void;

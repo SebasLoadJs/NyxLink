@@ -99,11 +99,12 @@ export class TerminalDashboard {
     start(): () => void {
         if (this.running || this.manager.destroyed) return () => this.stop();
         this.running = true;
-        if (getManagerLogRoute(this.manager)) this.render();
+        if (!getManagerLogRoute(this.manager)) { this.running = false; return () => this.stop(); }
+        this.render();
         if (this.options.mode !== 'static' && process.stdout.isTTY && !process.env.CI) {
             this.timer = setInterval(() => {
                 if (this.manager.destroyed || !getManagerLogRoute(this.manager)) { this.stop(); return; }
-                if (getManagerLogRoute(this.manager)) this.render();
+                this.render();
             }, this.intervalMs);
             this.timer.unref();
         }

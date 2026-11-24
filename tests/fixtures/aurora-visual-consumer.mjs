@@ -42,3 +42,9 @@ for(const columns of [40,80,120]){
 const unknown=renderIncident({state:'failed',backend:'private-node',reasonCode:'private-secret'},{columns:40,unicode:false});
 assert.match(unknown,/Duration: N\/A/);
 assert.doesNotMatch(unknown,/private-/);
+
+for(const columns of [40,80,120]){
+ const output=createPresentation({columns,color:false,isTTY:false}).event({eventCode:'DASHBOARD_SNAPSHOT',timestamp:'2026-01-01T12:34:56Z',sanitizedContext:{nodeCount:2,playerCount:0,playingCount:0,queuedTracks:4,sourceCount:3,password:'PRIVATE_CANARY'}});
+ assert.match(output,/Nodes: 2/);assert.match(output,/Players: 0/);assert.match(output,/Queue: 4/);
+ assert.doesNotMatch(output,/PRIVATE_CANARY/);assert.ok(output.split('\n').every(line=>stringWidth(stripAnsi(line))<=columns));
+}
