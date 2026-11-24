@@ -16,7 +16,7 @@ for(const format of ['disabled','silent','json','pretty','aurora']){
             done();
         }});
         const pipeline=format==='disabled'?undefined:createAuroraPipeline({format,level:format==='silent'?'silent':'debug',stream,onEvent(){received++;},onRenderError(){renderErrors++;}});
-        const manager=new Manager({nodes:[{host:'localhost',port:2333,password:'fixture',secure:false}],options:pipeline?{aurora:{level:pipeline.level,target:pipeline.target}}:{}});
+        const manager=new Manager({nodes:[{host:'localhost',port:2333,password:'fixture',secure:false}],options:pipeline?{logging:{level:pipeline.level,target:pipeline.target}}:{}});
         const player={node:{backend:{kind:'nodelink'}}};
         try{
             for(let i=0;i<100;i++)manager.emit('queueAdd',player,[{}]);

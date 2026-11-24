@@ -7,7 +7,7 @@ import {Manager,OpenTelemetry,AuroraInspectorStore} from 'nyxlink';
 import {activeTraceContext,createInspectorSpanProcessor} from './aurora-otel.mjs';
 const cm=new AsyncLocalStorageContextManager().enable();assert.equal(context.setGlobalContextManager(cm),true);
 let store;const records=[];
-const m=new Manager({nodes:[{host:'localhost',port:2333,password:'fixture',secure:false}],options:{aurora:{level:'info',target:pino({level:'info'},{write(line){const record=JSON.parse(line);records.push(record);store?.recordEvent(record);}}),traceContext:activeTraceContext}}});
+const m=new Manager({nodes:[{host:'localhost',port:2333,password:'fixture',secure:false}],options:{logging:{level:'info',target:pino({level:'info'},{write(line){const record=JSON.parse(line);records.push(record);store?.recordEvent(record);}}),traceContext:activeTraceContext}}});
 store=new AuroraInspectorStore(m);
 const provider=new BasicTracerProvider({spanProcessors:[createInspectorSpanProcessor(store)]});
 const t=new OpenTelemetry(m,{tracer:provider.getTracer('fixture')});

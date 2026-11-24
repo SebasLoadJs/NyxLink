@@ -2,13 +2,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const { once } = require('node:events');
-const { Logger, BackendDetector } = require('../dist');
+const { AuroraEvents, BackendDetector } = require('../dist');
 const { createPlayer } = require('./helpers/player.cjs');
 
-async function fixture(t) {
+async function fixture(t, level='debug') {
   const context = createPlayer(t); const records = [];
-  const logger = new Logger({ level: 'debug', transports: [{ write(record) { records.push(record); } }] });
-  context.manager.logger = logger;
+  const logger = new AuroraEvents({level,target:Object.fromEntries(['trace','debug','info','warn','error','fatal'].map(name=>[name,record=>records.push(record)]))});
+  logger.attach(context.manager);
   context.node.backend = BackendDetector.detect({ version: { semver: '3.10.0' }, isNodelink: true }); context.node.isNodeLink = true;
   context.node.sessionId = 'PRIVATE_SESSION';
   const server = http.createServer(async (req, res) => {
@@ -24,8 +24,7 @@ async function fixture(t) {
 }
 
 test('REST and stream-opening metrics work with a silent logger without retaining payloads', async t => {
-  const { manager, node, logger } = await fixture(t);
-  logger.setLevel('silent');
+  const { manager, node } = await fixture(t,'silent');
   const monitor = manager.startPerformanceMonitor(); t.after(() => monitor.close());
   assert.deepEqual(await node.rest.getInfo(), { returned: 'PRIVATE_RESPONSE' });
   const response = await node.rest.loadStream({ encodedTrack: 'PRIVATE_STREAM_TRACK', format: 'raw' });
@@ -37,17 +36,16 @@ test('REST and stream-opening metrics work with a silent logger without retainin
 
 test('HTTP spans preserve header overloads/results while scrubbing session paths, queries and bodies', async t => {
   const { node, player, logger, records } = await fixture(t);
-  await logger.traceOperation('command', async () => {
+  await logger.observe('search', async () => {
     const info = await node.rest.getInfoWithHeaders();
     assert.deepEqual(info.data, { returned: 'PRIVATE_RESPONSE' }); assert.equal(info.headers['x-fixture'], 'preserved');
     assert.equal((await node.rest.getPlayer(player.guildId)).guildId, player.guildId);
     await node.rest.loadLyrics('PRIVATE_ENCODED_QUERY');
-  }, { traceId: 'request-trace' });
-  await logger.flush();
-  const http = records.filter(record => record.context.operation === 'REST.http');
-  assert.equal(http.filter(record => record.event === 'operation.completed').length, 3);
-  assert.ok(http.every(record => record.context.traceId === 'request-trace'));
-  assert.ok(http.some(record => record.context.route === '/v4/sessions/:session/players/:guild'));
+  });
+  const http = records.filter(record => record.eventCode === 'REST_COMPLETED');
+  assert.equal(http.length,3);
+  const parent = records.find(record=>record.eventCode==='SEARCH_COMPLETED');
+  assert.ok(http.every(record=>record.parentOperationId===parent.operationId));
   assert.doesNotMatch(JSON.stringify(records), /PRIVATE_SESSION|PRIVATE_ENCODED_QUERY|PRIVATE_RESPONSE/);
 });
 
@@ -56,8 +54,7 @@ test('stream spans describe only opening and leave audio consumption to the call
   const result = await node.rest.loadStream({ encodedTrack: 'PRIVATE_STREAM_TRACK', format: 'raw' });
   let bytes = 0; for await (const chunk of result.stream) bytes += chunk.length;
   assert.equal(bytes, 16); assert.equal(result.statusCode, 200);
-  await logger.flush();
-  assert.ok(records.some(record => record.context.operation === 'REST.stream.open' && record.event === 'operation.completed'));
+  assert.ok(records.some(record => record.eventCode === 'STREAM_OPENED'));
   assert.doesNotMatch(JSON.stringify(records), /PRIVATE_STREAM_TRACK/);
 });
 
@@ -66,8 +63,7 @@ test('failure spans retain actual HTTP status without logging raw backend bodies
   server.removeAllListeners('request');
   server.on('request', (_req, res) => { res.writeHead(403, { 'content-type': 'application/json' }); res.end('{"message":"PRIVATE_BODY_DETAIL"}'); });
   await assert.rejects(node.rest.getInfoWithHeaders(), error => error.statusCode === 403 && error.body.message === 'PRIVATE_BODY_DETAIL');
-  await logger.flush();
-  const failure = records.find(record => record.event === 'operation.failed');
-  assert.equal(failure.context.error.statusCode, 403);
+  const failure = records.find(record => record.eventCode === 'REST_FAILED');
+  assert.equal(failure.sanitizedContext.httpStatus, 403);
   assert.doesNotMatch(JSON.stringify(records), /PRIVATE_BODY_DETAIL/);
 });
