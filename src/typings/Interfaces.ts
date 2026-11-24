@@ -5,6 +5,7 @@ import { Track } from "../entities/Track";
 import { Filters } from "../entities/Filters";
 import { NodeState, PlayerLoop, TrackEndReason, NodeSortStrategy, TPartialTrackProperties } from "./types";
 import type { LoggerOptions } from '../logging/Logger';
+import type { OpenTelemetryOptions } from '../observability/OpenTelemetry';
 import type { FailoverOptions } from '../nodes/NodeFailover';
 import type { StorageAdapter } from '../database/StorageAdapter';
 import type { BackendKind } from '../backends/BackendAdapter';
@@ -136,6 +137,7 @@ export interface IManagerNodeConfig {
 
 export interface IManagerOptionsConfig {
     logging?: LoggerOptions & { banner?: boolean };
+    telemetry?: OpenTelemetryOptions;
     clientName?: string;
     userAgent?: string;
     noReplace?: boolean;
