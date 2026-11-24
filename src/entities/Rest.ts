@@ -67,7 +67,10 @@ export class Rest {
         return new Proxy(transport, { apply: (target, receiver, args) => {
             const monitor = this.node.manager.performanceMonitor;
             const execute = () => monitor ? monitor.measure(operation === 'REST.http' ? 'rest' : 'streamOpen', () => Reflect.apply(target, receiver, args)) : Reflect.apply(target, receiver, args);
-            const run = () => observeOperation(this.node.manager, 'nyxlink.rest', async () => execute(), result => {
+            const run = () => observeOperation(this.node.manager, 'nyxlink.rest', async () => {
+                const aurora = this.node.manager.aurora;
+                return aurora ? aurora.observe(operation === 'REST.http' ? 'rest' : 'stream', async () => execute(), { backend: this.node.backend?.kind }) : execute();
+            }, result => {
                 if (result == null) return 'empty';
                 // Classify the load response only for the actual loadtracks endpoint.
                 let pathname = '';

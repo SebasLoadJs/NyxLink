@@ -69,3 +69,24 @@ test('failover reason codes are fixed and never inferred from raw error text',as
   assert.doesNotMatch(JSON.stringify(events),/private-/);
  }finally{await manager.shutdown();}
 });
+
+test('canonical search, REST and player observations emit once and retain no private payloads',async()=>{
+ const {manager,events}=fixture();
+ try{
+  const result={isError:false,tracks:[{title:'private-title'}]};
+  manager.searches.search=async()=>result;
+  assert.equal(await manager.search({query:'private-query'}),result);
+  manager.searches.search=async()=>({isError:false,tracks:[]});
+  await manager.search({query:'private-query'});
+  const failure=Error('private-error');let calls=0;
+  await assert.rejects(manager.aurora.observe('rest',async()=>{calls++;throw failure;}),e=>e===failure);
+  assert.equal(calls,1);
+  await manager.aurora.observe('stream',async()=>({body:'private-response'}));
+  const player={node:{backend:{kind:'nodelink'}},guildId:'private-guild'};
+  manager.emit('playerPause',player,true);
+  manager.emit('filtersUpdate',player,{token:'private-token'});
+  assert.deepEqual(events.map(x=>x.event.eventCode),['SEARCH_COMPLETED','SEARCH_EMPTY','REST_FAILED','STREAM_OPENED','PLAYER_PAUSED','FILTERS_UPDATED']);
+  assert.ok(events.slice(0,4).every(x=>x.event.durationMs>=0&&x.event.operationId));
+  assert.doesNotMatch(JSON.stringify(events),/private-/);
+ }finally{await manager.shutdown();}
+});
