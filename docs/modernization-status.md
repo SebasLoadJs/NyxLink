@@ -2,6 +2,8 @@
 
 Fecha local: 23 de noviembre de 2026 (Paraguay). Base: `03546fd49faffdaaf9e0ad45e1e9c7439ec749a6`; rama de trabajo `codex/resume-stabilization`. Este documento registra los 24 capítulos complementarios y **no sustituye ni duplica** los IDs del backlog original de 38 tareas. La implementación local no se ha publicado ni validado en CI remoto.
 
+Tras autorización explícita del responsable se creó el commit de implementación `eeb72264` y el [PR de desarrollo #32](https://github.com/SebasLoadJs/NyxLink/pull/32). Se amplía el gate de endurance de 600 s a PRs hacia `dev` que cambien fuente, pruebas o su infraestructura; antes solo se disparaba por rutas documentales/push y no cubría automáticamente este candidato. Los resultados remotos todavía están en curso; no se fusionó el PR ni se publicó una versión.
+
 ## Cambios de este bloque
 
 | Componente | Antes | Cambio concreto | Verificación | Estado |
