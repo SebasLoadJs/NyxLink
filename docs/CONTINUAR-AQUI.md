@@ -4,6 +4,25 @@ El usuario pidió implementar **todo** el documento `C:\Users\kangu\Downloads\NY
 
 Repositorio: `C:\Users\kangu\Desktop\Proyectos\NyxLink`. Rama: `codex/resume-stabilization`. [PR #32 hacia dev](https://github.com/SebasLoadJs/NyxLink/pull/32). No modificar `v5.2`. Commit/push/PR ya están autorizados; merge/tag/publicación no. El usuario hará después las pruebas reales: no volver a pedir credenciales ni ejecutar Discord. Registro: [pending-real-world-acceptance.md](pending-real-world-acceptance.md).
 
+## Auditoría y hardening adicional de código (24/11/2026)
+
+El usuario confirmó que quiere **toda la implementación, pruebas automatizadas y correcciones en el código**, dejando a su cargo exclusivamente las pruebas con Discord, audibilidad y sesiones de voz reales. Este pedido **no autoriza** fusionar, borrar ramas, etiquetar ni publicar npm antes de los gates y decisiones ya documentados.
+
+- Se creó [feature-contract-matrix.md](feature-contract-matrix.md) con los **27 contratos F01–F27**, rutas reales de código, pruebas, guías y puertas de aceptación. Complementa (no reemplaza) los 38 IDs y ampliaciones A–J.
+- `PerformanceMonitor`: descarta ciclos READY abortados y eventos TrackStart atrasados sin perder la muestra correcta; solo contabiliza resultados Recovery con inicio observado. Tests en `tests/performance-monitor.test.cjs`.
+- `TrackResolver` y `MetadataTrackResolver`: no hacer fallback después de un error del backend o respuesta directa malformada; detener las fuentes alternativas ante un error del proveedor; respetar `disabledSources` tanto al elegir proveedor como al validar el `sourceName` de la pista. Tests en `tests/track-resolution.test.cjs` y `tests/metadata-fallback-deadline.test.cjs`.
+- Documentación API y CHANGELOG sincronizados. No se añadieron dependencias de logging opcionales como runtime obligatorio.
+
+El **HEAD definitivo debe validarse por su propio SHA** con Node 22/24, build, API generada, consumidor CJS/ESM/TS, CodeQL, Redis, NodeLink moderno/baseline, Lavalink/plugins y endurance de >=600 s. Todas las comprobaciones LIVE-01 a LIVE-12, SOAK-01/02 y RELEASE-01/02/03 siguen sujetas a sus criterios reales; las que exigen escuchar audio/Discord se reservan al usuario. SOAK-01 (sin Discord) puede ejecutarse en CI o infraestructura apta; no asumir que ya pasó 24–72 h por tener el job de 600 s.
+
+### Orden de trabajo desde este bloque
+
+1. Revisar las Actions **del último HEAD**, no capturas históricas. Si falla una prueba, obtener logs concretos, corregir en esta rama y volver a ejecutar.
+2. Completar la auditoría A–J y capítulos 0–23 enlazándolos a contratos verificables (sin inventar endpoints internos de NodeLink) y cerrar bugs reales con pruebas.
+3. Mantener silencioso el logger por defecto; verificar perfiles, traza, JSON, redacción, dashboard, Pino y OTel inyectados con cobertura y pruebas de cierre; no instalar todas las bibliotecas estéticas.
+4. Consolidar compatibilidad de backends y performance, ejecutar soak en infraestructura disponible sin Discord y preparar reporte de diferencias de API.
+5. Solo al terminar automatizados y gates externos preparar RC/estable con autorización separada y la limpieza de ramas posterior.
+
 ## Continuación de implementación: resoluciones y búsquedas (24/11/2026)
 
 **Checkpoint de código, no aceptación:** `270efb2f11362430e6f9da5d6f6861ed20d9b3f3` en `codex/resume-stabilization` / [PR #32](https://github.com/SebasLoadJs/NyxLink/pull/32). Las verificaciones del SHA final **están pendientes** al redactar este bloque. No asumir que resultados verdes anteriores certifican este checkpoint.
