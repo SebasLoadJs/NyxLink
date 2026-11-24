@@ -130,3 +130,46 @@ test('metadata matching prefers identical ISRC and rejects an explicit conflicti
   node.rest.loadTracks = async () => ({ loadType: 'search', data: [conflicting] });
   assert.equal(await resolveMetadata(seed, node, { sources: ['youtube'] }), undefined);
 });
+
+test('metadata provider errors and authorization failures do not bypass source policy', async t => {
+  const { node } = createPlayer(t);
+  const original = createTrack('blocked-provider');
+  let calls = 0;
+  node.rest.loadTracks = async () => {
+    calls++;
+    return { loadType: 'error', data: { message: 'HTTP 429: exhausted quota' } };
+  };
+  await assert.rejects(resolveMetadata(original, node, {
+    sources: ['youtube', 'soundcloud'],
+  }), /Metadata source rejected/i);
+  assert.equal(calls, 1, 'the alternate metadata source must never bypass a provider error');
+  node.rest.loadTracks = async () => {
+    calls++;
+    throw new Error('HTTP 401');
+  };
+  await assert.rejects(resolveMetadata(original, node, {
+    sources: ['youtube', 'soundcloud'],
+  }), /HTTP 401/);
+  assert.equal(calls, 2, 'a rejected auth request must not lead to another provider');
+});
+
+test('accent-insensitive metadata matching avoids a different live version and duration', async t => {
+  const { node } = createPlayer(t);
+  const original = createTrack('accent-search');
+  original.title = 'Canción Única';
+  original.author = 'José García';
+  const base = original.toJSON();
+  const matching = {
+    ...base, encoded: 'studio-match',
+    info: { ...base.info, title: 'Cancion Unica', author: 'Jose Garcia' },
+  };
+  const different = {
+    ...base, encoded: 'different-live-version',
+    info: { ...base.info, title: 'Cancion Unica (Live)', length: base.info.length + 40000 },
+  };
+  node.rest.loadTracks = async () => ({ loadType: 'search', data: [different, matching] });
+  const result = await resolveMetadata(original, node, { sources: ['youtube'], durationToleranceMs: 10000 });
+  assert.equal(result.encoded, 'studio-match');
+  node.rest.loadTracks = async () => ({ loadType: 'search', data: [different] });
+  assert.equal(await resolveMetadata(original, node, { sources: ['youtube'] }), undefined);
+});
