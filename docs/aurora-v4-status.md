@@ -157,3 +157,14 @@ throughput threshold. GitHub Actions uploads the transcripts and JSON
 measurements per Node version even on failure. Consola repeat throttling
 is disabled on the canonical event route to avoid collapsing events.
 CI results are still required; no benchmark numbers are assumed.
+
+## Remaining operation coverage
+
+Adds spans for connection setup (not READY confirmation), synchronous node
+selection, cross-backend track resolution, session restoration attempts,
+autoplay playback and crossfade configuration requests. Reconnection,
+session resumed and crossfade/gapless transition reports use real events;
+configuration is not evidence of audible transition. Runtime operation
+names and classification labels are allowlisted even for JavaScript callers.
+Some REST endpoints and complete handshake timing are not instrumented.
+CI, PTY and live-audio acceptance are required.

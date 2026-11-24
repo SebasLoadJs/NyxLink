@@ -1,3 +1,4 @@
+import { observeOperation } from '../observability/OpenTelemetry';
 import { Track } from '../entities/Track';
 import type { Node } from '../entities/Node';
 
@@ -8,6 +9,7 @@ export class TrackResolutionError extends Error {
 
 export class TrackResolver {
     public static async resolve(track: Track, target: Node, source?: Node): Promise<Track> {
+        return observeOperation(target.manager, 'nyxlink.resolve', async () => {
         const origin = track.backend ?? source?.backend?.kind;
         const destination = target.backend?.kind;
         const internal = track.pluginInfo?.needsStream === true;
@@ -36,5 +38,6 @@ export class TrackResolver {
         resolved.position = track.getInfo().position;
         resolved.backend = destination;
         return resolved;
+        });
     }
 }

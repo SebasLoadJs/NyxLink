@@ -1,3 +1,4 @@
+import { observeOperation } from '../observability/OpenTelemetry';
 import type { LyricsRequestOptions, SourceHealthResponse, NodeLinkStreamFormats } from '../backends/NodeLinkContracts';
 import type { LavaLyricsData, LavaLyricsOptions } from '../backends/LavaLyricsContracts';
 import type { LavalinkSponsorBlockCategory } from '../backends/LavalinkSponsorBlockContracts';
@@ -453,6 +454,7 @@ export class Node {
   public async connect(): Promise<void> {
     if (this.destroyed || this.connected || this.connecting || this.state === NodeState.CONNECTING && this.socket) return;
     this.connecting = true;
+    return observeOperation(this.manager, 'nyxlink.connect', async () => {
     try {
     this.setState(NodeState.CONNECTING);
     if (this.destroyed) return;
@@ -499,6 +501,7 @@ export class Node {
     } finally {
       this.connecting = false;
     }
+    });
   }
 
   private calculateReconnectDelay(): number {
