@@ -26,10 +26,10 @@ test('startup presentation is plain in non-TTY and NO_COLOR, with JSON separate 
    assert.equal(r.status,0,r.stderr);return r.stdout;
  }
  const plain=run({color:true,isTTY:false,unicode:false},{FORCE_COLOR:'3'});
- assert.match(plain,/NYXLINK/);assert.match(plain,/Backends/);assert.doesNotMatch(plain,/\\x1b\\[|fixture/);
+ assert.match(plain,/NYXLINK/);assert.match(plain,/Backends/);assert.doesNotMatch(plain,/\x1b\[|fixture/);
  const color=run({color:true,isTTY:true},{FORCE_COLOR:'3'});
- assert.match(color,/\\x1b\\[38;2;/);
- assert.doesNotMatch(run({color:true,isTTY:true},{FORCE_COLOR:'3',NO_COLOR:''}),/\\x1b\\[/);
+ assert.match(color,/\x1b\[38;2;/);
+ assert.doesNotMatch(run({color:true,isTTY:true},{FORCE_COLOR:'3',NO_COLOR:''}),/\x1b\[/);
  const json=run({json:true},{FORCE_COLOR:'3'});
- assert.doesNotMatch(json,/\\x1b\\[/);assert.equal(JSON.parse(json).eventCode,'MANAGER_INITIALIZED');
+ assert.doesNotMatch(json,/\x1b\[/);assert.equal(JSON.parse(json).eventCode,'MANAGER_INITIALIZED');
 });
