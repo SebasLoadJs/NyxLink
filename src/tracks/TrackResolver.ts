@@ -2,6 +2,7 @@ import { Track } from '../entities/Track';
 import type { Node } from '../entities/Node';
 import { resolveMetadata } from './MetadataTrackResolver';
 import { awaitWithAbort } from './AbortableLookup';
+import { validateLoadResponse } from '../backends/ProtocolValidation';
 
 export class TrackResolutionError extends Error {
     public readonly code = 'TRACK_RESOLUTION_FAILED';
@@ -55,6 +56,15 @@ export class TrackResolver {
             }
         }
         assertDestination();
+        if (loaded) {
+            // A backend error is not an empty search result. In particular,
+            // never bypass a provider's authorization/rate-limit failure by
+            // automatically trying different metadata sources.
+            validateLoadResponse(loaded);
+            if (loaded.loadType === 'error') {
+                throw new TrackResolutionError('Destination rejected the requested track URI');
+            }
+        }
         const data = loaded?.loadType === 'track' ? loaded.data : metadata ? await resolveMetadata(track, target, metadata, signal) : undefined;
         assertDestination();
         if (!data || typeof data.encoded !== 'string' || !data.encoded || !data.info) {
