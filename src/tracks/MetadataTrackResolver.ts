@@ -37,6 +37,7 @@ export async function resolveMetadata(track: Track, node: Node, options: Metadat
     const seed = track.getInfo();
     if (seed.isStream || !seed.title?.trim() || !seed.author?.trim()) return;
     const code = isrc(seed.isrc);
+    const disabledSources = new Set((node.manager.options.sources?.disabledSources ?? []).map(source => source.toLowerCase()));
     const queries = [...new Set([...(code ? [code] : []), `${seed.title} ${seed.author}`])];
     const budgetMs = options.timeoutMs ?? 10000;
     const started = performance.now();
@@ -45,7 +46,7 @@ export async function resolveMetadata(track: Track, node: Node, options: Metadat
     const signal = callerSignal ? AbortSignal.any([timeout.signal, callerSignal]) : timeout.signal;
     try {
         for (const source of new Set<keyof typeof prefixes>(options.sources)) {
-            if (node.backend?.featureStatus('source:' + source) === 'unavailable') continue;
+            if (disabledSources.has(source) || node.backend?.featureStatus('source:' + source) === 'unavailable') continue;
             for (const query of queries) {
                 signal.throwIfAborted();
                 const remainingMs = Math.ceil(budgetMs - (performance.now() - started));
@@ -78,7 +79,7 @@ export async function resolveMetadata(track: Track, node: Node, options: Metadat
                 let selected: ITrack | undefined, best = options.minimumScore ?? 0.8;
                 for (const candidate of candidates.slice(0, options.maxCandidates ?? 10)) {
                     const info = candidate.info;
-                    if (info.isStream || !candidate.encoded) continue;
+                    if (info.isStream || !candidate.encoded || disabledSources.has(info.sourceName.toLowerCase())) continue;
                     // Two explicitly different recording identifiers must not
                     // be considered the same recording merely because the
                     // artist/title/duration happen to match.
