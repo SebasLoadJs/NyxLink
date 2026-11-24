@@ -22,6 +22,18 @@ const images = {
     profile === 'modern' ? pinnedImages.nodelinkModern : pinnedImages.nodelink
 };
 
+// Pull immutable images separately from container startup: a cold registry
+// download can take much longer than a local container command.
+async function ensureImage(command, image, localOnly = false) {
+  try {
+    await command(['image', 'inspect', image]);
+    return;
+  } catch (error) {
+    if (localOnly) throw new Error('Required locally built image is unavailable: ' + image, { cause: error });
+  }
+  await command(['pull', image], 600000);
+}
+
 function tone(samples = 48000, switchFrequencyAt = Infinity) {
   if (!Number.isSafeInteger(samples) || samples < 1 || samples > 48000 * 10) throw new TypeError('Invalid fixture duration');
   const data = Buffer.alloc(44 + samples * 2);
@@ -49,11 +61,19 @@ async function freePort() {
 async function withBackendLab(run, options = {}) {
   if (process.platform !== 'linux') throw new Error('The isolated backend lab requires a Linux container host.');
   const engine = process.env.NYXLINK_CONTAINER_ENGINE || 'podman';
-  const command = args => exec(engine, args, { timeout: 120000, maxBuffer: 1024 * 1024 });
+  const password = randomBytes(24).toString('hex');
+  const redact = value => String(value ?? '').replaceAll(password, '[REDACTED]');
+  const command = async (args, timeout = 120000) => {
+    try {
+      return await exec(engine, args, { timeout, maxBuffer: 4 * 1024 * 1024 });
+    } catch (error) {
+      const status = error.killed ? `terminated (timeout ${timeout}ms or output limit)` : `exit ${error.code ?? error.signal ?? 'unknown'}`;
+      throw new Error(redact(`${engine} ${args[0]} failed: ${status}\n${error.stderr || error.stdout || error.message}`));
+    }
+  };
   const root = path.resolve(__dirname, '../..');
   await fs.mkdir(path.join(root, '.runtime/integration'), { recursive: true });
   const directory = await fs.mkdtemp(path.join(root, '.runtime/integration/run-'));
-  const password = randomBytes(24).toString('hex');
   const media = tone();
   // A frequency transition at 500ms makes an actual seek audible/measurable:
   // before 500ms = 440Hz, after 500ms = 880Hz.
@@ -78,6 +98,7 @@ async function withBackendLab(run, options = {}) {
   const backends = [];
   try {
     for (const kind of ['lavalink', 'nodelink']) {
+      await ensureImage(command, images[kind].image, kind === 'nodelink' && profile === 'patched');
       const port = await freePort();
       const name = `nyxlink-test-${kind}-${process.pid}-${randomBytes(3).toString('hex')}`;
       const configPath = path.join(directory, kind === 'lavalink' ? 'application.yml' : 'config.js');
@@ -85,7 +106,7 @@ async function withBackendLab(run, options = {}) {
       await fs.writeFile(configPath, config, { mode: 0o600 });
       const mount = kind === 'lavalink' ? '/opt/Lavalink/application.yml' : '/app/config.js';
       // Match the owner of the mode-0600 fixture on both local and CI hosts.
-      const args = ['run', '-d', '--name', name, '--user', `${process.getuid()}:${process.getgid()}`, '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--network', 'host', '--memory', '768m', '--cpus', '1',
+      const args = ['run', '--pull=never', '-d', '--name', name, '--user', `${process.getuid()}:${process.getgid()}`, '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--network', 'host', '--memory', '768m', '--cpus', '1',
         '-v', `${configPath}:${mount}:ro`, '-v', `${directory}:/fixtures:ro`];
       if (kind === 'lavalink') args.push('-e', 'JAVA_TOOL_OPTIONS=-Xms64m -Xmx384m');
       else {
@@ -111,7 +132,7 @@ async function withBackendLab(run, options = {}) {
       }
       if (!info) {
         const logs = await command(['logs', '--tail', '25', name]).catch(error => ({ stdout: error.message }));
-        throw new Error(`${kind} failed to start: ${logs.stdout}`);
+        throw new Error(redact(`${kind} failed to start: ${logs.stdout}`));
       }
       if (kind === 'nodelink') {
         const revision = await command(['inspect', '--format', '{{ index .Config.Labels "org.opencontainers.image.revision" }}', name]);
@@ -133,4 +154,4 @@ async function withBackendLab(run, options = {}) {
   }
 }
 
-module.exports = { withBackendLab };
+module.exports = { withBackendLab, ensureImage };
