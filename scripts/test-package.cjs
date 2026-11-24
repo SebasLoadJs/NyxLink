@@ -51,7 +51,7 @@ async function main() {
         'string-width': '7.2.0', 'strip-ansi': '7.1.2', 'pretty-ms': '9.2.0', 'log-symbols': '7.0.1',
         listr2: '8.3.3', ora: '8.2.0', 'cli-progress': '3.12.0',
         'cli-table3': '0.6.5', 'pretty-bytes': '6.1.1', 'log-update': '6.1.0', ink: '5.2.1', react: '18.3.1', 'ink-testing-library': '4.0.0',
-        'cli-truncate':'4.0.0','wrap-ansi':'9.0.0','slice-ansi':'7.1.0','is-unicode-supported':'2.1.0','figures':'6.1.0','@crafter/charts':'0.2.5',
+        'cli-truncate':'4.0.0','wrap-ansi':'9.0.0','slice-ansi':'7.1.0','is-unicode-supported':'2.1.0','figures':'6.1.0',
         'ink-text-input':'6.0.0','ink-select-input':'6.2.0','ink-spinner':'5.0.0' } }));
     const pnpm = 'pnpm';
     run(pnpm, ['install', fromRegistry ? '--prefer-offline=false' : '--prefer-offline', ...(fromRegistry ? ['--force'] : []), '--registry=https://registry.npmjs.org/', '--ignore-scripts', '--no-frozen-lockfile'], consumer);

@@ -5,7 +5,6 @@ import stringWidth from 'string-width';
 import stripAnsi from 'strip-ansi';
 import isUnicodeSupported from 'is-unicode-supported';
 import figures from 'figures';
-import { sparkline, sparkBar } from '@crafter/charts';
 import prettyMs from 'pretty-ms';
 
 export const terminalUnicode = (requested=true) => requested!==false&&isUnicodeSupported();
@@ -14,16 +13,24 @@ export const wrapRecord = (text,width) => wrapAnsi(String(text),Math.max(1,Math.
 export const viewport = (text,start,width) => sliceAnsi(String(text),Math.max(0,start),Math.max(0,start)+Math.max(1,width));
 export const measure = text => stringWidth(stripAnsi(text));
 export const stateMarker = (ready,unicode=true) => unicode?(ready?figures.tick:figures.circle):(ready?'+':'.');
+// Native, deterministic terminal charts; no runtime loader or external chart engine.
+const boundedWidth = (width,min,max,fallback) => Number.isFinite(width)
+    ? Math.max(min,Math.min(max,Math.floor(width))) : fallback;
+const sparkGlyphs = '▁▂▃▄▅▆▇█';
+
 export function latencyChart(history,{width=24,unicode=true}={}){
-    const count=Math.max(2,Math.min(60,Math.floor(width)));
+    const count=boundedWidth(width,2,60,24);
     const values=history.slice(-count).map(s=>s.latencyMs);
     if(!values.length||values.some(v=>!Number.isFinite(v)||v<0))return 'N/A';
     if(values.length===1||!unicode)return values.map(v=>prettyMs(v)).slice(-3).join(' / ');
-    return fitLabel(stripAnsi(sparkline(values)),count)+' '+prettyMs(values.at(-1));
+    const low=Math.min(...values), high=Math.max(...values);
+    const spark=values.map(value=>sparkGlyphs[high===low?3:Math.round((value-low)/(high-low)*7)]).join('');
+    return spark+' '+prettyMs(values.at(-1));
 }
 export function readinessChart(ready,total,{width=12,unicode=true}={}){
     if(!Number.isSafeInteger(ready)||!Number.isSafeInteger(total)||total<=0||ready<0||ready>total)return 'N/A';
-    const size=Math.max(3,Math.min(30,Math.floor(width)));
+    const size=boundedWidth(width,3,30,12);
     if(!unicode){const n=Math.floor(ready/total*size);return '['+'='.repeat(n)+'-'.repeat(size-n)+']';}
-    return stripAnsi(sparkBar(ready,total,{width:size,showPercent:false}));
+    const filled=Math.floor(ready/total*size);
+    return '█'.repeat(filled)+'░'.repeat(size-filled);
 }

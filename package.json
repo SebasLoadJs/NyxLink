@@ -103,7 +103,6 @@
     "slice-ansi": "7.1.0",
     "is-unicode-supported": "2.1.0",
     "figures": "6.1.0",
-    "@crafter/charts": "0.2.5",
     "ink-text-input": "6.0.0",
     "ink-select-input": "6.2.0",
     "ink-spinner": "5.0.0",
@@ -180,9 +179,6 @@
       "optional": true
     },
     "figures": {
-      "optional": true
-    },
-    "@crafter/charts": {
       "optional": true
     },
     "ink-text-input": {

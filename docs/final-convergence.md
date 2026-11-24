@@ -78,3 +78,7 @@ Deprecated Logger.attachManager now delegates to AuroraEvents instead of maintai
 ## Replacement decision — latest owner instruction supersedes historical compatibility checkpoints
 
 The Manager legacy logging options and `options.aurora` alias have been removed. Former `Logger.attachManager` was deleted. Search, REST, migration stages, extension failures and private logging metrics use the single canonical Aurora route. Native Pino serialization is shared and lazily loaded. Aurora public subpaths and optional peers are shipped in the package rather than requiring copied examples. Standalone old Logger utilities remain as explicit public API at this checkpoint; they still require final removal or migration to the canonical schema before claiming full replacement. Frozen lockfile, generated API, packed consumer and complete CI remain mandatory. The separate read-only convergence generator creates lockfile/reference artifacts but does not certify acceptance or publish.
+
+## Packed-consumer ESM correction
+
+The packed consumer failed to import `nyxlink/aurora/inspector` under native Node because `@crafter/charts@0.2.5` ships extensionless ESM imports. Remove this incompatible peer and its lock entries; keep bounded, deterministic Unicode latency and readiness charts directly in Aurora with ASCII output, unknown-value handling and explicit consumer assertions. Other visual dependencies remain in use. The packed consumer and full CI gates remain required; this is not a release.

@@ -5,7 +5,7 @@ The root SDK uses native Pino 10.4.0 loaded on demand. The optional runtime is s
 Install the pinned runtime peers for the complete terminal, bootstrap and Inspector:
 
 ```sh
-pnpm add pino-pretty@13.2.0 figlet@1.9.4 gradient-string@3.0.0 chalk@5.6.2 boxen@8.0.1 string-width@7.2.0 strip-ansi@7.1.2 pretty-ms@9.2.0 log-symbols@7.0.1 listr2@8.3.3 ora@8.2.0 cli-progress@3.12.0 cli-table3@0.6.5 pretty-bytes@6.1.1 log-update@6.1.0 ink@5.2.1 react@18.3.1 cli-truncate@4.0.0 wrap-ansi@9.0.0 slice-ansi@7.1.0 is-unicode-supported@2.1.0 figures@6.1.0 @crafter/charts@0.2.5 ink-text-input@6.0.0 ink-select-input@6.2.0 ink-spinner@5.0.0
+pnpm add pino-pretty@13.2.0 figlet@1.9.4 gradient-string@3.0.0 chalk@5.6.2 boxen@8.0.1 string-width@7.2.0 strip-ansi@7.1.2 pretty-ms@9.2.0 log-symbols@7.0.1 listr2@8.3.3 ora@8.2.0 cli-progress@3.12.0 cli-table3@0.6.5 pretty-bytes@6.1.1 log-update@6.1.0 ink@5.2.1 react@18.3.1 cli-truncate@4.0.0 wrap-ansi@9.0.0 slice-ansi@7.1.0 is-unicode-supported@2.1.0 figures@6.1.0 ink-text-input@6.0.0 ink-select-input@6.2.0 ink-spinner@5.0.0
 ```
 
 Optional OpenTelemetry host SDK and OTLP integration:
@@ -27,3 +27,5 @@ pnpm add @opentelemetry/api@1.9.0 @opentelemetry/sdk-node@0.208.0 @opentelemetry
 CommonJS applications load the ESM UI with `await import('nyxlink/aurora')`. The public demo command is `pnpm exec nyxlink-aurora --scenario all --snapshot`; its inputs are simulated. Keep one owner of stdout. Stop the pipeline before opening a full-screen Inspector on that stream, or provide a separate stream. The library never starts an SDK, bot login, renderer or background monitor by import alone.
 
 Acceptance: the packed-consumer test compiles and executes the installed subpaths. The generated lockfile and public API reference must match the final source SHA; no publication is implied by these instructions.
+
+Terminal latency and readiness charts are rendered directly by Aurora. The former `@crafter/charts@0.2.5` peer was removed because its published ESM entrypoint failed native Node 22/24 packed-consumer imports. No consumer patch or special loader is required.
