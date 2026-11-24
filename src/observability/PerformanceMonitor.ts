@@ -51,23 +51,49 @@ export class PerformanceMonitor {
         this.active = true;
         this.histogram.enable();
         this.detach.push(
-            this.manager.on('nodeStateChange', (node, _old, state) => { if (state === NodeState.CONNECTING) this.ready.set(node, performance.now()); }),
-            this.manager.on('nodeReady', node => this.finish('nodeReady', this.ready, node)),
+            this.manager.on('nodeStateChange', (node, _old, state) => {
+                if (state === NodeState.CONNECTING) this.ready.set(node, performance.now());
+                else if (state === NodeState.DISCONNECTED || state === NodeState.DESTROYED) this.ready.delete(node);
+            }),
+            this.manager.on('nodeReady', node => {
+                if (!node.destroyed && node.connected && node.state === NodeState.READY) {
+                    this.finish('nodeReady', this.ready, node);
+                }
+            }),
             this.manager.on('nodeReconnect', () => { this.counters.reconnects++; }),
             this.manager.on('playerTriggeredPlay', (player, track) => {
                 this.playback.set(player, { time: performance.now(), node: player.node, session: player.node.sessionId, ticket: playbackGuard(player).ticket, encoded: track.encoded });
             }),
             this.manager.on('trackStart', (player, track) => {
                 const started = this.playback.get(player);
+                if (!started) return;
+                const stillCurrent = !player.destroyed && player.node === started.node &&
+                    player.node.sessionId === started.session && playbackGuard(player).isCurrent(started.ticket);
+                if (!stillCurrent || performance.now() - started.time > this.maxPendingMs) {
+                    this.playback.delete(player);
+                    return;
+                }
+                // A delayed TrackStart from the previous song is not an
+                // acknowledgement of the newest playback intent.
+                if (track.encoded !== started.encoded) return;
                 this.playback.delete(player);
-                if (started && !player.destroyed && player.node === started.node && player.node.sessionId === started.session &&
-                    playbackGuard(player).isCurrent(started.ticket) && track.encoded === started.encoded) this.elapsed('playbackStart', started.time);
+                this.elapsed('playbackStart', started.time);
             }),
             this.manager.on('playerTriggeredStop', player => this.playback.delete(player)),
             this.manager.on('playerDestroyed', player => { this.playback.delete(player); this.recovery.delete(player); }),
-            this.manager.on('playerRecoveryStarted', player => { if (!this.recovery.has(player)) this.recovery.set(player, performance.now()); }),
-            this.manager.on('playerRecoverySuccess', player => { this.finish('recovery', this.recovery, player); this.counters.recoveries++; }),
-            this.manager.on('playerRecoveryFailed', player => { this.recovery.delete(player); this.counters.recoveryFailures++; }),
+            this.manager.on('playerRecoveryStarted', player => {
+                if (!player.destroyed && !this.recovery.has(player)) this.recovery.set(player, performance.now());
+            }),
+            this.manager.on('playerRecoverySuccess', player => {
+                if (!this.recovery.has(player) || player.destroyed) return;
+                this.finish('recovery', this.recovery, player);
+                this.counters.recoveries++;
+            }),
+            this.manager.on('playerRecoveryFailed', player => {
+                if (!this.recovery.has(player)) return;
+                this.recovery.delete(player);
+                this.counters.recoveryFailures++;
+            }),
         );
         return this;
     }
