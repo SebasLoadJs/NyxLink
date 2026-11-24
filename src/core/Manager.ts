@@ -385,7 +385,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
 
     public async search(options: ISearchQuery): Promise<SearchResult> {
         this.performanceMonitor?.recordSearch();
-        return this.searches.search(options);
+        return this.telemetry ? this.telemetry.search(() => this.searches.search(options)) : this.searches.search(options);
     }
 
     public async packetUpdate(packet: DiscordGatewayPacket): Promise<void> {
