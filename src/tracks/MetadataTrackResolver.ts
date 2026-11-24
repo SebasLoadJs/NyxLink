@@ -24,7 +24,7 @@ const isrc = (value: unknown): string | undefined => {
 };
 
 /** Explicit fallback policy against the destination itself, with no native-provider recursion. */
-export async function resolveMetadata(track: Track, node: Node, options: MetadataResolutionOptions): Promise<ITrack | undefined> {
+export async function resolveMetadata(track: Track, node: Node, options: MetadataResolutionOptions, callerSignal?: AbortSignal): Promise<ITrack | undefined> {
     if (!options || !Array.isArray(options.sources) || !options.sources.length || options.sources.length > 3 ||
         options.sources.some(source => !Object.hasOwn(prefixes, source)) ||
         options.minimumScore !== undefined && (!Number.isFinite(options.minimumScore) || options.minimumScore < 0 || options.minimumScore > 1) ||
@@ -41,23 +41,24 @@ export async function resolveMetadata(track: Track, node: Node, options: Metadat
     const started = performance.now();
     const timeout = new AbortController();
     const timer = setTimeout(() => timeout.abort(new Error('Metadata resolution timed out')), budgetMs);
+    const signal = callerSignal ? AbortSignal.any([timeout.signal, callerSignal]) : timeout.signal;
     try {
         for (const source of new Set<keyof typeof prefixes>(options.sources)) {
             if (node.backend?.featureStatus('source:' + source) === 'unavailable') continue;
             for (const query of queries) {
-                timeout.signal.throwIfAborted();
+                signal.throwIfAborted();
                 const remainingMs = Math.ceil(budgetMs - (performance.now() - started));
                 if (remainingMs <= 0) {
                     timeout.abort(new Error('Metadata resolution timed out'));
-                    timeout.signal.throwIfAborted();
+                    signal.throwIfAborted();
                 }
                 // The same deadline is shared across every provider and query.
                 // Signal cancellation also stops the HTTP call when supported by Rest.
                 const response = await node.rest.loadTracks(`${prefixes[source]}:${query}`, {
                     timeoutMs: remainingMs,
-                    signal: timeout.signal,
+                    signal,
                 });
-                timeout.signal.throwIfAborted();
+                signal.throwIfAborted();
                 validateLoadResponse(response);
                 const candidates = response.loadType === 'track' ? [response.data] : response.loadType === 'search' ? response.data : [];
                 let selected: ITrack | undefined, best = options.minimumScore ?? 0.8;
