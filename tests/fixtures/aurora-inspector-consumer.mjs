@@ -7,7 +7,7 @@ import { Writable } from 'node:stream';
 const source = { snapshot: () => ({
     source:'simulated',nodes:[{alias:'NODE-01',backend:'nodelink',ready:true,capabilities:[]}],
     players:[{alias:'PLAYER-01',backend:'nodelink',state:'paused'}],
-    events:[{code:'NODE_READY',level:'info',category:'NODE',backend:'nodelink',message:'Backend session ready'}],
+    events:[{code:'NODE_READY',level:'info',category:'NODE',backend:'nodelink',message:'Backend session ready'},{code:'QUEUE_ADDED',level:'info',category:'QUEUE',backend:'lavalink',message:'Track queued'}],
     spans:[{name:'nyxlink.search',traceId:'a'.repeat(32),spanId:'b'.repeat(16),durationMs:12,outcome:'ok'}],
 }) };
 for (const [tab, pattern] of [['Overview',/Nodes: 1\/1 ready/],['Nodes',/NODE-01/],['Players',/PLAYER-01/],['Events',/NODE_READY/],['Traces',/nyxlink.search/]]) {
@@ -43,11 +43,18 @@ for(const columns of [40,80,120]){
 const app=render(React.createElement(Inspector,{source,initialTab:'Events',interactive:true,columns:80}));
 try{
  const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
- app.stdin.write('/');await delay(80);
- app.stdin.write('NODE_READY');await delay(80);
- app.stdin.write('\r');await delay(80);
- assert.match(app.lastFrame(),/Search: NODE_READY/);
- app.stdin.write('g');await delay(80);
- app.stdin.write('\r');await delay(80);
- assert.match(app.lastFrame(),/\[Overview\]/);
+ const frame=async pattern=>{
+   const deadline=Date.now()+3000;
+   do {if(pattern.test(app.lastFrame()??''))return;await delay(25);}while(Date.now()<deadline);
+   assert.match(app.lastFrame()??'',pattern);
+ };
+ // Ink registers input listeners in effects after the initial render.
+ await frame(/\\[Events\\]/);await delay(100);
+ app.stdin.write('/');await frame(/Search \\(editing\\):/);await delay(50);
+ app.stdin.write('NODE_READY');await frame(/Search \\(editing\\): NODE_READY/);
+ assert.doesNotMatch(app.lastFrame(),/QUEUE_ADDED/);
+ app.stdin.write('\\r');await frame(/Search: NODE_READY/);
+ assert.doesNotMatch(app.lastFrame(),/Search \\(editing\\)/);
+ app.stdin.write('g');await frame(/Jump to view:/);await delay(50);
+ app.stdin.write('\\r');await frame(/\\[Overview\\]/);
 }finally{app.unmount();app.cleanup();}

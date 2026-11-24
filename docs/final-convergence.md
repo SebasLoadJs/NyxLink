@@ -82,3 +82,7 @@ The Manager legacy logging options and `options.aurora` alias have been removed.
 ## Packed-consumer ESM correction
 
 The packed consumer failed to import `nyxlink/aurora/inspector` under native Node because `@crafter/charts@0.2.5` ships extensionless ESM imports. Remove this incompatible peer and its lock entries; keep bounded, deterministic Unicode latency and readiness charts directly in Aurora with ASCII output, unknown-value handling and explicit consumer assertions. Other visual dependencies remain in use. The packed consumer and full CI gates remain required; this is not a release.
+
+## Inspector input acceptance
+
+After the ESM peer correction, packed Node 22/24 advanced through 11 checks; the remaining observed failure is interactive Inspector search. Expose editing/jump state, explicitly focus the text field, close detail on mode entry, and synchronize the packed consumer with rendered input states before sending further keys. The fixture also requires a non-matching event to disappear. Do not mark the package accepted until CI confirms the actual interaction.

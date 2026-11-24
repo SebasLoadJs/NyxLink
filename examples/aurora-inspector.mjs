@@ -89,8 +89,8 @@ export function Inspector({ source, initialTab = 'Overview', interactive = true,
         else if (input === 'f') { setLevel(v => cycle(levels,v)); setCursor(0); }
         else if (input === 'c') { setCategory(v => cycle(categories,v)); setCursor(0); }
         else if (input === 'b') { setBackend(v => cycle(backends,v)); setCursor(0); }
-        else if (input === '/') setSearching(true);
-        else if (input === 'g') setChoosing(true);
+        else if (input === '/') { setDetail(false); setSearching(true); }
+        else if (input === 'g') { setDetail(false); setChoosing(true); }
         else if (input === 'e' && reportPath && !exporting) {
             setExporting(true);
             setExportStatus('Exporting...');
@@ -133,8 +133,8 @@ export function Inspector({ source, initialTab = 'Overview', interactive = true,
         h(Text,{bold:true,color:'#A78BFA'}, 'NYXLINK INSPECTOR | ' + snapshot.source.toUpperCase() + (paused?' | PAUSED':'')),
         h(Text,{color:'#36E7F2'},tabs.map((name,i)=>i===tab?'['+name+']':name).join('  ')),
         h(Text,{},'Level: '+level+'  Category: '+category+'  Backend: '+backend),
-        searching?h(Box,{},h(Text,{},'Search: '),h(TextInput,{value:query,onChange:value=>{setQuery(value.replace(/[^ -~]/g,'').slice(0,80));setCursor(0);},onSubmit:()=>setSearching(false)})):h(Text,{},'Search: '+viewport(query,0,Math.max(1,columns-9))),
-        ...(choosing?[h(SelectInput,{key:'jump',items:tabs.map((label,value)=>({label,value})),onSelect:item=>{setTab(item.value);setCursor(0);setDetail(false);setChoosing(false);}})]:[]),
+        searching?h(Box,{},h(Text,{},'Search (editing): '),h(TextInput,{focus:interactive,placeholder:'Type to filter',value:query,onChange:value=>{setQuery(value.replace(/[^ -~]/g,'').slice(0,80));setCursor(0);},onSubmit:()=>setSearching(false)})):h(Text,{},'Search: '+viewport(query,0,Math.max(1,columns-9))),
+        ...(choosing?[h(Text,{key:'jump-label'},'Jump to view:'),h(SelectInput,{key:'jump',items:tabs.map((label,value)=>({label,value})),onSelect:item=>{setTab(item.value);setCursor(0);setDetail(false);setChoosing(false);}})]:[]),
         ...rows.map((line,i)=>h(Text,{key:i,color:line.startsWith('> ')?'#55E9B6':undefined},fitLabel(line,Math.max(10,columns-1)))),
         ...(exportStatus?[h(Text,{key:'export'},exporting&&interactive?h(Spinner,{type:'dots'}):null,exportStatus)]:[]),
         h(Text,{dimColor:true},'Tab/arrows: navigate | g: jump | Enter: detail | p: pause | f/c/b: filters | /: search | q: quit'+(reportPath?' | e: export':''))
