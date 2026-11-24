@@ -32,6 +32,26 @@ function canonical(record) {
     }
     return safe;
 }
+// One engine construction and canonical serialization path for every active format.
+function createCanonicalEngine(level,consume,onRenderError){
+    let closed=false;
+    const logger=pino({level,base:null,redact:['password','token','authorization','sanitizedContext.password','sanitizedContext.token']},{
+        write(line){
+            if(closed)return;
+            try{
+                const raw=JSON.parse(line);
+                const record=canonical(raw);
+                if(record)consume(record,raw);
+            }catch{try{onRenderError?.();}catch{}}
+        }
+    });
+    const target=Object.fromEntries(levels.map(name=>[name,record=>{
+        if(closed)return;
+        const safe=canonical(record);
+        if(safe&&safe.severity===name)logger[name](safe,auroraCatalog[safe.eventCode].message);
+    }]));
+    return {target,close(){closed=true;}};
+}
 export function createAuroraPipeline(options={}){
     const format=options.format??'silent';
     if(!['silent','json','pretty','aurora','custom'].includes(format))throw new TypeError('Invalid Aurora format');
@@ -40,24 +60,11 @@ export function createAuroraPipeline(options={}){
     if(format==='silent'||level==='silent')return {target:noOutput,level:'silent',banner:()=>{},close:async()=>true};
     if(format==='custom'){
         if(!options.target||levels.some(l=>typeof options.target[l]!=='function'))throw new TypeError('Custom requires a target');
-        // Custom consumes the same sanitized Pino records, not a second engine.
-        let closed=false;
-        const logger=pino({level,base:null,redact:['password','token','authorization','sanitizedContext.password','sanitizedContext.token']},{
-            write(line){
-                if(closed)return;
-                try{
-                    const record=canonical(JSON.parse(line));
-                    if(!record)return;
-                    options.target[record.severity](record,auroraCatalog[record.eventCode].message);
-                }catch{try{options.onRenderError?.();}catch{}}
-            }
-        });
-        const target=Object.fromEntries(levels.map(name=>[name,record=>{
-            if(closed)return;
-            const safe=canonical(record);
-            if(safe&&safe.severity===name)logger[name](safe,auroraCatalog[safe.eventCode].message);
-        }]));
-        return {target,level,banner:()=>{},close:async()=>{closed=true;return true;}};
+        const engine=createCanonicalEngine(level,record=>{
+            try{options.onEvent?.({...record,sanitizedContext:{...record.sanitizedContext}});}catch{}
+            options.target[record.severity](record,auroraCatalog[record.eventCode].message);
+        },options.onRenderError);
+        return {target:engine.target,level,banner:()=>{},close:async()=>{engine.close();return true;}};
     }
     const stream=options.stream??process.stdout;
     const width=()=>Math.max(40,Math.min(120,stream.columns??80));
@@ -92,28 +99,16 @@ export function createAuroraPipeline(options={}){
     };
     // Consola is a reporter bridge, never a second terminal destination.
     const reporter=createConsola({level:5,throttle:0,reporters:[{log(log){renderRecord(log.args[0]);}}]});
-    const logger=pino({level,base:null,redact:['password','token','authorization','sanitizedContext.password','sanitizedContext.token']},{
-        write(line){
-            try{
-                const raw=JSON.parse(line);
-                const record=canonical(raw);
-                if(!record)return;
-                try{options.onEvent?.({...record,sanitizedContext:{...record.sanitizedContext}});}catch{}
-                if(format==='json')write(JSON.stringify({...record,level:raw.level,msg:auroraCatalog[record.eventCode].message}),record);
-                else if(format==='pretty')write(String(pretty(JSON.stringify({...record,level:raw.level,msg:auroraCatalog[record.eventCode].message,time:raw.time}))).trimEnd(),record);
-                else {
-                    const semantic=record.severity==='fatal'||record.severity==='error'?'error':record.severity==='warn'?'warn':record.outcome==='confirmed'?'success':record.outcome==='started'?'start':record.severity==='debug'||record.severity==='trace'?'debug':'info';
-                    reporter[semantic](record);
-                }
-            }catch{try{options.onRenderError?.();}catch{}}
+    const engine=createCanonicalEngine(level,(record,raw)=>{
+        try{options.onEvent?.({...record,sanitizedContext:{...record.sanitizedContext}});}catch{}
+        if(format==='json')write(JSON.stringify({...record,level:raw.level,msg:auroraCatalog[record.eventCode].message}),record);
+        else if(format==='pretty')write(String(pretty(JSON.stringify({...record,level:raw.level,msg:auroraCatalog[record.eventCode].message,time:raw.time}))).trimEnd(),record);
+        else {
+            const semantic=record.severity==='fatal'||record.severity==='error'?'error':record.severity==='warn'?'warn':record.outcome==='confirmed'?'success':record.outcome==='started'?'start':record.severity==='debug'||record.severity==='trace'?'debug':'info';
+            reporter[semantic](record);
         }
-    });
-    // The target exposes only the canonical event contract, not raw Pino APIs.
-    const target=Object.fromEntries(levels.map(name=>[name,record=>{
-        const safe=canonical(record);
-        if(!safe||safe.severity!==name)return;
-        logger[name](safe,auroraCatalog[safe.eventCode].message);
-    }]));
+    },options.onRenderError);
+    const target=engine.target;
     return {target,level,terminal,incidents,
         banner(manager){if(format==='aurora'&&!bannerWritten){bannerWritten=true;terminal.write(presentation().banner(manager));}},
         startMusic(strip,viewOptions={}){
@@ -122,5 +117,5 @@ export function createAuroraPipeline(options={}){
             musicStop=startCoordinatedMusicView(strip,terminal,{...viewOptions,staticFallback:!interactive,onError:options.onRenderError});
             return musicStop;
         },
-        close:signal=>{closing=true;musicStop?.();return terminal.close(signal);}};
+        close:signal=>{closing=true;engine.close();musicStop?.();return terminal.close(signal);}};
 }

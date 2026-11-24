@@ -66,3 +66,7 @@ sonic-boom, terminal-link, humanize-duration, tinybench, node-pty and
 optional OTel instrumentation/exporters) require a specific tested use
 and must not duplicate existing facilities. The previous Logger migration
 and combined CI remain release blockers; these changes are not a release.
+
+## Single-route migration checkpoint
+
+Preferred Manager configuration is `options.logging: { target, level }`; `options.aurora` is a deprecated alias. Both cannot coexist. A shared weak ownership registry rejects manual attachment of a second automatic logging route, including a silent canonical route. `detachLogger()` closes the canonical subscription too. The optional host pipeline uses one common Pino engine constructor and canonical serialization for JSON, Pretty, Aurora and Custom; Silent constructs no engine. The legacy Logger options remain temporarily functional for backwards compatibility; full migration of those standalone methods and transports remains open, not an accepted second architecture. No CI acceptance or release is implied.

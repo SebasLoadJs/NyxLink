@@ -141,7 +141,9 @@ export interface IManagerNodeConfig {
 
 export interface IManagerOptionsConfig {
     recommendations?: import('../autoplay/RecommendationPreference').RecommendationPreferences;
-    logging?: LoggerOptions & { banner?: boolean };
+    /** Preferred: canonical Aurora target. Legacy Logger options remain temporarily supported. */
+    logging?: AuroraEventOptions | (LoggerOptions & { banner?: boolean });
+    /** @deprecated Use logging with a canonical Aurora target. */
     aurora?: AuroraEventOptions;
     telemetry?: OpenTelemetryOptions;
     clientName?: string;

@@ -12,6 +12,7 @@ import { formatDashboardObservation, formatErrorDiagnostic } from './TerminalFor
 import { formatPlayerTrace, type PlayerTraceOptions } from './PlayerTrace';
 import { LogPipeline, safeLogValue, type LogContext, type LogTransport, type StructuredLogRecord } from './StructuredLog';
 import type { Manager } from '../core/Manager';
+import { claimManagerLogRoute } from './ManagerLogRoute';
 import { NodeState } from '../typings/types';
 import { terminalColor, terminalDepth, trueColor } from './TerminalCapabilities';
 import { formatStartupObservation } from './TerminalFormatter';
@@ -331,6 +332,7 @@ export class Logger {
     if (this.closed || this.pipeline.stats().closed) return () => {};
     const existing = this.managers.get(manager);
     if (existing) return existing;
+    const releaseRoute = claimManagerLogRoute(manager);
     const detachDebug = this.attachLegacyDebug(manager);
     const detachStatus = manager.on('nodeStateChange', () => this.managerStatus(manager));
     const detachReady = manager.on('nodeReady', () => this.managerStatus(manager));
@@ -373,6 +375,7 @@ export class Logger {
       for (const detach of detachEvents) detach();
       this.disposers.delete(dispose);
       this.managers.delete(manager);
+      releaseRoute();
     };
     this.disposers.add(dispose);
     this.managers.set(manager, dispose);

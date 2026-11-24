@@ -165,21 +165,24 @@ export class Manager extends EventEmitter<IManagerEvents> {
             }
         };
 
-        if (this.options.aurora && this.options.logging) throw new TypeError('Select Aurora or legacy logging, not both');
+        if (this.options.aurora && this.options.logging) throw new TypeError('Select logging or its aurora alias, not both');
+        const logging = this.options.logging;
+        const canonicalLogging = logging && 'target' in logging ? logging : this.options.aurora;
+        const legacyLogging = logging && !('target' in logging) ? logging : undefined;
         this.searches = new SearchService(this, query => this.resolveNativeSource(query));
         Structure.setManager(this);
 
         this.nodes = new (Structure.get("NodeManager"))(this, config.nodes);
         this.players = new (Structure.get("PlayerManager"))(this);
         if (this.options.telemetry) this.telemetry = new OpenTelemetry(this, this.options.telemetry);
-        if (this.options.aurora) {
-            this.aurora = new AuroraEvents(this.options.aurora);
+        if (canonicalLogging) {
+            this.aurora = new AuroraEvents(canonicalLogging);
             this.aurora.attach(this);
         }
-        if (this.options.logging) {
-            this.logger = new Logger(this.options.logging);
+        if (legacyLogging) {
+            this.logger = new Logger(legacyLogging);
             this.detachLogging = this.logger.attachManager(this);
-            if (this.options.logging.banner) this.logger.banner();
+            if (legacyLogging.banner) this.logger.banner();
         }
     }
 
@@ -208,6 +211,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
     public detachLogger(): void {
         this.detachLogging?.();
         this.detachLogging = undefined;
+        this.aurora?.close();
     }
 
     /** Starts bounded, optional observations independently of logging level. */
@@ -253,7 +257,8 @@ export class Manager extends EventEmitter<IManagerEvents> {
             if (this.destroyed) return this;
             if (this.options.playerDestruction?.autoDestroyOnIdle) this.startIdleMonitoring();
             this.initialized = true;
-            if (this.options.logging?.startup) this.logger?.startup(this);
+            const logging = this.options.logging;
+            if (logging && !('target' in logging) && logging.startup) this.logger?.startup(this);
             this.emit('debug', `Moonlink.js > Manager >> Initialized. ClientId: ${this.clientId}`);
             return this;
             } catch (error) {

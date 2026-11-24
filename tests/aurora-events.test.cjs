@@ -90,3 +90,23 @@ test('canonical search, REST and player observations emit once and retain no pri
   assert.doesNotMatch(JSON.stringify(events),/private-/);
  }finally{await manager.shutdown();}
 });
+
+test('preferred logging option and deprecated aurora alias share one route; manual duplicate attachment is rejected',async()=>{
+ const { Logger, AuroraEvents }=require('../dist');
+ const records=[];
+ const target=Object.fromEntries(['trace','debug','info','warn','error','fatal'].map(level=>[level,event=>records.push(event)]));
+ const manager=new Manager({nodes:[{host:'localhost',port:2333,password:'fixture',secure:false}],options:{logging:{level:'debug',target}}});
+ const legacy=new Logger({level:'debug',console:false});
+ const duplicate=new AuroraEvents({level:'debug',target});
+ try{
+  assert.equal(manager.logger,undefined);
+  assert.ok(manager.aurora);
+  assert.throws(()=>legacy.attachManager(manager),/already has a logging route/);
+  assert.throws(()=>duplicate.attach(manager),/already has a logging route/);
+  manager.emit('nodeReady',{backend:{kind:'lavalink'}},{});
+  assert.equal(records.length,1);
+  manager.detachLogger();
+  manager.emit('nodeReady',{backend:{kind:'lavalink'}},{});
+  assert.equal(records.length,1);
+ }finally{duplicate.close();await legacy.close();await manager.shutdown();}
+});
