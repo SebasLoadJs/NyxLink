@@ -4,6 +4,7 @@ import { createConsola } from 'consola';
 import { TerminalCoordinator, AuroraIncidentEngine, auroraCatalog } from 'nyxlink';
 import { createPresentation, renderIncident } from './aurora-visual.mjs';
 import { startCoordinatedMusicView } from './aurora-diagnostics.mjs';
+import { wrapRecord } from './aurora-terminal-tools.mjs';
 
 const levels = ['trace','debug','info','warn','error','fatal'];
 const rank = Object.fromEntries(levels.map((x,i)=>[x,i]));
@@ -76,7 +77,7 @@ export function createAuroraPipeline(options={}){
     const pretty=prettyFactory({colorize:false,translateTime:'SYS:HH:MM:ss',ignore:'pid,hostname,category,timestamp,sanitizedContext,operationId,traceId,spanId,eventCode,outcome,severity',singleLine:true,messageFormat:'{category} | {msg}'});
     const incidents=new AuroraIncidentEngine(options.incidentCapacity??100);
     let bannerWritten=false;
-    const write=(line,record)=>terminal.write(line,isCritical(record)?'critical':'normal');
+    const write=(line,record)=>terminal.write(format==='aurora'?wrapRecord(line,width()):line,isCritical(record)?'critical':'normal');
     const renderRecord=record=>{
         const incident=incidents.accept(record);
         if(!incident&&record.operationId&&record.eventCode.startsWith('FAILOVER_')&&incidents.snapshot().some(x=>x.operationId===record.operationId))return;
