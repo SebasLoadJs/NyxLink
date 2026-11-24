@@ -18,7 +18,7 @@ The [generated public API reference](api-generated.md) lists every root export a
 | `manager.startPrivateMetricsServer(options)` | Starts a private loopback service only when called |
 | `manager.useExtension(extension, options?)` | Optional typed event extension lifecycle; returns an async disposer |
 | `manager.removeExtension(name)` | Removes/aborts a registered extension |
-| `manager.detachLogger()` | Detaches manager logging observers; does not close an independently owned Logger |
+| `manager.detachLogger()` | Detaches manager logging observers; does not close the host-owned output pipeline |
 | `manager.shutdown()` | Terminal idempotent cleanup; attempts all resources and aggregates failures |
 
 `manager.on(event, listener)` returns an unsubscribe function. `IManagerEvents` is the event signature inventory: node connection/readiness/errors, track/queue activity, player lifecycle and commands, source health, recovery/failover, guild ownership and extension errors. Raw payload events are a compatibility boundary, not automatic privacy-safe telemetry; avoid persisting them indiscriminately.
@@ -85,13 +85,13 @@ Memory and Local implement the storage boundary; RedisStorage accepts an injecte
 
 ## Logging, telemetry and extensions
 
-Logger, JsonLogTransport, typed LogTransport/StructuredLogRecord, diagnostics, async trace scopes and TerminalDashboard are opt-in. `logger.playerTrace(guildId, options?)` provides a bounded retained-event view; migration stages expose actual acknowledgements and partial cleanup/rollback results. Rest HTTP/open-stream observations preserve request overloads and omit raw request/response secrets. See [logging guide](logging-guide.md), [private metrics](private-metrics.md) and [extension lifecycle](extensions.md). The SDK installs no Pino, Redis or OpenTelemetry service. The extension contract is trusted application code and cannot be used as an untrusted-code sandbox.
+AuroraEvents, native Pino serialization, the optional Aurora pipeline, Inspector and TerminalDashboard provide the single canonical logging architecture. The dashboard sends aggregate observations through the existing Manager route; typed snapshots remain explicit local reads. Migration stages expose actual acknowledgements and partial cleanup/rollback results. REST observations omit raw request/response secrets. See [logging guide](logging-guide.md), [private metrics](private-metrics.md) and [extension lifecycle](extensions.md). The SDK does not start a Redis or OpenTelemetry service. Extensions are trusted application code, not an untrusted-code sandbox.
 
 ## Error handling
 
 Catch rejected async commands and inspect typed `code`/status where present. FeatureUnavailableError, ProtocolResponseError, NoEligibleNodeError, CircuitOpenError, HttpError, HttpPolicyError, TrackResolutionError, snapshot validation/conflict, PlayerOperationCancelledError and ExtensionLifecycleError distinguish different boundaries. A missing session/player is different from an unsupported route. An invalid response must not be treated as a capability success. Avoid retrying a non-idempotent mutation merely because its response was lost.
 
-`logger.reportError` produces redacted advice from known errors; it does not automatically retry or fix backend behavior. Application event observers should also catch their own failures. The optional ExtensionContext observer wrapper provides isolation for hooks registered through it.
+`diagnoseError` produces redacted advice from known errors; it does not automatically retry or fix backend behavior. Application event observers should also catch their own failures. The optional ExtensionContext observer wrapper provides isolation for hooks registered through it.
 
 ## Version and release status
 

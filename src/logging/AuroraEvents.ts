@@ -14,6 +14,7 @@ export type AuroraCategory = 'CORE' | 'MANAGER' | 'NODE' | 'LAVALINK' | 'NODELIN
 export type AuroraOutcome = 'observed' | 'started' | 'confirmed' | 'failed' | 'cancelled';
 type Definition = { category: AuroraCategory; level: AuroraLevel; outcome: AuroraOutcome; message: string };
 export const auroraCatalog = {
+    DASHBOARD_SNAPSHOT: { category: 'TELEMETRY', level: 'info', outcome: 'observed', message: 'Cluster dashboard observed' },
     MANAGER_INITIALIZED: { category: 'CORE', level: 'info', outcome: 'observed', message: 'Manager initialized' },
     EXTENSION_FAILED: { category: 'PLUGIN', level: 'error', outcome: 'failed', message: 'Extension lifecycle failed' },
     MIGRATION_STAGE_STARTED: { category: 'FAILOVER', level: 'debug', outcome: 'started', message: 'Migration stage started' },
@@ -70,6 +71,11 @@ export type AuroraContext = {
     stage?: MigrationStage;
     stageStatus?: MigrationStageObservation['status'];
     httpStatus?: number;
+    nodeCount?: number;
+    playerCount?: number;
+    playingCount?: number;
+    queuedTracks?: number;
+    sourceCount?: number;
 };
 export type AuroraEvent = {
     eventCode: AuroraEventCode;
@@ -125,6 +131,10 @@ const migrationStatuses = new Set<unknown>(['started','acknowledged','failed','c
 function safeContext(input: AuroraContext = {}): AuroraContext {
     const context: AuroraContext = {};
     if (input.backend !== undefined) context.backend = backend(input.backend);
+    for (const field of ['nodeCount','playerCount','playingCount','queuedTracks','sourceCount'] as const) {
+        const value = count(input[field]);
+        if (value !== undefined) context[field] = value;
+    }
     const attempt = count(input.attempt), trackCount = count(input.trackCount);
     if (attempt !== undefined) context.attempt = attempt;
     if (trackCount !== undefined) context.trackCount = trackCount;
@@ -221,6 +231,7 @@ export class AuroraEvents {
         return result;
     }
 
+    recordDashboard(input: Pick<AuroraContext, 'nodeCount' | 'playerCount' | 'playingCount' | 'queuedTracks' | 'sourceCount'>): void { this.emit('DASHBOARD_SNAPSHOT', input); }
     recordInitialized(): void { this.emit('MANAGER_INITIALIZED'); }
     recordExtensionFailure(): void { this.emit('EXTENSION_FAILED'); }
     recordMigrationStage(player: Player, stage: MigrationStage, status: MigrationStageObservation['status']): void {

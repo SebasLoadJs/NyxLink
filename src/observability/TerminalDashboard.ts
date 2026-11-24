@@ -1,6 +1,6 @@
 import { performance } from 'node:perf_hooks';
 import type { Manager } from '../core/Manager';
-import type { Logger } from '../logging/Logger';
+import { getManagerLogRoute } from '../logging/ManagerLogRoute';
 import { NodeState } from '../typings/types';
 import type { PerformanceSnapshot } from './PerformanceMonitor';
 
@@ -32,7 +32,7 @@ export class TerminalDashboard {
     private running = false;
     private previousUtilization = performance.eventLoopUtilization();
 
-    constructor(private readonly manager: Manager, private readonly logger: Logger, private readonly options: TerminalDashboardOptions = {}) {
+    constructor(private readonly manager: Manager, private readonly options: TerminalDashboardOptions = {}) {
         const integer = (value: number, min: number, max: number) => {
             if (!Number.isSafeInteger(value) || value < min || value > max) throw new TypeError('Invalid terminal dashboard limit');
             return value;
@@ -89,8 +89,9 @@ export class TerminalDashboard {
 
     render(): TerminalDashboardSnapshot {
         const snapshot = this.snapshot();
-        this.logger.event('info', 'Dashboard', 'dashboard.snapshot', snapshot as unknown as Record<string, unknown>,
-            `Cluster ${snapshot.nodes.length} nodes | Audio ${snapshot.audio.playing}/${snapshot.audio.players} playing | Sources ${snapshot.sources.length} observed | Heap ${snapshot.runtime.heapUsedBytes} bytes`);
+        getManagerLogRoute(this.manager)?.recordDashboard({ nodeCount: snapshot.nodes.length + snapshot.truncatedNodes,
+            playerCount: snapshot.audio.players, playingCount: snapshot.audio.playing, queuedTracks: snapshot.audio.queuedTracks,
+            sourceCount: snapshot.sources.length + snapshot.truncatedSources });
         return snapshot;
     }
 
@@ -98,11 +99,11 @@ export class TerminalDashboard {
     start(): () => void {
         if (this.running || this.manager.destroyed) return () => this.stop();
         this.running = true;
-        if (this.logger.isEnabled('info')) this.render();
+        if (getManagerLogRoute(this.manager)) this.render();
         if (this.options.mode !== 'static' && process.stdout.isTTY && !process.env.CI) {
             this.timer = setInterval(() => {
-                if (this.manager.destroyed || this.logger.getStats().closed) { this.stop(); return; }
-                if (this.logger.isEnabled('info')) this.render();
+                if (this.manager.destroyed || !getManagerLogRoute(this.manager)) { this.stop(); return; }
+                if (getManagerLogRoute(this.manager)) this.render();
             }, this.intervalMs);
             this.timer.unref();
         }

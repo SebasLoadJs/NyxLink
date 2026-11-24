@@ -1,14 +1,3 @@
-export type NyxLogLevel = 'silent' | 'error' | 'warn' | 'info' | 'debug' | 'trace';
-
-export const consolaLevels: Record<NyxLogLevel, number> = {
-  silent: -999,
-  error: 0,
-  warn: 1,
-  info: 3,
-  debug: 4,
-  trace: 5,
-};
-
 export const logColors: Record<string, number> = {
   TRACE: 90,
   DEBUG: 94,

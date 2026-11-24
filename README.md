@@ -39,7 +39,7 @@
 | **Búsqueda** | Fuentes configurables, cancelación, timeout y caché TTL/LRU opcional. |
 | **Almacenamiento** | Memoria, persistencia local y Redis 7 opcional con snapshots atómicos. |
 | **Integración** | Conector Discord.js, eventos y declaraciones de tipos incluidas. |
-| **Consola** | Logger opcional con Consola, banner de terminal y estado de nodos. |
+| **Aurora** | Pino como motor único, Consola para presentación, Inspector y telemetría opcional. |
 
 NyxLink es el cliente de tu bot. **Necesitas un servidor Lavalink v4 o NodeLink disponible** para cargar y reproducir audio. Las fuentes y extensiones disponibles dependen de la configuración y los plugins de ese servidor.
 
@@ -384,27 +384,20 @@ originales. Los spans no establecen un contexto activo para solicitudes internas
 no equivalen a tracing distribuido de extremo a extremo. Los listeners se
 retiran durante `manager.shutdown()`; el SDK pertenece al bot.
 
-El logger está desactivado por defecto. `logging` activa la salida de Consola y `banner: true` muestra el banner de terminal. Los eventos `debug` originales pueden contener credenciales y deben mantenerse privados. La salida del logger aplica redacción de patrones conocidos, no una garantía de anonimización.
-
-Para usar Pino con tu propia configuración, instala `pino` en el bot y proporciona su instancia mediante el adaptador opcional:
+Aurora está desactivado por defecto. Instalá los peers visuales indicados en [la guía de instalación](docs/aurora-installation.md).
 
 ```js
-const pino = require('pino');
-const { Manager, createPinoSink } = require('nyxlink');
-
-const manager = new Manager({
-  nodes,
-  options: {
-    logging: {
-      level: 'info',
-      console: false,
-      sink: createPinoSink(pino()),
-    },
-  },
-});
+const { Manager } = require('nyxlink');
+async function createClient(nodes) {
+  const { createAuroraPipeline } = await import('nyxlink/aurora');
+  const pipeline = createAuroraPipeline({ format: 'aurora', level: 'info' });
+  const manager = new Manager({nodes, options: {logging: {level: pipeline.level, target: pipeline.target}}});
+  pipeline.banner(manager);
+  return {manager, async close(){await manager.shutdown();await pipeline.close();}};
+}
 ```
 
-El bot puede configurar `pino-pretty` en su propio transporte para desarrollo, o reenviar los registros a su infraestructura de observabilidad. NyxLink no instala ni inicia un transporte externo. El sink recibe nivel, tipo, módulo, timestamp y mensaje redactado, incluidos los paneles de estado. Su contrato es síncrono; las excepciones del sink se aíslan y no deben detener la reproducción. Para evitar duplicar la salida, utiliza `console: false`. No envíes datos privados ni secretos arbitrarios como etiquetas o mensajes.
+Usá un único destino. El Inspector recibe eventos canónicos y no debe competir por la misma terminal con otro renderer. Los eventos `debug` originales no se incorporan automáticamente a Aurora. Consultá [logging y observabilidad](docs/logging-guide.md).
 
 </details>
 

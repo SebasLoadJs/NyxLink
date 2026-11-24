@@ -1,4 +1,4 @@
-import { Manager, Player, Node, Track, Queue, Rest, Filters, SearchResult, NodeManager, PlayerManager, WebSocket, Connectors, VoiceReceiver, YouTubeLiveChat, SpotifySource, DeezerSource, Logger, NodeSelector, NodeHealthMonitor, NodeFailover, BackendDetector, HttpError, FeatureUnavailableError, NoEligibleNodeError, NodeCircuitBreaker, CircuitOpenError, type CircuitState, type CircuitBreakerOptions, type NodeRequirements, type NodeSelectionOptions, type NodeRejection, type FailoverResult, type StorageAdapter, type TrackSnapshot, TrackCodec, TrackResolver, TrackResolutionError, VoicePacketHandler, Memory, Local, version, PlayerSnapshotCodec, SnapshotConflictError, SnapshotValidationError, type PlayerSnapshot } from '../../dist';
+import { Manager, Player, Node, Track, Queue, Rest, Filters, SearchResult, NodeManager, PlayerManager, WebSocket, Connectors, VoiceReceiver, YouTubeLiveChat, SpotifySource, DeezerSource, AuroraEvents, createAuroraPinoEngine, TerminalDashboard, diagnoseError, NodeSelector, NodeHealthMonitor, NodeFailover, BackendDetector, HttpError, FeatureUnavailableError, NoEligibleNodeError, NodeCircuitBreaker, CircuitOpenError, type CircuitState, type CircuitBreakerOptions, type NodeRequirements, type NodeSelectionOptions, type NodeRejection, type FailoverResult, type StorageAdapter, type TrackSnapshot, TrackCodec, TrackResolver, TrackResolutionError, VoicePacketHandler, Memory, Local, version, PlayerSnapshotCodec, SnapshotConflictError, SnapshotValidationError, type PlayerSnapshot } from '../../dist';
 
 declare const manager: Manager;
 declare const player: Player;
@@ -9,7 +9,6 @@ const playing: Promise<boolean> = player.play({ track, position: 10 });
 const stopping: Promise<Player> = player.stop();
 const volume: Player = player.setVolume(75);
 const asyncVolume: Promise<Player> = player.setVolumeAsync(75);
-const logger = new Logger({ level: "debug", color: false });
 const route = new (require('../../dist').AuroraEvents as typeof import('../../dist').AuroraEvents)({level:'silent'});
 route.attach(manager);
 const detach: () => void = () => route.close();
@@ -26,7 +25,7 @@ const failover: Promise<FailoverResult> = NodeFailover.move(player, node, { maxA
 const backend = BackendDetector.detect({ version: { semver: '4.2.2' } });
 const configuredNode: Parameters<NodeManager['add']>[0] = { host: 'localhost', port: 2333, password: 'test', secure: false, retryAmount: 0, readyTimeoutMs: 10000 };
 void [health, selected, failover, backend, HttpError, FeatureUnavailableError, configuredNode];
-void [asyncVolume, detach, playing, stopping, volume, autoplay, transfer, search, queue, Rest, Filters, SearchResult, NodeManager, PlayerManager, WebSocket, Connectors, VoiceReceiver, YouTubeLiveChat, SpotifySource, DeezerSource, Logger, version];
+void [asyncVolume, detach, playing, stopping, volume, autoplay, transfer, search, queue, Rest, Filters, SearchResult, NodeManager, PlayerManager, WebSocket, Connectors, VoiceReceiver, YouTubeLiveChat, SpotifySource, DeezerSource, AuroraEvents, version];
 
 const snapshot: TrackSnapshot = TrackCodec.serialize(track);
 const restored: Track = TrackCodec.restore(snapshot);
@@ -270,23 +269,22 @@ const badGatewayOpcode: import('../../dist').GuildVoiceGatewayPacket = { op: 5, 
 const invalidGatewayMute: import('../../dist').GuildVoiceGatewayPacket = { op: 4, d: { ...voiceGatewayPacket.d, self_mute: 'no' } };
 void [outboundEnvelope, routedPacket, badGatewayOpcode, invalidGatewayMute];
 
-const diagnosticLogger = new (require('../../dist').Logger)({
-    profile: 'diagnostic', mode: 'json', layout: 'compact', timelineLimit: 100,
-    sampleRate: 0.5, deduplicateMs: 1000,
-    transports: [{ write(record: import('../../dist').StructuredLogRecord) { void record.context; } }],
-} satisfies import('../../dist').LoggerOptions) as import('../../dist').Logger;
-const correlated = diagnosticLogger.child({ guildId: '123456789012345678' });
-const operationResult: Promise<number> = correlated.traceOperation('test', async log => { log.event('info', 'Test', 'observed'); return 1; });
-const structuredEvents: import('../../dist').StructuredLogRecord[] = correlated.timeline({ limit: 10 });
-const loggerStats: Readonly<import('../../dist').LogPipelineStats> = diagnosticLogger.getStats();
-const diagnostic: import('../../dist').ErrorDiagnostic = diagnosticLogger.reportError(new Error('fixture'));
+const canonicalEvents: import('../../dist').AuroraEvent[] = [];
+const engine = createAuroraPinoEngine('debug', event => canonicalEvents.push(event));
+const logging: import('../../dist').AuroraEventOptions = {level:'debug', target:engine.target};
+const dashboard = new TerminalDashboard(manager, {mode:'static'});
+const diagnostic: import('../../dist').ErrorDiagnostic = diagnoseError(new Error('fixture'));
+const observed: import('../../dist').TerminalDashboardSnapshot = dashboard.render();
+// @ts-expect-error The standalone Logger has been removed.
+type RemovedLogger = import('../../dist').Logger;
+// @ts-expect-error Invalid severity is not accepted.
+const invalidLogging: import('../../dist').AuroraEventOptions = {level:'invalid'};
+void [logging, observed, diagnostic, invalidLogging];
 const mixCreated: Promise<import('../../dist').MixLayerCreated | null> = player.addMix('encoded', { volume: 0.5 });
 const mixList: Promise<import('../../dist').MixLayersResponse | null> = player.getMixes();
 // @ts-expect-error Mixer volume is numeric.
 player.updateMixVolume('mix-id', 'loud');
-// @ts-expect-error Structured log levels do not include arbitrary strings.
-diagnosticLogger.event('invalid', 'Node', 'event');
-void [operationResult, structuredEvents, loggerStats, diagnostic, mixCreated, mixList];
+void [mixCreated, mixList];
 
 const optionalExtension: import('../../dist').NyxExtension = { name: 'typed-observer', setup(context) {
     context.on('trackStart', (playingPlayer, track) => { const ids: [string, string | undefined] = [playingPlayer.guildId, track.identifier]; void ids; });
@@ -296,6 +294,5 @@ const optionalExtension: import('../../dist').NyxExtension = { name: 'typed-obse
 } };
 const extensionDisposer: Promise<() => Promise<void>> = manager.useExtension(optionalExtension);
 void extensionDisposer;
-const playerTraceRecords: import('../../dist').StructuredLogRecord[] = diagnosticLogger.playerTrace('123456789012345678', { limit: 10 });
 const migrationStage: import('../../dist').MigrationStage = 'persist-snapshot';
-void [playerTraceRecords, migrationStage];
+void migrationStage;

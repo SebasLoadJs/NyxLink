@@ -1,4 +1,4 @@
-import { safeLogValue, type LogContext } from './StructuredLog';
+import { safeDiagnosticValue, type DiagnosticContext } from './SafeDiagnostics';
 
 export interface ErrorDiagnostic {
     code: string;
@@ -6,7 +6,7 @@ export interface ErrorDiagnostic {
     message: string;
     action: string;
     retryable?: boolean;
-    context: LogContext;
+    context: DiagnosticContext;
     error: unknown;
 }
 
@@ -26,8 +26,8 @@ const actions: Record<string, string> = {
 };
 
 /** Advice is based on an actual typed code/status; unknown failures get no invented cause. */
-export function diagnoseError(error: unknown, context: LogContext = {}): ErrorDiagnostic {
-    const safe = safeLogValue(error);
+export function diagnoseError(error: unknown, context: DiagnosticContext = {}): ErrorDiagnostic {
+    const safe = safeDiagnosticValue(error);
     const fields = safe && typeof safe === 'object' ? safe as Record<string, unknown> : {};
     const status = typeof fields.statusCode === 'number' ? fields.statusCode : undefined;
     const code = typeof fields.code === 'string' ? fields.code : status ? `HTTP_${status}` : 'UNKNOWN_ERROR';
@@ -37,5 +37,5 @@ export function diagnoseError(error: unknown, context: LogContext = {}): ErrorDi
         'Inspect the recorded error and operation context; the cause has not been classified.');
     return { code, severity: 'error', message: typeof fields.message === 'string' ? fields.message : typeof safe === 'string' ? safe : 'Unclassified failure',
         action, ...(typeof fields.retryable === 'boolean' ? { retryable: fields.retryable } : {}),
-        context: safeLogValue(context) as LogContext, error: safe };
+        context: safeDiagnosticValue(context) as DiagnosticContext, error: safe };
 }
