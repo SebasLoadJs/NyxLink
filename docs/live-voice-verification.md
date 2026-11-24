@@ -10,6 +10,26 @@ This is a **manual, opt-in, potentially audible** integration check. It will con
 - Two **different, authorized** HTTP(S) audio WAV files, approximately 15–120 seconds each, reachable **from the NodeLink server**. Use original generated test tones or files you control; avoid streamed/copyrighted catalog material.
 - Node.js 22+, development dependencies installed and a clean source checkout. The harness recompiles TypeScript **before Discord login**, rather than trusting older checked-in `dist/` output.
 
+## Generate the two controlled audio tracks
+
+Run this on the clean development checkout (the generated files are gitignored):
+
+```bash
+node scripts/generate-live-fixtures.cjs
+```
+
+This creates two original synthetic 60-second mono PCM16 WAV files under
+`.runtime/live-fixtures/`: `track-a.wav` (440 Hz, one amplitude pulse per second)
+and `track-b.wav` (660 Hz, two pulses per second). Use a low initial listening
+volume. The different pitches and pulse rates make it easier to distinguish
+the tracks during a crossfade and hear interruptions. They do not certify
+music fidelity, automatic recommendation quality, or real provider behavior.
+
+Serve the files from an authorized HTTP(S) origin reachable by the audio
+server, then set the two track URL variables to their respective URLs. The
+generator never starts a server, exposes a port, connects to Discord or uploads
+files. Do not expose unrelated directories, tokens or private reports.
+
 Provide the required environment variables using your local process environment or a secrets manager. No `.env` file is required:
 
 | Variable | Purpose |
