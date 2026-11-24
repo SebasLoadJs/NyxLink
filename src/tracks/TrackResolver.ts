@@ -8,7 +8,8 @@ export class TrackResolutionError extends Error {
 }
 
 export class TrackResolver {
-    public static async resolve(track: Track, target: Node, source?: Node): Promise<Track> {
+    public static async resolve(track: Track, target: Node, source?: Node, signal?: AbortSignal): Promise<Track> {
+        signal?.throwIfAborted();
         const origin = track.backend ?? source?.backend?.kind;
         const destination = target.backend?.kind;
         const internal = track.pluginInfo?.needsStream === true;
@@ -22,8 +23,10 @@ export class TrackResolver {
         }
         // Resolve against the destination itself, never through Manager.search/native-source shortcuts.
         // v4 loading contract: https://lavalink.dev/api/rest#track-loading
-        const loaded = uri && /^https?:\/\//i.test(uri) ? await target.rest.loadTracks(uri, { timeoutMs: 10000 }) : undefined;
-        const data = loaded?.loadType === 'track' ? loaded.data : metadata ? await resolveMetadata(track, target, metadata) : undefined;
+        const loaded = uri && /^https?:\/\//i.test(uri) ? await target.rest.loadTracks(uri, { timeoutMs: 10000, signal }) : undefined;
+        signal?.throwIfAborted();
+        const data = loaded?.loadType === 'track' ? loaded.data : metadata ? await resolveMetadata(track, target, metadata, signal) : undefined;
+        signal?.throwIfAborted();
         if (!data || typeof data.encoded !== 'string' || !data.encoded || !data.info) {
             throw new TrackResolutionError('Destination could not load the requested track URI');
         }
