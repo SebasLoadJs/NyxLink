@@ -44,3 +44,25 @@ All 22 overlapping files now have an initial reconciliation. The combined branch
 ## Aurora V4 precedence (owner clarification)
 
 Aurora V4 supersedes the earlier logging implementation. One canonical Pino engine and mutually exclusive destinations are the required final architecture; Consola is presentation only. Do not merge until legacy Logger calls are migrated to the canonical route; the current Manager still exposes the old compatibility path, so convergence is not complete. The host pipeline now routes Custom through Pino as well, assigns Consola semantic levels to canonical events and styles incident panels using Chalk, Boxen, Log Symbols and Pretty MS, with bounded width and static fallbacks. Tests cover known evidence, private fields, state variants and widths. Remaining dependency-specific acceptance (including real MultiBar and Listr2 visual phases, richer Inspector and live-region styling) must be demonstrated, not inferred from installed packages. No release or CI success is claimed.
+
+## Aurora V5 visual expansion (owner-approved direction)
+
+Aurora replaces the previous logger, not a parallel logging product.
+This increment adds nine exact-pinned optional consumer dependencies:
+cli-truncate (width-safe labels), wrap-ansi (styled record wrapping),
+slice-ansi (search viewport), is-unicode-supported (glyph capability),
+figures (state symbols), @crafter/charts (actual latency/readiness),
+ink-text-input (search), ink-select-input (tab picker), and ink-spinner
+(report write pending state). The Inspector also formats observed memory
+through pretty-bytes. Missing values remain N/A. The root dependency
+manifest and lockfile are unchanged; isolated packed-consumer tests
+install these pins. CI must verify compatibility and actual behavior.
+
+The @crafter/cli-tree package is a command-discovery tool, not a runtime
+trace-tree renderer; keep the existing bounded span traversal. Do not
+add TSLog, Winston or another competing logger. Remaining proposed
+dependencies (supports-color, ansi-escapes, pino-abstract-transport,
+sonic-boom, terminal-link, humanize-duration, tinybench, node-pty and
+optional OTel instrumentation/exporters) require a specific tested use
+and must not duplicate existing facilities. The previous Logger migration
+and combined CI remain release blockers; these changes are not a release.
