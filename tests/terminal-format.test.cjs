@@ -1,75 +1,38 @@
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const { formatStartupObservation, formatDashboardObservation, formatErrorDiagnostic } = require('../dist/src/logging/TerminalFormatter');
-const { formatBox, formatSystemStatus } = require('../dist/src/logging/LogFormatter');
-
-test('cluster panel leaves unknown telemetry empty and shows real runtime fields', () => {
-  const panel = formatDashboardObservation({ nodes: [{ id: 'observed', backend: 'lavalink', state: 'ready', players: 2 }], sources: [],
-    audio: { players: 2, playing: 1, paused: 1, queuedTracks: 3 }, runtime: { heapUsedBytes: 1234, rssBytes: 5000, uptimeSeconds: 1, eventLoopUtilization: 0.25 }, truncatedNodes: 0 }, { width: 60 });
-  assert.match(panel, /OBSERVED CLUSTER/);
-  assert.match(panel, /observed \/ lavalink \/ ready \/ --/);
-  assert.match(panel, /heap 1234 B/);
-  assert.match(panel, /No current source-health observations/);
-  assert.doesNotMatch(panel, /HEALTHY|RECOVERED/);
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const {AuroraPresentation,normalizeAuroraEvent,diagnoseError,HttpError}=require('../dist');
+const {formatBox,formatSystemStatus}=require('../dist/src/logging/LogFormatter');
+const strip=s=>s.replace(/\x1b\[[0-9;]*m/g,'');
+const paint=s=>'\x1b[95m'+s+'\x1b[0m';
+const tools={figlet:s=>s,gradient:paint,paint,box:s=>s,width:s=>strip(s).length,strip,duration:n=>n+'ms',symbols:{info:'i',success:'+',warning:'!',error:'x'}};
+const dashboard=(context={})=>normalizeAuroraEvent({eventCode:'DASHBOARD_SNAPSHOT',timestamp:'2026-01-01T12:00:00.000Z',sanitizedContext:context});
+test('canonical cluster panel uses observed aggregate counts, including zero, without invented health',()=>{
+ const view=new AuroraPresentation(tools,{columns:60,color:false});
+ const text=view.event(dashboard({nodeCount:1,playerCount:2,playingCount:1,queuedTracks:3,sourceCount:0,nodeId:'PRIVATE_CANARY'}));
+ assert.match(text,/Cluster dashboard observed/);assert.match(text,/Nodes: 1/);assert.match(text,/Players: 2/);
+ assert.match(text,/Sources: 0/);assert.doesNotMatch(text,/PRIVATE_CANARY|HEALTHY|RECOVERED/);
 });
-
-test('truncated or malformed dashboard observations use the log-message fallback', () => {
-  assert.equal(formatDashboardObservation({ truncated: true }, {}), undefined);
-  assert.equal(formatErrorDiagnostic({ diagnostic: 'untrusted' }, {}), undefined);
+test('malformed dashboard fields are omitted, not invented',()=>{
+ const event=dashboard({nodeCount:NaN,playerCount:-1,playingCount:'unknown',sourceCount:Infinity,queuedTracks:0});
+ assert.deepEqual(event.sanitizedContext,{backend:'unknown',queuedTracks:0});
+ const output=new AuroraPresentation(tools,{columns:80}).event(event);
+ assert.match(output,/Queue: 0/);assert.doesNotMatch(output,/Nodes:|Players:|Playing:|Sources:/);
 });
-
-test('diagnostic panels show actual code, cause and grounded advice', () => {
-  const panel = formatErrorDiagnostic({ traceId: 'trace-1', diagnostic: { code: 'HTTP_429', message: 'rate limited', action: 'Respect retry delay.' } }, {});
-  assert.match(panel, /HTTP_429/); assert.match(panel, /rate limited/); assert.match(panel, /Respect retry delay/); assert.match(panel, /trace-1/);
+test('typed error diagnostics retain actual error code and retry advice, without credentials',()=>{
+ const diagnostic=diagnoseError(new HttpError(429),{token:'PRIVATE_CANARY',traceId:'trace-1'});
+ assert.match(diagnostic.action,/retry delay/);assert.equal(diagnostic.context.traceId,'trace-1');
+ assert.doesNotMatch(JSON.stringify(diagnostic),/PRIVATE_CANARY/);
 });
-
-test('panels respect narrow widths and non-finite widths cannot crash formatting', () => {
-  for (const panel of [formatBox('A long title for a narrow terminal', { values: 'x'.repeat(100) }, 20), formatSystemStatus([], { width: 20 })]) {
-    assert.ok(panel.split('\n').every(line => [...line].length <= 20));
-  }
-  assert.doesNotThrow(() => formatBox('safe', {}, Infinity));
-  assert.doesNotThrow(() => formatSystemStatus([], { width: NaN }));
+test('pure panels respect narrow widths and non-finite widths cannot crash formatting',()=>{
+ for(const panel of [formatBox('A long title for a narrow terminal',{values:'x'.repeat(100)},20),formatSystemStatus([],{width:20})])
+  assert.ok(panel.split('\n').every(line=>[...line].length<=20));
+ assert.doesNotThrow(()=>formatBox('safe',{},Infinity));assert.doesNotThrow(()=>formatSystemStatus([],{width:NaN}));
 });
-
-test('startup, dashboard and error panels color only the heading when explicitly enabled', () => {
-  const contexts = [
-    () => formatStartupObservation({ packageVersion: '5.3-dev', runtime: 'Node 22', readyNodes: 1, configuredNodes: 2 }, { width: 72 }, 'standard'),
-    () => formatDashboardObservation({
-      nodes: [], sources: [], audio: { players: 0, playing: 0, paused: 0, queuedTracks: 0 },
-      runtime: { heapUsedBytes: 0, rssBytes: 0, uptimeSeconds: 0, eventLoopUtilization: 0 },
-      truncatedNodes: 0,
-    }, { width: 72 }),
-    () => formatErrorDiagnostic({ diagnostic: { code: 'HTTP_429', message: 'rate limit', action: 'Try later' } }, { width: 72 }),
-  ];
-  const colored = [
-    formatStartupObservation({ packageVersion: '5.3-dev', runtime: 'Node 22', readyNodes: 1, configuredNodes: 2 }, { color: true, width: 72 }, 'standard'),
-    formatDashboardObservation({
-      nodes: [], sources: [], audio: { players: 0, playing: 0, paused: 0, queuedTracks: 0 },
-      runtime: { heapUsedBytes: 0, rssBytes: 0, uptimeSeconds: 0, eventLoopUtilization: 0 },
-      truncatedNodes: 0,
-    }, { color: true, width: 72 }),
-    formatErrorDiagnostic({ diagnostic: { code: 'HTTP_429', message: 'rate limit', action: 'Try later' } }, { color: true, width: 72 }),
-  ];
-  const strip = text => text.replace(/\x1b\[[0-9;]*m/g, '');
-  for (let index = 0; index < colored.length; index++) {
-    assert.match(colored[index], /\x1b\[[0-9;]*m/, 'theme should color the visible heading');
-    assert.equal(strip(colored[index]), contexts[index](), 'theme must not change data or visible panel geometry');
-  }
-  assert.doesNotMatch(contexts[0](), /\x1b\[/);
-  assert.doesNotMatch(formatStartupObservation({ readyNodes: 0, configuredNodes: 0 }, { color: false }, 'compact'), /\x1b\[/);
-});
-
-test('compact dashboard uses observed counts without drawing a full panel', () => {
-  const context = {
-    nodes: [{ id: 'one', backend: 'lavalink', state: 'ready', players: 2 }],
-    sources: [], audio: { players: 2, playing: 1, paused: 1, queuedTracks: 7 },
-    runtime: { heapUsedBytes: 1234, rssBytes: 4000, uptimeSeconds: 10, eventLoopUtilization: 0.3 },
-    truncatedNodes: 0,
-  };
-  const compact = formatDashboardObservation(context, { color: false }, 'compact');
-  assert.equal(compact, 'NYXLINK / CLUSTER | 1 node shown | 1/2 playing | queue 7');
-  assert.doesNotMatch(compact, /[┌└│]/);
-  const colored = formatDashboardObservation(context, { color: true }, 'compact');
-  assert.match(colored, /\x1b\[95mNYXLINK\x1b\[0m/);
-  assert.equal(colored.replace(/\x1b\[[0-9;]*m/g, ''), compact);
+test('dashboard respects terminal widths, no-color, ASCII and canonical event metadata',()=>{
+ const record=dashboard({nodeCount:2,playerCount:2,playingCount:1,queuedTracks:7,sourceCount:0});
+ for(const columns of [40,80,120]){
+   const text=new AuroraPresentation(tools,{columns,color:false,isTTY:false,unicode:false}).event(record);
+   assert.match(text,/INFO/);assert.match(text,/TELEMETRY/);assert.match(text,/Queue: 7/);
+   assert.doesNotMatch(text,/\x1b\[/);assert.ok(text.split('\n').every(line=>line.length<=columns));
+ }
 });
