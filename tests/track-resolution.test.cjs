@@ -339,3 +339,41 @@ test('direct URL lookup consumes late backend rejection after user cancellation'
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(player.queue.tracks, [queued]);
 });
+
+test('destination URI errors cannot be bypassed with metadata source fallback', async t => {
+  const { manager, node: source } = createPlayer(t);
+  const destination = target(manager);
+  manager.options.search = { trackResolution: { sources: ['youtube'] } };
+  const song = createTrack('provider-rejection');
+  song.backend = 'lavalink';
+  const { TrackResolver } = require('../dist');
+  let calls = 0;
+  destination.rest.loadTracks = async () => {
+    calls++;
+    return { loadType: 'error', data: { message: 'HTTP 429: provider rate limit' } };
+  };
+  await assert.rejects(TrackResolver.resolve(song, destination, source), /Destination rejected/i);
+  assert.equal(calls, 1, 'a backend error must not trigger the metadata fallback');
+  destination.rest.loadTracks = async () => {
+    calls++;
+    throw new Error('HTTP 401');
+  };
+  await assert.rejects(TrackResolver.resolve(song, destination, source), /HTTP 401/);
+  assert.equal(calls, 2, 'authorization errors must not be retried across fallback sources');
+});
+
+test('invalid direct URI protocol responses fail before metadata fallback', async t => {
+  const { manager, node: source } = createPlayer(t);
+  const destination = target(manager);
+  manager.options.search = { trackResolution: { sources: ['youtube'] } };
+  const song = createTrack('invalid-direct-data');
+  song.backend = 'lavalink';
+  const { TrackResolver } = require('../dist');
+  let calls = 0;
+  destination.rest.loadTracks = async () => {
+    calls++;
+    return { loadType: 'search', data: { incorrect: true } };
+  };
+  await assert.rejects(TrackResolver.resolve(song, destination, source), /Invalid search response/i);
+  assert.equal(calls, 1, 'malformed direct response must not be treated as empty');
+});
