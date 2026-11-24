@@ -86,3 +86,15 @@ standalone Log Update music renderer. The static consumer fixture verifies
 units and non-TTY behavior; the interactive Log Update path still needs PTY
 acceptance. Do not run that standalone view beside the coordinator. The
 final coordinated visual pipeline, incident panels and Ink remain pending.
+
+## Inspector increment
+
+The bounded `AuroraInspectorStore` accepts common event records and
+explicitly completed host-exported span metadata. Unknown span names and raw
+attributes are excluded; an event with trace IDs alone is not a span.
+`examples/aurora-inspector.mjs` implements five Ink views with Tab/arrows,
+level/category/backend filters, local search, pause of view refresh, detail
+and exit. No audio command is exposed. It is a standalone terminal owner
+with console patching disabled and static fallback for non-TTY/CI/NO_COLOR.
+Fixture tests render all five views through Ink itself. Real key input, PTY,
+host exporter adapter and comprehensive trace tree remain to be validated.
