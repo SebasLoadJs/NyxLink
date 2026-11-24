@@ -40,3 +40,16 @@ can bound waiting for drain; this does not guarantee the last OS-level write
 was physically displayed. No cursor is hidden. This increment strips caller
 control sequences and uses an ASCII-only live line; themed multi-line rendering,
 Unicode widths and Pino/Consola presentation integration are still pending.
+
+## Visual foundation
+
+`AuroraPresentation` and `examples/aurora-visual.mjs` provide a pure
+banner/event renderer using Figlet, Gradient String, Chalk, Boxen, String
+Width, Strip ANSI, Pretty MS and Log Symbols. These dependencies are installed
+only in the explicit consumer; the core has no imports of them. The packed
+consumer test installs pinned versions and tests 40/80/120-column banners,
+ASCII fallback, duration formatting and privacy. The supported backend list
+describes the client, not connected nodes. Failover describes automatic
+movement (`autoMovePlayers`), not actual recovery or manual transfers.
+No dynamic tasks, cursor effects, real Pino destination bridge or PTY
+verification are claimed by this increment.
