@@ -2,6 +2,8 @@ export type * from './src/typings/Interfaces';
 export { NodeState, VoiceConnectionState, LoadType } from './src/typings/types';
 export const version: string = require("../package.json").version as string;
 export { Logger, ConsoleReporter, createPinoSink, createBanner, formatEntry, formatBox, formatSystemStatus, formatFailover } from './src/logging';
+export { AuroraInspectorStore } from './src/logging/AuroraInspector';
+export type { InspectorEvent, InspectorSpan, InspectorPlayer, InspectorSnapshot } from './src/logging/AuroraInspector';
 export { AuroraMusicStrip, AuroraIncidentEngine, AuroraCapabilityExplorer } from './src/logging/AuroraDiagnostics';
 export type { MusicSnapshot, IncidentState, IncidentSnapshot, CapabilityNode } from './src/logging/AuroraDiagnostics';
 export { AuroraBootstrap } from './src/logging/AuroraBootstrap';
