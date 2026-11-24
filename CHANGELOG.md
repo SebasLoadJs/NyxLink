@@ -4,6 +4,8 @@ This changelog describes the unreleased NyxLink 5.3 development line and its ver
 
 ## [5.3.0-rc.1 — candidate, not yet published]
 
+- Kept Aurora terminal and Inspector tools opt-in so core consumers using React 19 or different CLI package versions can install NyxLink without unrelated peer dependency conflicts.
+
 ### Observability and terminal
 
 - Canonical diagnostic event/Inspector normalization now ignores inherited values and accessors and rejects proxy objects without triggering traps; invalid prototype-named severity levels are rejected.

@@ -44,8 +44,8 @@ async function main() {
     await fs.writeFile(path.join(consumer, 'package.json'), JSON.stringify({ private: true, packageManager: manifest.packageManager,
       dependencies: { [manifest.name]: fromRegistry ? manifest.version : `file:${archive}` }, devDependencies: { '@types/node': types, typescript: compiler, 'discord.js': discord,
         ...manifest.dependencies,
-        ...manifest.peerDependencies,
-        '@opentelemetry/context-async-hooks': manifest.peerDependencies['@opentelemetry/sdk-trace-base'],
+        ...manifest.devDependencies,
+        '@opentelemetry/context-async-hooks': manifest.devDependencies['@opentelemetry/sdk-trace-base'],
         'ink-testing-library': '4.0.0', tinybench: manifest.devDependencies.tinybench } }));
     const pnpm = 'pnpm';
     run(pnpm, ['install', fromRegistry ? '--prefer-offline=false' : '--prefer-offline', ...(fromRegistry ? ['--force'] : []), '--registry=https://registry.npmjs.org/', '--ignore-scripts', '--no-frozen-lockfile'], consumer);

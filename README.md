@@ -233,7 +233,7 @@ La selección respeta los requisitos de backend, capacidades y región. Las migr
 
 Aurora es el sistema de logging y observabilidad integrado. El núcleo es silencioso por defecto. Pino procesa los eventos canónicos; Consola y las herramientas de terminal presentan esos eventos sin introducir un segundo motor de logging.
 
-Instala los peers del perfil que utilizarás desde [Aurora installation](docs/aurora-installation.md).
+Instala las dependencias opcionales del perfil que utilizarás desde [Aurora installation](docs/aurora-installation.md).
 
 ```ts
 import { Manager } from 'nyxlink';

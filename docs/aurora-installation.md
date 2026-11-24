@@ -1,6 +1,8 @@
 # Aurora installation — NyxLink 5.3 development
 
-The root SDK uses native Pino 10.4.0 loaded on demand. The optional runtime is shipped in the npm archive through ESM package subpaths. No old Manager logger configuration or automatic legacy subscription is supported. The visual dependencies are optional peers, so silent and core-only consumers need not load them.
+The root SDK uses native Pino 10.4.0 loaded on demand. The optional runtime is shipped in the npm archive through ESM package subpaths. No old Manager logger configuration or automatic legacy subscription is supported. Install the visual dependencies only in applications that use those subpaths; the core package does not constrain a host's versions of unrelated terminal or UI packages.
+
+The optional Ink 5 Inspector requires React 18. Install `react@18.3.1` with the Inspector dependencies in a separate terminal consumer when the host application uses React 19. The NyxLink core does not require React and does not constrain the host application's React version.
 
 Install the pinned runtime peers for the complete terminal, bootstrap and Inspector:
 
