@@ -2,6 +2,8 @@ export type * from './src/typings/Interfaces';
 export { NodeState, VoiceConnectionState, LoadType } from './src/typings/types';
 export const version: string = require("../package.json").version as string;
 export { Logger, ConsoleReporter, createPinoSink, createBanner, formatEntry, formatBox, formatSystemStatus, formatFailover } from './src/logging';
+export { TerminalCoordinator } from './src/logging/TerminalCoordinator';
+export type { TerminalOptions, TerminalLease, TerminalStats, TerminalPriority, TerminalRejectReason } from './src/logging/TerminalCoordinator';
 export { AuroraEvents, auroraCatalog } from './src/logging/AuroraEvents';
 export type { AuroraEvent, AuroraEventCode, AuroraCategory, AuroraLevel, AuroraOutcome, AuroraContext, AuroraPinoTarget, AuroraEventOptions } from './src/logging/AuroraEvents';
 export { OpenTelemetry } from './src/observability/OpenTelemetry';
