@@ -94,6 +94,7 @@ export interface IncidentSnapshot {
     state: IncidentState;
     backend: 'lavalink' | 'nodelink' | 'unknown';
     durationMs?: number;
+    sourceBackend?: 'lavalink' | 'nodelink' | 'unknown';
 }
 const incidentStates = new Map<string, IncidentState>([
     ['FAILOVER_STARTED', 'recovering'], ['FAILOVER_RECOVERED', 'recovered'],
@@ -113,6 +114,7 @@ export class AuroraIncidentEngine {
         if (prior && (prior.state !== 'recovering' || state === 'recovering')) return;
         const duration = state !== 'recovering' ? finite(event.durationMs) : undefined;
         const result: IncidentSnapshot = { operationId: id, state, backend: backend(event.sanitizedContext?.backend),
+            ...(prior?.state === 'recovering' && state !== 'recovering' ? { sourceBackend: prior.backend } : {}),
             ...(duration === undefined ? {} : { durationMs: duration }) };
         this.incidents.delete(id);
         this.incidents.set(id, result);

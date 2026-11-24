@@ -76,3 +76,11 @@ test('capability explorer masks identities and preserves observed capability sta
         assert.deepEqual(offline.capabilities, []);
     } finally { m.nodes.nodes.clear(); await m.shutdown(); }
 });
+
+test('incident retains observed source backend and terminal destination without identifiers',()=>{
+ const engine=new AuroraIncidentEngine();
+ const operationId='11111111-1111-4111-8111-111111111111';
+ engine.accept({eventCode:'FAILOVER_STARTED',operationId,sanitizedContext:{backend:'lavalink'}});
+ const result=engine.accept({eventCode:'FAILOVER_RECOVERED',operationId,sanitizedContext:{backend:'nodelink'},durationMs:25});
+ assert.equal(result.sourceBackend,'lavalink');assert.equal(result.backend,'nodelink');assert.equal(result.durationMs,25);
+});

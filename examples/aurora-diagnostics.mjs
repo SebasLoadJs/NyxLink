@@ -40,3 +40,34 @@ export function startStandaloneMusicView(strip, options = {}) {
     let closed = false;
     return () => { if (closed) return; closed = true; clearInterval(timer); render.clear(); render.done(); };
 }
+
+/** Explicit host-owned view. No timer or renderer if a region is unavailable.
+ * The caller owns the read-only strip; the view owns only its lease and timer.
+ */
+export function startCoordinatedMusicView(strip, terminal, {signal, intervalMs=250, staticFallback=false, onError}={}){
+    if(!Number.isSafeInteger(intervalMs)||intervalMs<100||intervalMs>5000)throw new RangeError('Invalid music refresh interval');
+    if(signal?.aborted)return ()=>{};
+    const lease=terminal.acquire();
+    if(!lease){
+        if(staticFallback){try{terminal.write(musicLine(strip.snapshot()));}catch{try{onError?.();}catch{}}}
+        return ()=>{};
+    }
+    let timer,closed=false;
+    const stop=()=>{
+        if(closed)return;
+        closed=true;
+        if(timer)clearInterval(timer);
+        signal?.removeEventListener('abort',stop);
+        lease.release();
+    };
+    const draw=()=>{
+        if(closed)return;
+        try{
+            if(!lease.update(musicLine(strip.snapshot())))stop();
+        }catch{stop();try{onError?.();}catch{}}
+    };
+    signal?.addEventListener('abort',stop,{once:true});
+    draw();
+    if(!closed){timer=setInterval(draw,intervalMs);timer.unref?.();}
+    return stop;
+}

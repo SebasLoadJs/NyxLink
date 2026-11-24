@@ -226,3 +226,17 @@ by shutdown; callers must not point it back at the coordinator. Delivery of
 bytes already accepted by the OS/stream cannot be guaranteed. Without a
 fallback, loss remains explicitly counted. Regression tests cover width
 changes, owner release, saturation, cancellation and callback reentrancy.
+
+## Coordinated music and incident presentation
+
+The explicit host API `pipeline.startMusic(strip, {signal})` acquires the
+coordinator's existing region, updates at a bounded cadence and releases
+on cancellation, rendering failure or pipeline shutdown. It neither starts
+playback nor owns the selected-player observer. A noninteractive Aurora
+destination receives a single static snapshot; other logging modes do not
+start a music view. A second region is never created when the bootstrap
+or another view already owns the lease. The standalone Log Update view
+remains a mutually exclusive alternative. Incident summaries preserve the
+observed source backend from the start record and suppress retained
+duplicate terminal reports. They do not claim known causes or audible
+recovery when those signals are absent. Tests and CI remain required.

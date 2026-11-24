@@ -5,6 +5,7 @@ import boxen from 'boxen';
 import prettyMs from 'pretty-ms';
 import { TerminalCoordinator, AuroraIncidentEngine, auroraCatalog } from 'nyxlink';
 import { createPresentation } from './aurora-visual.mjs';
+import { startCoordinatedMusicView } from './aurora-diagnostics.mjs';
 
 const levels = ['trace','debug','info','warn','error','fatal'];
 const rank = Object.fromEntries(levels.map((x,i)=>[x,i]));
@@ -45,15 +46,25 @@ export function createAuroraPipeline(options={}){
     const interactive=format==='aurora'&&stream.isTTY===true&&!process.env.CI&&!('NO_COLOR'in process.env)&&process.env.TERM!=='dumb';
     const color=interactive&&options.color!==false;
     const terminal=new TerminalCoordinator({stream,interactive,color,maxQueued:options.maxQueued,onRejected:options.onRejected,onCriticalRejected:options.onCriticalRejected});
-    const presentation=()=>createPresentation({columns:width(),isTTY:interactive,color,unicode:options.unicode!==false});
+    let cachedWidth, cachedPresentation;
+    const presentation=()=>{
+        const columns=width();
+        if(cachedWidth!==columns){
+            cachedWidth=columns;
+            cachedPresentation=createPresentation({columns,isTTY:interactive,color,unicode:options.unicode!==false});
+        }
+        return cachedPresentation;
+    };
+    let musicStop,closing=false;
     const pretty=prettyFactory({colorize:false,translateTime:'SYS:HH:MM:ss',ignore:'pid,hostname,timestamp,sanitizedContext,operationId,traceId,spanId,eventCode,outcome,severity',singleLine:true});
     const incidents=new AuroraIncidentEngine(options.incidentCapacity??100);
     let bannerWritten=false;
     const write=(line,record)=>terminal.write(line,isCritical(record)?'critical':'normal');
     const renderRecord=record=>{
         const incident=incidents.accept(record);
+        if(!incident&&record.operationId&&record.eventCode.startsWith('FAILOVER_')&&incidents.snapshot().some(x=>x.operationId===record.operationId))return;
         if(incident&&incident.state!=='recovering'){
-            const content=['FAILOVER '+incident.state.toUpperCase(),incident.backend.toUpperCase(),
+            const content=['FAILOVER '+incident.state.toUpperCase(),incident.sourceBackend?incident.sourceBackend.toUpperCase()+' -> '+incident.backend.toUpperCase():incident.backend.toUpperCase(),
                 incident.durationMs===undefined?'Duration: N/A':'Duration: '+prettyMs(incident.durationMs)].join('\n');
             if(width()>=40&&options.unicode!==false)write(boxen(content,{padding:1,borderStyle:'round'}),record);
             else write(content,record);
@@ -87,5 +98,11 @@ export function createAuroraPipeline(options={}){
     }]));
     return {target,level,terminal,incidents,
         banner(manager){if(format==='aurora'&&!bannerWritten){bannerWritten=true;terminal.write(presentation().banner(manager));}},
-        close:signal=>terminal.close(signal)};
+        startMusic(strip,viewOptions={}){
+            if(format!=='aurora'||closing)return ()=>{};
+            musicStop?.();
+            musicStop=startCoordinatedMusicView(strip,terminal,{...viewOptions,staticFallback:!interactive,onError:options.onRenderError});
+            return musicStop;
+        },
+        close:signal=>{closing=true;musicStop?.();return terminal.close(signal);}};
 }
