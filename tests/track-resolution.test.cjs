@@ -377,3 +377,19 @@ test('invalid direct URI protocol responses fail before metadata fallback', asyn
   await assert.rejects(TrackResolver.resolve(song, destination, source), /Invalid search response/i);
   assert.equal(calls, 1, 'malformed direct response must not be treated as empty');
 });
+
+test('destination track decoding respects explicitly disabled source policy', async t => {
+  const { manager, node: source } = createPlayer(t);
+  const destination = target(manager);
+  manager.options.sources.disabledSources = ['youtube'];
+  const song = createTrack('blocked-on-destination');
+  song.backend = 'lavalink';
+  const { TrackResolver } = require('../dist');
+  destination.rest.loadTracks = async () => ({ loadType: 'track', data: migrated(song) });
+  await assert.rejects(
+    TrackResolver.resolve(song, destination, source),
+    /disabled track source/i,
+  );
+  assert.equal(song.backend, 'lavalink');
+  assert.equal(song.encoded, 'encoded-blocked-on-destination');
+});
