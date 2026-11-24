@@ -1,13 +1,23 @@
-import { formatBox, type FormatterOptions } from './LogFormatter';
+import { ansi, formatBox, type FormatterOptions } from './LogFormatter';
 import type { LogContext } from './StructuredLog';
 
 const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value: unknown): string => typeof value === 'string' ? value : '--';
 const number = (value: unknown, unit = ''): string => typeof value === 'number' && Number.isFinite(value) ? `${value}${unit}` : '--';
 
+/** Add terminal colors only after calculating the plain-text panel width.
+ * JSON and NO_COLOR paths never receive these visual escape sequences. */
+function themedBox(title: string, fields: Record<string, unknown>, options: FormatterOptions, color: number): string {
+    const formatted = formatBox(title, fields, options.width);
+    return options.color ? formatted.replace(title.toUpperCase(), ansi(title.toUpperCase(), color, true)) : formatted;
+}
+
 export function formatStartupObservation(context: LogContext, options: FormatterOptions, layout: string): string {
     const summary = `${number(context.readyNodes)}/${number(context.configuredNodes)} nodes ready`;
-    if (layout === 'compact') return `NYXLINK ${text(context.packageVersion)} / ${text(context.runtime)} / ${summary}`;
+    if (layout === 'compact') {
+        const label = options.color ? ansi('NYXLINK', 95, true) : 'NYXLINK';
+        return `${label} ${text(context.packageVersion)} / ${text(context.runtime)} / ${summary}`;
+    }
     const fields: Record<string, unknown> = { Runtime: text(context.runtime), Package: text(context.packageVersion),
         Core: context.initialized === true ? 'Initialized; node readiness reported separately' : 'Not initialized', Topology: summary };
     if (Array.isArray(context.nodes)) for (const [index, entry] of context.nodes.entries()) {
@@ -17,7 +27,7 @@ export function formatStartupObservation(context: LogContext, options: Formatter
     }
     if (typeof context.omittedNodes === 'number' && context.omittedNodes > 0) fields.Omitted = context.omittedNodes;
     if (layout === 'diagnostic') { fields.Platform = `${text(context.platform)} / ${text(context.architecture)}`; fields.Logging = context.logging; }
-    return formatBox('NYXLINK / STARTUP', fields, options.width);
+    return themedBox('NYXLINK / STARTUP', fields, options, 96);
 }
 
 /** Render only observed fields; malformed/truncated event context falls back to its message. */
@@ -48,7 +58,7 @@ export function formatDashboardObservation(context: LogContext, options: Formatt
         if (object(observed.resources)) rows.Resources = `${number(observed.resources.pendingRequests)} pending HTTP / ${number(observed.resources.pendingPlayerCommands)} player commands / ${number(observed.resources.managerListeners)} listeners`;
         if (object(observed.durations) && object(observed.durations.rest)) rows.REST = `p50 ${number(observed.durations.rest.p50Ms, 'ms')} / p95 ${number(observed.durations.rest.p95Ms, 'ms')}`;
     }
-    return formatBox('NYXLINK / OBSERVED CLUSTER', rows, options.width);
+    return themedBox('NYXLINK / OBSERVED CLUSTER', rows, options, 95);
 }
 
 export function formatErrorDiagnostic(context: LogContext, options: FormatterOptions): string | undefined {
@@ -56,5 +66,5 @@ export function formatErrorDiagnostic(context: LogContext, options: FormatterOpt
     if (!object(diagnostic) || typeof diagnostic.code !== 'string' || typeof diagnostic.action !== 'string') return;
     const fields: Record<string, unknown> = { Code: diagnostic.code, Severity: 'ERROR', Cause: text(diagnostic.message), Action: diagnostic.action };
     for (const key of ['nodeId', 'guildId', 'traceId', 'operation']) if (context[key] !== undefined) fields[key] = context[key];
-    return formatBox('NYXLINK / ERROR DIAGNOSTIC', fields, options.width);
+    return themedBox('NYXLINK / ERROR DIAGNOSTIC', fields, options, 91);
 }
