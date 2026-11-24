@@ -49,12 +49,12 @@ try{
    assert.match(app.lastFrame()??'',pattern);
  };
  // Ink registers input listeners in effects after the initial render.
- await frame(/\\[Events\\]/);await delay(100);
- app.stdin.write('/');await frame(/Search \\(editing\\):/);await delay(50);
- app.stdin.write('NODE_READY');await frame(/Search \\(editing\\): NODE_READY/);
+ await frame(/\[Events\]/);await delay(100);
+ app.stdin.write('/');await frame(/Search \(editing\):/);await delay(50);
+ app.stdin.write('NODE_READY');await frame(/Search \(editing\): NODE_READY/);
  assert.doesNotMatch(app.lastFrame(),/QUEUE_ADDED/);
- app.stdin.write('\\r');await frame(/Search: NODE_READY/);
- assert.doesNotMatch(app.lastFrame(),/Search \\(editing\\)/);
+ app.stdin.write('\r');await frame(/Search: NODE_READY/);
+ assert.doesNotMatch(app.lastFrame(),/Search \(editing\)/);
  app.stdin.write('g');await frame(/Jump to view:/);await delay(50);
- app.stdin.write('\\r');await frame(/\\[Overview\\]/);
+ app.stdin.write('\r');await frame(/\[Overview\]/);
 }finally{app.unmount();app.cleanup();}
