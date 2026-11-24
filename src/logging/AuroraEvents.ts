@@ -8,6 +8,7 @@ import type { Player } from '../entities/Player';
 import type { MigrationStage, MigrationStageObservation } from '../players/PlayerMigration';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { HttpError } from '../errors/HttpError';
+import { observedFields } from './ObservedFields';
 
 export type AuroraLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 export type AuroraCategory = 'CORE' | 'MANAGER' | 'NODE' | 'LAVALINK' | 'NODELINK' | 'WEBSOCKET' | 'REST' | 'PLAYER' | 'QUEUE' | 'TRACK' | 'SEARCH' | 'FILTERS' | 'AUTOPLAY' | 'CROSSFADE' | 'FAILOVER' | 'HEALTH' | 'PLUGIN' | 'TELEMETRY';
@@ -128,7 +129,8 @@ const validHex = (value: unknown, length: number): value is string =>
 type Operation = { id: string; started: number; parentId?: string };
 const migrationStages = new Set<unknown>(['select-target','resolve-track','restore-player','persist-snapshot','cleanup-source','rollback','cleanup-target']);
 const migrationStatuses = new Set<unknown>(['started','acknowledged','failed','cancelled','partial']);
-function safeContext(input: AuroraContext = {}): AuroraContext {
+function safeContext(value: unknown = {}): AuroraContext {
+    const input = observedFields(value, ['backend','attempt','trackCount','reasonCode','stage','stageStatus','httpStatus','nodeCount','playerCount','playingCount','queuedTracks','sourceCount']) as AuroraContext;
     const context: AuroraContext = {};
     if (input.backend !== undefined) context.backend = backend(input.backend);
     for (const field of ['nodeCount','playerCount','playingCount','queuedTracks','sourceCount'] as const) {
@@ -149,7 +151,7 @@ const operationId = (value: unknown): value is string => typeof value === 'strin
 /** Canonicalize before the native Pino engine, including records submitted by a host. */
 export function normalizeAuroraEvent(input: unknown): AuroraEvent | undefined {
     if (!input || typeof input !== 'object') return;
-    const record = input as Partial<AuroraEvent>;
+    const record = observedFields(input, ['eventCode','timestamp','sanitizedContext','durationMs','operationId','parentOperationId','traceId','spanId']) as Partial<AuroraEvent>;
     if (typeof record.eventCode !== 'string' || !Object.hasOwn(auroraCatalog, record.eventCode)) return;
     const definition = auroraCatalog[record.eventCode];
     const context = safeContext(record.sanitizedContext ?? {});
@@ -179,8 +181,9 @@ export class AuroraEvents {
     getStats() { return { ...this.counters, closed: this.closed }; }
 
     constructor(private readonly options: AuroraEventOptions) {
-        this.minimum = ranks[options.level ?? 'silent'];
-        if (this.minimum === undefined) throw new TypeError('Invalid Aurora log level');
+        const level = options.level ?? 'silent';
+        if (!Object.hasOwn(ranks, level)) throw new TypeError('Invalid Aurora log level');
+        this.minimum = ranks[level];
         this.categories = options.categories ? new Set(options.categories) : undefined;
         if (this.minimum !== Infinity && (!options.target || Object.keys(ranks).filter(level => level !== 'silent').some(level =>
             typeof options.target?.[level as AuroraLevel] !== 'function'))) throw new TypeError('Aurora requires a Pino-compatible target');
@@ -199,7 +202,7 @@ export class AuroraEvents {
             ...(operation && finished ? { durationMs: performance.now() - operation.started } : {}),
         };
         try {
-            const trace = this.options.traceContext?.();
+            const trace = observedFields(this.options.traceContext?.(), ['traceId','spanId']);
             if (trace && validHex(trace.traceId, 32) && validHex(trace.spanId, 16)) {
                 event.traceId = trace.traceId;
                 event.spanId = trace.spanId;

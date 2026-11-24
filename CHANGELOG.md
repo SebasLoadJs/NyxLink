@@ -6,6 +6,8 @@ This changelog describes the unreleased NyxLink 5.3 development line and its ver
 
 ### Observability and terminal
 
+- Canonical diagnostic event/Inspector normalization now ignores inherited values and accessors and rejects proxy objects without triggering traps; invalid prototype-named severity levels are rejected.
+
 - **Breaking development API:** retired the standalone Logger and legacy transports in favor of one Aurora/Pino route; migrated dashboard aggregates, consumer checks and typed diagnostics. Added Fuse.js search, terminal hyperlinks, native exclusive bounded NDJSON output, opt-in OTLP logs, Tinybench and cross-platform Node PTY checks. Updated Figlet, ws and OpenTelemetry to resolve observed production audit failures.
 
 - Added opt-in Aurora V4 structured events, a bounded terminal coordinator, and an optional host pipeline for Silent, JSON, Pretty, Aurora and Custom logging.

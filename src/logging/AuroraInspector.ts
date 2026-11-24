@@ -1,5 +1,6 @@
 import type { Manager } from '../core/Manager';
 import type { Player } from '../entities/Player';
+import { observedFields } from './ObservedFields';
 import { AuroraCapabilityExplorer, type CapabilityNode } from './AuroraDiagnostics';
 import { auroraCatalog, type AuroraEventCode, type AuroraCategory, type AuroraLevel } from './AuroraEvents';
 
@@ -65,11 +66,11 @@ export class AuroraInspectorStore {
     }
     recordEvent(input: unknown): boolean {
         if (!input || typeof input !== 'object') return false;
-        const record = input as Record<string, unknown>;
+        const record = observedFields(input, ['eventCode','sanitizedContext','timestamp','durationMs','traceId','spanId']);
         const code = record.eventCode;
         if (typeof code !== 'string' || !Object.hasOwn(auroraCatalog, code)) return false;
         const definition = auroraCatalog[code as AuroraEventCode];
-        const context = record.sanitizedContext as Record<string, unknown> | undefined;
+        const context = observedFields(record.sanitizedContext, ['backend']);
         const event: InspectorEvent = { code: code as AuroraEventCode, category: definition.category,
             level: definition.level, message: definition.message, backend: backend(context?.backend) };
         if (typeof record.timestamp === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(record.timestamp)) event.timestamp = record.timestamp;
@@ -83,7 +84,7 @@ export class AuroraInspectorStore {
     /** Call only with a completed span from a host exporter. Never copy attributes or exceptions. */
     recordSpan(input: unknown): boolean {
         if (!input || typeof input !== 'object') return false;
-        const span = input as Record<string, unknown>;
+        const span = observedFields(input, ['name','traceId','spanId','parentSpanId','durationMs','startTimeMs','outcome']);
         if (typeof span.name !== 'string' || !spanNames.has(span.name) ||
             !hex(span.traceId, 32) || !hex(span.spanId, 16) || !duration(span.durationMs) ||
             (span.outcome !== 'ok' && span.outcome !== 'error' && span.outcome !== 'unset')) return false;

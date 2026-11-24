@@ -123,3 +123,17 @@ test('nested operations retain parent correlation and never expose payloads',asy
   assert.doesNotMatch(JSON.stringify(events),/never/);
  }finally{await manager.shutdown();}
 });
+
+test('canonical normalization ignores inherited fields and never executes accessors or proxy traps',()=>{
+ const {normalizeAuroraEvent,AuroraEvents}=require('../dist');
+ let touched=0;
+ const getter=()=>{touched++;throw Error('must not run');};
+ const proxy=new Proxy({}, {get:getter,getOwnPropertyDescriptor:getter});
+ assert.equal(normalizeAuroraEvent(proxy),undefined);
+ assert.equal(normalizeAuroraEvent(Object.create({eventCode:'NODE_READY'})),undefined);
+ assert.equal(normalizeAuroraEvent({get eventCode(){return getter();}}),undefined);
+ const event=normalizeAuroraEvent({eventCode:'NODE_READY',get durationMs(){return getter();},sanitizedContext:{get backend(){return getter();},get token(){return getter();},trackCount:2}});
+ assert.deepEqual(event.sanitizedContext,{backend:'unknown',trackCount:2});assert.equal(event.durationMs,undefined);
+ assert.equal(touched,0);
+ for(const level of ['constructor','toString','__proto__','invalid'])assert.throws(()=>new AuroraEvents({level}),/Invalid Aurora log level/);
+});
