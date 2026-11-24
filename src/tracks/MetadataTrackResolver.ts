@@ -88,6 +88,11 @@ export async function resolveMetadata(track: Track, node: Node, options: Metadat
                 for (const candidate of candidates.slice(0, options.maxCandidates ?? 10)) {
                     const info = candidate.info;
                     if (info.isStream || !candidate.encoded) continue;
+                    // Two explicitly different recording identifiers must not
+                    // be considered the same recording merely because the
+                    // artist/title/duration happen to match.
+                    const candidateIsrc = isrc(info.isrc);
+                    if (code && candidateIsrc && candidateIsrc !== code) continue;
                     const difference = Math.abs(seed.length - info.length);
                     const tolerance = options.durationToleranceMs ?? 10000;
                     if (seed.length > 0 && info.length > 0 && difference > tolerance) continue;
