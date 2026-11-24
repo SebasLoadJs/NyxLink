@@ -65,7 +65,7 @@ export function createAuroraPipeline(options={}){
         }else write(presentation.event(record),record);
     };
     // Consola is a reporter bridge, never a second terminal destination.
-    const reporter=createConsola({level:5,reporters:[{log(log){renderRecord(log.args[0]);}}]});
+    const reporter=createConsola({level:5,throttle:0,reporters:[{log(log){renderRecord(log.args[0]);}}]});
     const logger=pino({level,base:null,redact:['password','token','authorization','sanitizedContext.password','sanitizedContext.token']},{
         write(line){
             try{

@@ -142,6 +142,17 @@ async function main() {
     const sdk = run(process.execPath,['aurora-sdk-consumer.cjs'],consumer);
     assert.equal(sdk.stdout,''); assert.equal(sdk.stderr,'');
     checks.push('host SDK automatic Pino correlation and local OTLP traces/metrics without duplicate log export');
+    const acceptance = path.join(root,'.runtime/aurora-acceptance',process.version);
+    await fs.mkdir(acceptance,{recursive:true});
+    for(const fixture of ['aurora-pty.py','aurora-pty-region.mjs','aurora-benchmark.mjs'])
+      await fs.copyFile(path.join(root,'tests/fixtures',fixture),path.join(consumer,fixture));
+    if(process.platform==='linux'){
+      const pty = run('python3',['aurora-pty.py',process.execPath,acceptance],consumer);
+      assert.match(pty.stdout,/6 sessions passed/);
+      checks.push('real Linux PTY: 40/80/120 columns, NO_COLOR, region restore and Ink navigation');
+    }
+    run(process.execPath,['aurora-benchmark.mjs',path.join(acceptance,'benchmark.json')],consumer);
+    checks.push('measured comparative benchmark with exact event counts and no render errors');
     for (const file of ['discordjs.ts', 'discordjs.cjs']) await fs.copyFile(path.join(root, 'examples', file), path.join(consumer, file));
     run(process.execPath, [tsc, '--noEmit', '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', 'discordjs.ts'], consumer);
     await fs.writeFile(path.join(consumer, 'example-smoke.cjs'), `const { createMusicClient } = require('./discordjs.cjs'); const fixture = createMusicClient([{host:'127.0.0.1',port:2333,password:'fixture'}]); fixture.close().catch(error=>{console.error(error);process.exitCode=1});`);
