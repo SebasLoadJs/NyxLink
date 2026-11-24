@@ -277,3 +277,17 @@ In particular, richer incident phases, timed trace trees, per-node progress,
 a local inspector report export, bounded latency history and all requested
 PTY modes still require acceptance. No new functionality is inferred from
 a dependency merely being installed.
+
+## Inspector reports, timestamps and bounded latency samples
+
+The host exporter forwards actual span start timestamps. The Inspector
+shows a bounded parent/child tree with relative start offsets, measured
+duration and missing-parent markers; it never creates synthetic spans.
+A host-configured reportPath enables the explicit e key to export the
+trusted read-only store to a new local JSON file (exclusive create, mode
+0600 on POSIX). There is no automatic network upload or overwrite.
+Latency samples are taken at host request, retained up to 60 per node
+and capacity-limited across nodes; absent readings are not synthesized.
+The view samples while active and stops refreshing when paused.
+New tests require CI acceptance. Report exports assume the supplied
+source is the sanitized Inspector store, not arbitrary user objects.

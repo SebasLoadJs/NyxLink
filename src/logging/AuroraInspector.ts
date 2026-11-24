@@ -20,6 +20,7 @@ export interface InspectorSpan {
     spanId: string;
     parentSpanId?: string;
     durationMs: number;
+    startTimeMs?: number;
     outcome: 'ok' | 'error' | 'unset';
 }
 export interface InspectorPlayer {
@@ -55,6 +56,8 @@ export class AuroraInspectorStore {
     private readonly events: InspectorEvent[] = [];
     private readonly spans: InspectorSpan[] = [];
     private readonly players = new WeakMap<Player, string>();
+    private readonly latency = new Map<string, { timeMs: number; latencyMs: number }[]>();
+    private readonly historyLimit = 60;
     private nextPlayer = 0;
     constructor(private readonly manager: Manager, private readonly capacity = 200) {
         if (!Number.isSafeInteger(capacity) || capacity < 1 || capacity > 10000) throw new RangeError('Invalid inspector capacity');
@@ -86,9 +89,29 @@ export class AuroraInspectorStore {
             (span.outcome !== 'ok' && span.outcome !== 'error' && span.outcome !== 'unset')) return false;
         const value: InspectorSpan = { name: span.name, traceId: span.traceId, spanId: span.spanId,
             durationMs: span.durationMs, outcome: span.outcome };
+        if (duration(span.startTimeMs)) value.startTimeMs = span.startTimeMs;
+        if (this.spans.some(x => x.traceId === value.traceId && x.spanId === value.spanId)) return false;
         if (hex(span.parentSpanId, 16) && span.parentSpanId !== span.spanId) value.parentSpanId = span.parentSpanId;
         append(this.spans, value, this.capacity);
         return true;
+    }
+    /** Samples only actual measured node latency at host request; snapshot remains read-only. */
+    sampleLatencies(now = Date.now()): void {
+        if (!duration(now)) return;
+        const nodes = this.explorer.snapshot();
+        const aliases = new Set(nodes.map(node => node.alias));
+        for (const alias of this.latency.keys()) if (!aliases.has(alias)) this.latency.delete(alias);
+        for (const node of nodes.slice(0, this.capacity)) {
+            if (!duration(node.latencyMs)) continue;
+            const series = this.latency.get(node.alias) ?? [];
+            if (series.length && now <= series.at(-1)!.timeMs) continue;
+            append(series, {timeMs: now, latencyMs: node.latencyMs}, this.historyLimit);
+            this.latency.set(node.alias, series);
+            if (this.latency.size > this.capacity) this.latency.delete(this.latency.keys().next().value!);
+        }
+    }
+    latencyHistory(alias: string): ReadonlyArray<{timeMs:number;latencyMs:number}> {
+        return (this.latency.get(alias) ?? []).map(sample => ({ ...sample }));
     }
     snapshot(): InspectorSnapshot {
         const players: InspectorPlayer[] = [];
