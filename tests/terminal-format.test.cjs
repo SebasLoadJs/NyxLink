@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { formatDashboardObservation, formatErrorDiagnostic } = require('../dist/src/logging/TerminalFormatter');
+const { formatStartupObservation, formatDashboardObservation, formatErrorDiagnostic } = require('../dist/src/logging/TerminalFormatter');
 const { formatBox, formatSystemStatus } = require('../dist/src/logging/LogFormatter');
 
 test('cluster panel leaves unknown telemetry empty and shows real runtime fields', () => {
@@ -29,4 +29,32 @@ test('panels respect narrow widths and non-finite widths cannot crash formatting
   }
   assert.doesNotThrow(() => formatBox('safe', {}, Infinity));
   assert.doesNotThrow(() => formatSystemStatus([], { width: NaN }));
+});
+
+test('startup, dashboard and error panels color only the heading when explicitly enabled', () => {
+  const contexts = [
+    () => formatStartupObservation({ packageVersion: '5.3-dev', runtime: 'Node 22', readyNodes: 1, configuredNodes: 2 }, { width: 72 }, 'standard'),
+    () => formatDashboardObservation({
+      nodes: [], sources: [], audio: { players: 0, playing: 0, paused: 0, queuedTracks: 0 },
+      runtime: { heapUsedBytes: 0, rssBytes: 0, uptimeSeconds: 0, eventLoopUtilization: 0 },
+      truncatedNodes: 0,
+    }, { width: 72 }),
+    () => formatErrorDiagnostic({ diagnostic: { code: 'HTTP_429', message: 'rate limit', action: 'Try later' } }, { width: 72 }),
+  ];
+  const colored = [
+    formatStartupObservation({ packageVersion: '5.3-dev', runtime: 'Node 22', readyNodes: 1, configuredNodes: 2 }, { color: true, width: 72 }, 'standard'),
+    formatDashboardObservation({
+      nodes: [], sources: [], audio: { players: 0, playing: 0, paused: 0, queuedTracks: 0 },
+      runtime: { heapUsedBytes: 0, rssBytes: 0, uptimeSeconds: 0, eventLoopUtilization: 0 },
+      truncatedNodes: 0,
+    }, { color: true, width: 72 }),
+    formatErrorDiagnostic({ diagnostic: { code: 'HTTP_429', message: 'rate limit', action: 'Try later' } }, { color: true, width: 72 }),
+  ];
+  const strip = text => text.replace(/\x1b\[[0-9;]*m/g, '');
+  for (let index = 0; index < colored.length; index++) {
+    assert.match(colored[index], /\x1b\[[0-9;]*m/, 'theme should color the visible heading');
+    assert.equal(strip(colored[index]), contexts[index](), 'theme must not change data or visible panel geometry');
+  }
+  assert.doesNotMatch(contexts[0](), /\x1b\[/);
+  assert.doesNotMatch(formatStartupObservation({ readyNodes: 0, configuredNodes: 0 }, { color: false }, 'compact'), /\x1b\[/);
 });
