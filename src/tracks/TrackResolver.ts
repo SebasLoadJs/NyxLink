@@ -16,6 +16,22 @@ export class TrackResolver {
         if (!internal && (origin === destination || !origin && !source)) return track;
         if (!internal && source && !origin && !destination) return track;
         if (!destination) throw new TrackResolutionError('Destination backend identity is unknown');
+        // A resolved encoding belongs to a particular destination backend,
+        // session and node instance. Reject stale replies after reconnect,
+        // backend refresh, or replacement of a registered node.
+        const session = target.sessionId;
+        const socket = target.socket;
+        const backend = target.backend;
+        const registered = target.manager.nodes.nodes.get(target.identifier);
+        const assertDestination = (): void => {
+            signal?.throwIfAborted();
+            if (target.destroyed || target.manager.destroyed ||
+                target.sessionId !== session || target.socket !== socket ||
+                target.backend !== backend ||
+                target.manager.nodes.nodes.get(target.identifier) !== registered) {
+                throw new TrackResolutionError('Destination node changed while resolving the track');
+            }
+        };
         const uri = track.getInfo().uri;
         const metadata = target.manager.options.search?.trackResolution;
         if ((!uri || !/^https?:\/\//i.test(uri)) && !metadata) {
@@ -24,9 +40,9 @@ export class TrackResolver {
         // Resolve against the destination itself, never through Manager.search/native-source shortcuts.
         // v4 loading contract: https://lavalink.dev/api/rest#track-loading
         const loaded = uri && /^https?:\/\//i.test(uri) ? await target.rest.loadTracks(uri, { timeoutMs: 10000, signal }) : undefined;
-        signal?.throwIfAborted();
+        assertDestination();
         const data = loaded?.loadType === 'track' ? loaded.data : metadata ? await resolveMetadata(track, target, metadata, signal) : undefined;
-        signal?.throwIfAborted();
+        assertDestination();
         if (!data || typeof data.encoded !== 'string' || !data.encoded || !data.info) {
             throw new TrackResolutionError('Destination could not load the requested track URI');
         }
