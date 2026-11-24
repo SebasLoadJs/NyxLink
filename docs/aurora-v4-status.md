@@ -70,3 +70,19 @@ Noninteractive mode prints only final phase summaries. Dependencies are pinned
 in the isolated package consumer test. Actual PTY and full CI acceptance
 remain pending; this is not a complete multi-stage bootstrap or a guarantee
 of audible playback.
+
+## Diagnostic models increment
+
+`AuroraMusicStrip` observes a single explicitly selected player. Position
+extrapolation is bounded to five seconds and marked estimated; streams have
+no invented duration or percentage. The incident history accepts only common
+failover event codes and bounded operation IDs, ignores duplicate terminal
+reports while retained, and never claims audible recovery. The capability
+explorer exposes session-local aliases and negotiated feature states, omitting
+disconnected metrics rather than guessing them.
+
+The host example provides CLI Table 3, Pretty Bytes, and an explicitly
+standalone Log Update music renderer. The static consumer fixture verifies
+units and non-TTY behavior; the interactive Log Update path still needs PTY
+acceptance. Do not run that standalone view beside the coordinator. The
+final coordinated visual pipeline, incident panels and Ink remain pending.

@@ -32,7 +32,8 @@ export class AuroraMusicStrip {
             manager.on('playerUpdate', (owner, track, payload) => {
                 if (owner !== player || !track || track !== player.current) return;
                 const position = finite(payload?.state?.position);
-                if (position !== undefined) this.anchor = { track, position, at: this.now() };
+                if (position !== undefined && payload?.state?.connected === true && player.playing && !player.paused) this.anchor = { track, position, at: this.now() };
+                else this.anchor = undefined;
             }),
             manager.on('trackStart', (owner, track) => {
                 if (owner !== player) return;
