@@ -1954,6 +1954,7 @@ export interface MetadataResolutionOptions {
     minimumScore?: number;
     durationToleranceMs?: number;
     maxCandidates?: number;
+    timeoutMs?: number;
 }
 ```
 
@@ -3585,7 +3586,7 @@ export declare class TrackResolutionError extends Error {
 
 ```ts
 export declare class TrackResolver {
-    static resolve(track: Track, target: Node, source?: Node): Promise<Track>;
+    static resolve(track: Track, target: Node, source?: Node, signal?: AbortSignal): Promise<Track>;
 }
 ```
 
