@@ -41,13 +41,16 @@ export async function resolveMetadata(track: Track, node: Node, options: Metadat
     const started = performance.now();
     const timeout = new AbortController();
     const timer = setTimeout(() => timeout.abort(new Error('Metadata resolution timed out')), budgetMs);
-    timer.unref();
     try {
         for (const source of new Set<keyof typeof prefixes>(options.sources)) {
             if (node.backend?.featureStatus('source:' + source) === 'unavailable') continue;
             for (const query of queries) {
                 timeout.signal.throwIfAborted();
-                const remainingMs = Math.max(1, Math.ceil(budgetMs - (performance.now() - started)));
+                const remainingMs = Math.ceil(budgetMs - (performance.now() - started));
+                if (remainingMs <= 0) {
+                    timeout.abort(new Error('Metadata resolution timed out'));
+                    timeout.signal.throwIfAborted();
+                }
                 // The same deadline is shared across every provider and query.
                 // Signal cancellation also stops the HTTP call when supported by Rest.
                 const response = await node.rest.loadTracks(`${prefixes[source]}:${query}`, {
