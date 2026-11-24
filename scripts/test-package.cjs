@@ -38,9 +38,11 @@ async function main() {
     await fs.writeFile(path.join(consumer, 'package.json'), JSON.stringify({ private: true, packageManager: manifest.packageManager,
       dependencies: { [manifest.name]: fromRegistry ? manifest.version : `file:${archive}` }, devDependencies: { '@types/node': types, typescript: compiler, 'discord.js': discord,
         pino: '10.4.0', 'pino-pretty': '13.2.0', '@opentelemetry/api': '1.9.0',
-        '@opentelemetry/sdk-trace-base': '2.2.0', '@opentelemetry/sdk-metrics': '2.2.0',
+        '@opentelemetry/sdk-trace-base': '2.2.0', '@opentelemetry/sdk-metrics': '2.2.0', '@opentelemetry/context-async-hooks': '2.2.0',
         figlet: '1.9.4', 'gradient-string': '3.0.0', chalk: '5.6.2', boxen: '8.0.1',
-        'string-width': '7.2.0', 'strip-ansi': '7.1.2', 'pretty-ms': '9.2.0', 'log-symbols': '7.0.1' } }));
+        'string-width': '7.2.0', 'strip-ansi': '7.1.2', 'pretty-ms': '9.2.0', 'log-symbols': '7.0.1',
+        listr2: '8.3.3', ora: '8.2.0', 'cli-progress': '3.12.0',
+        'cli-table3': '0.6.5', 'pretty-bytes': '6.1.1', 'log-update': '6.1.0', ink: '5.2.1', react: '18.3.1', 'ink-testing-library': '4.0.0' } }));
     const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
     run(pnpm, ['install', fromRegistry ? '--prefer-offline=false' : '--prefer-offline', ...(fromRegistry ? ['--force'] : []), '--registry=https://registry.npmjs.org/', '--ignore-scripts', '--no-frozen-lockfile'], consumer);
     checks.push(fromRegistry ? 'install exact published version from public npm in isolated consumer' : 'install packed artifact in isolated consumer');
@@ -98,6 +100,26 @@ async function main() {
     const visual = run(process.execPath, ['aurora-visual-consumer.mjs'], consumer);
     assert.equal(visual.stdout, ''); assert.equal(visual.stderr, '');
     checks.push('real optional Aurora visual tools and 40/80/120 column static rendering');
+    await fs.copyFile(path.join(root, 'examples/aurora-bootstrap.mjs'), path.join(consumer, 'aurora-bootstrap.mjs'));
+    await fs.copyFile(path.join(root, 'tests/fixtures/aurora-bootstrap-consumer.mjs'), path.join(consumer, 'aurora-bootstrap-consumer.mjs'));
+    const bootstrap = run(process.execPath, ['aurora-bootstrap-consumer.mjs'], consumer);
+    assert.equal(bootstrap.stdout, ''); assert.equal(bootstrap.stderr, '');
+    checks.push('real optional Listr2, Ora and CLI Progress bootstrap adapter');
+    await fs.copyFile(path.join(root, 'examples/aurora-diagnostics.mjs'), path.join(consumer, 'aurora-diagnostics.mjs'));
+    await fs.copyFile(path.join(root, 'tests/fixtures/aurora-diagnostics-consumer.mjs'), path.join(consumer, 'aurora-diagnostics-consumer.mjs'));
+    const diagnostics = run(process.execPath, ['aurora-diagnostics-consumer.mjs'], consumer);
+    assert.equal(diagnostics.stdout, ''); assert.equal(diagnostics.stderr, '');
+    checks.push('real optional diagnostic table, units and static music strip');
+    await fs.copyFile(path.join(root, 'examples/aurora-inspector.mjs'), path.join(consumer, 'aurora-inspector.mjs'));
+    await fs.copyFile(path.join(root, 'tests/fixtures/aurora-inspector-consumer.mjs'), path.join(consumer, 'aurora-inspector-consumer.mjs'));
+    const inspector = run(process.execPath, ['aurora-inspector-consumer.mjs'], consumer);
+    assert.equal(inspector.stdout, ''); assert.equal(inspector.stderr, '');
+    checks.push('real Ink inspector five views and non-TTY fallback');
+    await fs.copyFile(path.join(root,'examples/aurora-otel.mjs'),path.join(consumer,'aurora-otel.mjs'));
+    await fs.copyFile(path.join(root,'tests/fixtures/aurora-otel-consumer.mjs'),path.join(consumer,'aurora-otel-consumer.mjs'));
+    const tracing = run(process.execPath,['aurora-otel-consumer.mjs'],consumer);
+    assert.equal(tracing.stdout,''); assert.equal(tracing.stderr,'');
+    checks.push('real active OTel parent-child spans and Pino correlation in inspector');
     for (const file of ['discordjs.ts', 'discordjs.cjs']) await fs.copyFile(path.join(root, 'examples', file), path.join(consumer, file));
     run(process.execPath, [tsc, '--noEmit', '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', 'discordjs.ts'], consumer);
     await fs.writeFile(path.join(consumer, 'example-smoke.cjs'), `const { createMusicClient } = require('./discordjs.cjs'); const fixture = createMusicClient([{host:'127.0.0.1',port:2333,password:'fixture'}]); fixture.close().catch(error=>{console.error(error);process.exitCode=1});`);

@@ -53,3 +53,51 @@ describes the client, not connected nodes. Failover describes automatic
 movement (`autoMovePlayers`), not actual recovery or manual transfers.
 No dynamic tasks, cursor effects, real Pino destination bridge or PTY
 verification are claimed by this increment.
+
+## Dynamic bootstrap increment
+
+The explicit `AuroraBootstrap` observer distinguishes completion of
+`manager.init()` (connections requested) from actual READY backend sessions.
+Network observation uses a fixed set of registered node objects, a bounded
+timeout, and optional cancellation. It neither delays nor changes normal
+manager initialization unless the application explicitly awaits observation.
+
+The optional host example `examples/aurora-bootstrap.mjs` wraps these two
+operations in Listr2 silent tasks, obtains Ora frames without starting its
+renderer, and directs CLI Progress to a private stream whose sanitized frames
+are forwarded into a coordinator lease. No simultaneous terminal ownership.
+Noninteractive mode prints only final phase summaries. Dependencies are pinned
+in the isolated package consumer test. Actual PTY and full CI acceptance
+remain pending; this is not a complete multi-stage bootstrap or a guarantee
+of audible playback.
+
+## Diagnostic models increment
+
+`AuroraMusicStrip` observes a single explicitly selected player. Position
+extrapolation is bounded to five seconds and marked estimated; streams have
+no invented duration or percentage. The incident history accepts only common
+failover event codes and bounded operation IDs, ignores duplicate terminal
+reports while retained, and never claims audible recovery. The capability
+explorer exposes session-local aliases and negotiated feature states, omitting
+disconnected metrics rather than guessing them.
+
+The host example provides CLI Table 3, Pretty Bytes, and an explicitly
+standalone Log Update music renderer. The static consumer fixture verifies
+units and non-TTY behavior; the interactive Log Update path still needs PTY
+acceptance. Do not run that standalone view beside the coordinator. The
+final coordinated visual pipeline, incident panels and Ink remain pending.
+
+## Inspector increment
+
+The bounded `AuroraInspectorStore` accepts common event records and
+explicitly completed host-exported span metadata. Unknown span names and raw
+attributes are excluded; an event with trace IDs alone is not a span.
+`examples/aurora-inspector.mjs` implements five Ink views with Tab/arrows,
+level/category/backend filters, local search, pause of view refresh, detail
+and exit. No audio command is exposed. It is a standalone terminal owner
+with console patching disabled and static fallback for non-TTY/CI/NO_COLOR.
+Fixture tests render all five views through Ink itself. Real key input, PTY,
+host exporter adapter and comprehensive trace tree remain to be validated.
+
+## Advanced tracing increment
+Active spans are used when supported by the host tracer. Search, loadtracks and player PATCH requests, queued explicit play/seek/stop, and executed failover attempts are instrumented. Resolved commands are not proof of audible playback. The host example forwards completed span metadata to the Inspector and supplies active trace IDs to Pino. Real async context manager, nested spans and Pino correlation have a packed consumer fixture. Node handshake, other REST routes, autoplay, crossfade, selection, session recovery, automatic Pino instrumentation, OTLP exporters and unified presentation remain pending. CI required.
