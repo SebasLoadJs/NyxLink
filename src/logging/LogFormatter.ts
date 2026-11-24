@@ -18,10 +18,52 @@ export function ansi(text: string, code: number, enabled: boolean): string {
   return enabled ? `\x1b[${code}m${text}\x1b[0m` : text;
 }
 
+/** Redact URL userinfo with a linear scan rather than a backtracking regex.
+ * Scheme and credentials may originate from untrusted provider diagnostics. */
+function redactUrlCredentials(value: string): string {
+  const isLetter = (code: number): boolean =>
+    (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+  const isDigit = (code: number): boolean => code >= 48 && code <= 57;
+  const isScheme = (code: number): boolean => isLetter(code) || isDigit(code) ||
+    code === 43 || code === 45 || code === 46;
+  const isWord = (code: number): boolean => isLetter(code) || isDigit(code) || code === 95;
+
+  let from = 0;
+  let copied = 0;
+  let output = '';
+  while (true) {
+    const separator = value.indexOf('://', from);
+    if (separator < 0) break;
+    let start = separator;
+    while (start > 0 && isScheme(value.charCodeAt(start - 1))) start--;
+    if (start === separator || !isLetter(value.charCodeAt(start)) ||
+        (start > 0 && isWord(value.charCodeAt(start - 1)))) {
+      from = separator + 3;
+      continue;
+    }
+    let end = separator + 3;
+    let credentialSeparator = -1;
+    while (end < value.length) {
+      const code = value.charCodeAt(end);
+      if (code === 47 || code === 64 || code <= 32 || code === 127) break;
+      if (code === 58 && credentialSeparator < 0) credentialSeparator = end;
+      end++;
+    }
+    if (value.charCodeAt(end) === 64 && credentialSeparator > separator + 3 &&
+        credentialSeparator < end - 1) {
+      output += value.slice(copied, separator + 3) + '[REDACTED]@';
+      copied = end + 1;
+      from = end + 1;
+    } else {
+      from = separator + 3;
+    }
+  }
+  return output + value.slice(copied);
+}
+
 /** Best-effort defense for credentials embedded in legacy debug messages. */
 export function redactSecrets(value: string): string {
-  return value
-    .replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/@]+:[^\s/@]+@/gi, '$1[REDACTED]@')
+  return redactUrlCredentials(value)
     .replace(/\bBearer\s+[A-Za-z0-9._~+\/=-]+/gi, 'Bearer [REDACTED]')
     .replace(/((?:["']?)(?:authorization|password|passwd|passphrase|api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|client[_-]?secret|session[_-]?id|token)(?:["']?)\s*[:=]\s*["']?)([^"'\s,}\]&]+)/gi, '$1[REDACTED]');
 }
