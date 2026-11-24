@@ -131,3 +131,15 @@ No credentials, Discord login, actual backend connections or playback are
 needed. The isolated package consumer checks the JSON and failover scenarios.
 Full PTY, snapshots captured from a real run, benchmark measurements, OTLP
 and automatic Pino instrumentation remain pending.
+
+## Host SDK and OTLP increment
+
+`examples/aurora-sdk.cjs` demonstrates host-owned registration of NodeSDK
+before loading Pino. Choose either explicit Aurora `traceContext` or automatic
+Pino correlation (not both). Automatic Pino log sending is disabled so the
+existing destination remains the sole log route. OTLP HTTP trace and metric
+exporters are enabled only with an explicitly supplied base endpoint. The
+host owns SDK start/shutdown. No default remote export or global registration
+occurs in the NyxLink library. The integration fixture uses a loopback HTTP
+receiver and checks actual nonempty trace/metric requests and one Pino
+record. CI must verify the pinned versions, including Pino 10 support.

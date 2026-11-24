@@ -24,8 +24,9 @@ function canonical(record) {
     }
     if(typeof record.durationMs==='number'&&Number.isFinite(record.durationMs)&&record.durationMs>=0)safe.durationMs=record.durationMs;
     if(typeof record.operationId==='string'&&/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(record.operationId))safe.operationId=record.operationId;
-    if(typeof record.traceId==='string'&&/^[a-f0-9]{32}$/.test(record.traceId)&&typeof record.spanId==='string'&&/^[a-f0-9]{16}$/.test(record.spanId)){
-        safe.traceId=record.traceId;safe.spanId=record.spanId;
+    const traceId=record.traceId??record.trace_id, spanId=record.spanId??record.span_id;
+    if(typeof traceId==='string'&&/^[a-f0-9]{32}$/.test(traceId)&&!/^0+$/.test(traceId)&&typeof spanId==='string'&&/^[a-f0-9]{16}$/.test(spanId)&&!/^0+$/.test(spanId)){
+        safe.traceId=traceId;safe.spanId=spanId;
     }
     return safe;
 }

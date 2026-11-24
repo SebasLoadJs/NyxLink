@@ -39,6 +39,8 @@ async function main() {
       dependencies: { [manifest.name]: fromRegistry ? manifest.version : `file:${archive}` }, devDependencies: { '@types/node': types, typescript: compiler, 'discord.js': discord,
         consola: '3.4.2', pino: '10.4.0', 'pino-pretty': '13.2.0', '@opentelemetry/api': '1.9.0',
         '@opentelemetry/sdk-trace-base': '2.2.0', '@opentelemetry/sdk-metrics': '2.2.0', '@opentelemetry/context-async-hooks': '2.2.0',
+        '@opentelemetry/sdk-node': '0.208.0', '@opentelemetry/instrumentation-pino': '0.55.1',
+        '@opentelemetry/exporter-trace-otlp-http': '0.208.0', '@opentelemetry/exporter-metrics-otlp-http': '0.208.0',
         figlet: '1.9.4', 'gradient-string': '3.0.0', chalk: '5.6.2', boxen: '8.0.1',
         'string-width': '7.2.0', 'strip-ansi': '7.1.2', 'pretty-ms': '9.2.0', 'log-symbols': '7.0.1',
         listr2: '8.3.3', ora: '8.2.0', 'cli-progress': '3.12.0',
@@ -135,6 +137,11 @@ async function main() {
     assert.match(visualDemo.stderr,/SIMULATED/);
     assert.doesNotMatch(visualDemo.stdout,/\x1b/);
     checks.push('executable simulated JSON and Aurora scenarios without network or Discord');
+    await fs.copyFile(path.join(root,'examples/aurora-sdk.cjs'),path.join(consumer,'aurora-sdk.cjs'));
+    await fs.copyFile(path.join(root,'tests/fixtures/aurora-sdk-consumer.cjs'),path.join(consumer,'aurora-sdk-consumer.cjs'));
+    const sdk = run(process.execPath,['aurora-sdk-consumer.cjs'],consumer);
+    assert.equal(sdk.stdout,''); assert.equal(sdk.stderr,'');
+    checks.push('host SDK automatic Pino correlation and local OTLP traces/metrics without duplicate log export');
     for (const file of ['discordjs.ts', 'discordjs.cjs']) await fs.copyFile(path.join(root, 'examples', file), path.join(consumer, file));
     run(process.execPath, [tsc, '--noEmit', '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', 'discordjs.ts'], consumer);
     await fs.writeFile(path.join(consumer, 'example-smoke.cjs'), `const { createMusicClient } = require('./discordjs.cjs'); const fixture = createMusicClient([{host:'127.0.0.1',port:2333,password:'fixture'}]); fixture.close().catch(error=>{console.error(error);process.exitCode=1});`);
