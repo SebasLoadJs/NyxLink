@@ -18,6 +18,518 @@ export type AudioNodeStatus = {
 };
 ```
 
+## AuroraBootstrap
+
+[Source declaration](../src/logging/AuroraBootstrap.ts)
+
+```ts
+export declare class AuroraBootstrap {
+    constructor(manager: Manager, options?: BootstrapOptions);
+    initialize(clientId: string): Promise<Manager>;
+    observeNetwork(): Promise<BootstrapSnapshot>;
+}
+```
+
+## AuroraCapabilityExplorer
+
+[Source declaration](../src/logging/AuroraDiagnostics.ts)
+
+```ts
+export declare class AuroraCapabilityExplorer {
+    constructor(manager: Manager);
+    snapshot(): CapabilityNode[];
+}
+```
+
+## auroraCatalog
+
+[Source declaration](../src/logging/AuroraEvents.ts)
+
+```ts
+export declare const auroraCatalog: {
+    readonly MANAGER_INITIALIZED: {
+        readonly category: "CORE";
+        readonly level: "info";
+        readonly outcome: "observed";
+        readonly message: "Manager initialized";
+    };
+    readonly EXTENSION_FAILED: {
+        readonly category: "PLUGIN";
+        readonly level: "error";
+        readonly outcome: "failed";
+        readonly message: "Extension lifecycle failed";
+    };
+    readonly MIGRATION_STAGE_STARTED: {
+        readonly category: "FAILOVER";
+        readonly level: "debug";
+        readonly outcome: "started";
+        readonly message: "Migration stage started";
+    };
+    readonly MIGRATION_STAGE_ACKNOWLEDGED: {
+        readonly category: "FAILOVER";
+        readonly level: "debug";
+        readonly outcome: "confirmed";
+        readonly message: "Migration stage acknowledged";
+    };
+    readonly MIGRATION_STAGE_FAILED: {
+        readonly category: "FAILOVER";
+        readonly level: "error";
+        readonly outcome: "failed";
+        readonly message: "Migration stage failed";
+    };
+    readonly MIGRATION_STAGE_CANCELLED: {
+        readonly category: "FAILOVER";
+        readonly level: "debug";
+        readonly outcome: "cancelled";
+        readonly message: "Migration stage cancelled";
+    };
+    readonly MIGRATION_STAGE_PARTIAL: {
+        readonly category: "FAILOVER";
+        readonly level: "warn";
+        readonly outcome: "observed";
+        readonly message: "Migration stage partially completed";
+    };
+    readonly NODE_READY: {
+        readonly category: "NODE";
+        readonly level: "info";
+        readonly outcome: "confirmed";
+        readonly message: "Backend session ready";
+    };
+    readonly NODE_ERROR: {
+        readonly category: "NODE";
+        readonly level: "error";
+        readonly outcome: "failed";
+        readonly message: "Backend reported an error";
+    };
+    readonly NODE_DISCONNECTED: {
+        readonly category: "WEBSOCKET";
+        readonly level: "warn";
+        readonly outcome: "observed";
+        readonly message: "Backend disconnected";
+    };
+    readonly NODE_RECONNECTING: {
+        readonly category: "WEBSOCKET";
+        readonly level: "info";
+        readonly outcome: "started";
+        readonly message: "Backend reconnect attempt";
+    };
+    readonly NODE_RESUMED: {
+        readonly category: "NODE";
+        readonly level: "info";
+        readonly outcome: "confirmed";
+        readonly message: "Backend session resumed";
+    };
+    readonly SEARCH_COMPLETED: {
+        readonly category: "SEARCH";
+        readonly level: "debug";
+        readonly outcome: "observed";
+        readonly message: "Search returned results";
+    };
+    readonly SEARCH_EMPTY: {
+        readonly category: "SEARCH";
+        readonly level: "debug";
+        readonly outcome: "observed";
+        readonly message: "Search returned no results";
+    };
+    readonly SEARCH_FAILED: {
+        readonly category: "SEARCH";
+        readonly level: "error";
+        readonly outcome: "failed";
+        readonly message: "Search failed";
+    };
+    readonly SEARCH_CANCELLED: {
+        readonly category: "SEARCH";
+        readonly level: "debug";
+        readonly outcome: "cancelled";
+        readonly message: "Search cancelled";
+    };
+    readonly REST_COMPLETED: {
+        readonly category: "REST";
+        readonly level: "debug";
+        readonly outcome: "observed";
+        readonly message: "Backend request completed";
+    };
+    readonly REST_FAILED: {
+        readonly category: "REST";
+        readonly level: "error";
+        readonly outcome: "failed";
+        readonly message: "Backend request failed";
+    };
+    readonly REST_CANCELLED: {
+        readonly category: "REST";
+        readonly level: "debug";
+        readonly outcome: "cancelled";
+        readonly message: "Backend request cancelled";
+    };
+    readonly STREAM_OPENED: {
+        readonly category: "REST";
+        readonly level: "debug";
+        readonly outcome: "observed";
+        readonly message: "Backend stream opened";
+    };
+    readonly STREAM_OPEN_FAILED: {
+        readonly category: "REST";
+        readonly level: "error";
+        readonly outcome: "failed";
+        readonly message: "Backend stream opening failed";
+    };
+    readonly STREAM_OPEN_CANCELLED: {
+        readonly category: "REST";
+        readonly level: "debug";
+        readonly outcome: "cancelled";
+        readonly message: "Backend stream opening cancelled";
+    };
+    readonly TRACK_ENDED: {
+        readonly category: "TRACK";
+        readonly level: "debug";
+        readonly outcome: "observed";
+        readonly message: "Backend reported track end";
+    };
+    readonly PLAYER_PAUSED: {
+        readonly category: "PLAYER";
+        readonly level: "debug";
+        readonly outcome: "observed";
+        readonly message: "Player paused";
+    };
+    readonly PLAYER_UNPAUSED: {
+        readonly category: "PLAYER";
+        readonly level: "debug";
+        readonly outcome: "observed";
+        readonly message: "Player unpaused";
+    };
+    readonly PLAYER_SEEKED: {
+        readonly category: "PLAYER";
+        readonly level: "debug";
+        readonly outcome: "observed";
+        readonly message: "Player seek reported";
+    };
+    readonly PLAYER_STOPPED: {
+        readonly category: "PLAYER";
+        readonly level: "info";
+        readonly outcome: "observed";
+        readonly message: "Player stopped";
+    };
+    readonly VOICE_CONNECTED: {
+        readonly category: "PLAYER";
+        readonly level: "info";
+        readonly outcome: "observed";
+        readonly message: "Voice connection reported";
+    };
+    readonly VOICE_DISCONNECTED: {
+        readonly category: "PLAYER";
+        readonly level: "warn";
+        readonly outcome: "observed";
+        readonly message: "Voice disconnected";
+    };
+    readonly FILTERS_UPDATED: {
+        readonly category: "FILTERS";
+        readonly level: "debug";
+        readonly outcome: "observed";
+        readonly message: "Player filters updated";
+    };
+    readonly SOURCE_HEALTH_CHANGED: {
+        readonly category: "HEALTH";
+        readonly level: "debug";
+        readonly outcome: "observed";
+        readonly message: "Source health changed";
+    };
+    readonly RECOVERY_STARTED: {
+        readonly category: "PLAYER";
+        readonly level: "debug";
+        readonly outcome: "started";
+        readonly message: "Player recovery started";
+    };
+    readonly RECOVERY_SUCCEEDED: {
+        readonly category: "PLAYER";
+        readonly level: "info";
+        readonly outcome: "observed";
+        readonly message: "Player recovery success reported";
+    };
+    readonly RECOVERY_FAILED: {
+        readonly category: "PLAYER";
+        readonly level: "error";
+        readonly outcome: "failed";
+        readonly message: "Player recovery failed";
+    };
+    readonly TRACK_STARTED: {
+        readonly category: "TRACK";
+        readonly level: "info";
+        readonly outcome: "observed";
+        readonly message: "Backend reported track start";
+    };
+    readonly TRACK_CROSSFADING: {
+        readonly category: "CROSSFADE";
+        readonly level: "info";
+        readonly outcome: "observed";
+        readonly message: "Backend reported crossfade transition";
+    };
+    readonly TRACK_GAPLESS: {
+        readonly category: "CROSSFADE";
+        readonly level: "info";
+        readonly outcome: "observed";
+        readonly message: "Backend reported gapless transition";
+    };
+    readonly PLAYER_RESUMED: {
+        readonly category: "PLAYER";
+        readonly level: "info";
+        readonly outcome: "observed";
+        readonly message: "Player session state restored";
+    };
+    readonly TRACK_FAILED: {
+        readonly category: "TRACK";
+        readonly level: "error";
+        readonly outcome: "failed";
+        readonly message: "Backend reported playback exception";
+    };
+    readonly QUEUE_ADDED: {
+        readonly category: "QUEUE";
+        readonly level: "debug";
+        readonly outcome: "observed";
+        readonly message: "Tracks queued";
+    };
+    readonly QUEUE_ENDED: {
+        readonly category: "QUEUE";
+        readonly level: "info";
+        readonly outcome: "observed";
+        readonly message: "Queue exhausted";
+    };
+    readonly AUTOPLAY_INSERTED: {
+        readonly category: "AUTOPLAY";
+        readonly level: "info";
+        readonly outcome: "observed";
+        readonly message: "Autoplay track selected";
+    };
+    readonly FAILOVER_STARTED: {
+        readonly category: "FAILOVER";
+        readonly level: "info";
+        readonly outcome: "started";
+        readonly message: "Recovery initiated";
+    };
+    readonly FAILOVER_RECOVERED: {
+        readonly category: "FAILOVER";
+        readonly level: "info";
+        readonly outcome: "confirmed";
+        readonly message: "Recovery confirmed by protocol";
+    };
+    readonly FAILOVER_FAILED: {
+        readonly category: "FAILOVER";
+        readonly level: "error";
+        readonly outcome: "failed";
+        readonly message: "Recovery failed";
+    };
+    readonly FAILOVER_CANCELLED: {
+        readonly category: "FAILOVER";
+        readonly level: "warn";
+        readonly outcome: "cancelled";
+        readonly message: "Recovery cancelled";
+    };
+};
+```
+
+## AuroraCategory
+
+[Source declaration](../src/logging/AuroraEvents.ts)
+
+```ts
+export type AuroraCategory = 'CORE' | 'MANAGER' | 'NODE' | 'LAVALINK' | 'NODELINK' | 'WEBSOCKET' | 'REST' | 'PLAYER' | 'QUEUE' | 'TRACK' | 'SEARCH' | 'FILTERS' | 'AUTOPLAY' | 'CROSSFADE' | 'FAILOVER' | 'HEALTH' | 'PLUGIN' | 'TELEMETRY';
+```
+
+## AuroraContext
+
+[Source declaration](../src/logging/AuroraEvents.ts)
+
+```ts
+export type AuroraContext = {
+    backend?: 'lavalink' | 'nodelink' | 'unknown';
+    attempt?: number;
+    trackCount?: number;
+    reasonCode?: FailoverReasonCode;
+    stage?: MigrationStage;
+    stageStatus?: MigrationStageObservation['status'];
+    httpStatus?: number;
+};
+```
+
+## AuroraEvent
+
+[Source declaration](../src/logging/AuroraEvents.ts)
+
+```ts
+export type AuroraEvent = {
+    eventCode: AuroraEventCode;
+    category: AuroraCategory;
+    severity: AuroraLevel;
+    outcome: AuroraOutcome;
+    timestamp: string;
+    durationMs?: number;
+    operationId?: string;
+    parentOperationId?: string;
+    sanitizedContext: AuroraContext;
+    traceId?: string;
+    spanId?: string;
+};
+```
+
+## AuroraEventCode
+
+[Source declaration](../src/logging/AuroraEvents.ts)
+
+```ts
+export type AuroraEventCode = keyof typeof auroraCatalog;
+```
+
+## AuroraEventOptions
+
+[Source declaration](../src/logging/AuroraEvents.ts)
+
+```ts
+export interface AuroraEventOptions {
+    level?: AuroraLevel | 'silent';
+    categories?: readonly AuroraCategory[];
+    target?: AuroraPinoTarget;
+    traceContext?: () => {
+        traceId: string;
+        spanId: string;
+    } | undefined;
+}
+```
+
+## AuroraEvents
+
+[Source declaration](../src/logging/AuroraEvents.ts)
+
+```ts
+export declare class AuroraEvents {
+    getStats(): {
+        closed: boolean;
+        accepted: number;
+        filtered: number;
+        targetErrors: number;
+        criticalTargetErrors: number;
+    };
+    constructor(options: AuroraEventOptions);
+    observe<T>(kind: 'search' | 'rest' | 'stream', run: () => Promise<T>, input?: AuroraContext, classify?: (result: T) => 'completed' | 'empty' | 'failed'): Promise<T>;
+    recordInitialized(): void;
+    recordExtensionFailure(): void;
+    recordMigrationStage(player: Player, stage: MigrationStage, status: MigrationStageObservation['status']): void;
+    attach(manager: Manager): void;
+    close(): void;
+}
+```
+
+## AuroraIncidentEngine
+
+[Source declaration](../src/logging/AuroraDiagnostics.ts)
+
+```ts
+export declare class AuroraIncidentEngine {
+    constructor(capacity?: number);
+    accept(event: AuroraEvent): IncidentSnapshot | undefined;
+    snapshot(): IncidentSnapshot[];
+}
+```
+
+## AuroraInspectorStore
+
+[Source declaration](../src/logging/AuroraInspector.ts)
+
+```ts
+export declare class AuroraInspectorStore {
+    constructor(manager: Manager, capacity?: number);
+    recordEvent(input: unknown): boolean;
+    recordSpan(input: unknown): boolean;
+    sampleLatencies(now?: number): void;
+    latencyHistory(alias: string): ReadonlyArray<{
+        timeMs: number;
+        latencyMs: number;
+    }>;
+    snapshot(): InspectorSnapshot;
+}
+```
+
+## AuroraLevel
+
+[Source declaration](../src/logging/AuroraEvents.ts)
+
+```ts
+export type AuroraLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+```
+
+## AuroraMusicStrip
+
+[Source declaration](../src/logging/AuroraDiagnostics.ts)
+
+```ts
+export declare class AuroraMusicStrip {
+    constructor(player: Player, now?: () => number);
+    snapshot(): MusicSnapshot;
+    close(): void;
+}
+```
+
+## AuroraOutcome
+
+[Source declaration](../src/logging/AuroraEvents.ts)
+
+```ts
+export type AuroraOutcome = 'observed' | 'started' | 'confirmed' | 'failed' | 'cancelled';
+```
+
+## AuroraPinoTarget
+
+[Source declaration](../src/logging/AuroraEvents.ts)
+
+```ts
+export type AuroraPinoTarget = Record<AuroraLevel, (event: AuroraEvent, message: string) => unknown>;
+```
+
+## AuroraPresentation
+
+[Source declaration](../src/logging/AuroraPresentation.ts)
+
+```ts
+export declare class AuroraPresentation {
+    constructor(tools: AuroraVisualToolkit, options?: AuroraVisualOptions);
+    banner(manager: Pick<Manager, 'options'>): string;
+    event(event: AuroraEvent): string;
+}
+```
+
+## AuroraVisualOptions
+
+[Source declaration](../src/logging/AuroraPresentation.ts)
+
+```ts
+export interface AuroraVisualOptions {
+    columns?: number;
+    color?: boolean;
+    unicode?: boolean;
+    isTTY?: boolean;
+}
+```
+
+## AuroraVisualToolkit
+
+[Source declaration](../src/logging/AuroraPresentation.ts)
+
+```ts
+export interface AuroraVisualToolkit {
+    figlet(text: string, font: 'ANSI Shadow' | 'Slant' | 'Small'): string;
+    gradient(text: string): string;
+    paint(text: string, hex: string): string;
+    box(text: string, width: number): string;
+    width(text: string): number;
+    strip(text: string): string;
+    duration(ms: number): string;
+    symbols: {
+        info: string;
+        success: string;
+        warning: string;
+        error: string;
+    };
+}
+```
+
 ## BackendAdapter
 
 [Source declaration](../src/backends/BackendAdapter.ts)
@@ -91,6 +603,39 @@ export type BackendPlugin = Readonly<{
 }>;
 ```
 
+## BootstrapOptions
+
+[Source declaration](../src/logging/AuroraBootstrap.ts)
+
+```ts
+export interface BootstrapOptions {
+    timeoutMs?: number;
+    signal?: AbortSignal;
+    onSnapshot?: (snapshot: BootstrapSnapshot) => void;
+}
+```
+
+## BootstrapPhase
+
+[Source declaration](../src/logging/AuroraBootstrap.ts)
+
+```ts
+export type BootstrapPhase = 'initializing' | 'initialized' | 'initialization-failed' | 'connecting' | 'ready' | 'partial' | 'timeout' | 'cancelled' | 'no-nodes';
+```
+
+## BootstrapSnapshot
+
+[Source declaration](../src/logging/AuroraBootstrap.ts)
+
+```ts
+export interface BootstrapSnapshot {
+    phase: BootstrapPhase;
+    durationMs: number;
+    ready: number;
+    total: number;
+}
+```
+
 ## CapabilityDescription
 
 [Source declaration](../src/backends/CapabilityRegistry.ts)
@@ -109,6 +654,22 @@ export type CapabilityDescription = Readonly<{
 
 ```ts
 export type CapabilityEvidence = 'protocol' | 'advertised' | 'observed' | 'none';
+```
+
+## CapabilityNode
+
+[Source declaration](../src/logging/AuroraDiagnostics.ts)
+
+```ts
+export interface CapabilityNode {
+    alias: string;
+    backend: 'lavalink' | 'nodelink' | 'unknown';
+    ready: boolean;
+    draining: boolean;
+    latencyMs?: number;
+    memoryUsedBytes?: number;
+    capabilities: CapabilityDescription[];
+}
 ```
 
 ## CapabilityRegistry
@@ -198,10 +759,21 @@ export declare const Connectors: {
 
 ```ts
 export declare class ConsoleReporter implements ConsolaReporter {
+    constructor(options?: FormatterOptions, sink?: StructuredLogSink | undefined, consoleEnabled?: boolean);
     writePanel(content: string): void;
-    constructor(options?: FormatterOptions);
     log(logObject: LogObject): void;
 }
+```
+
+## createAuroraPinoEngine
+
+[Source declaration](../src/logging/AuroraEvents.ts)
+
+```ts
+export declare function createAuroraPinoEngine(level: AuroraLevel, consume: (record: AuroraEvent, meta: PinoOutputMeta) => void, onError?: () => void): {
+    target: AuroraPinoTarget;
+    close(): void;
+};
 ```
 
 ## createBanner
@@ -210,6 +782,14 @@ export declare class ConsoleReporter implements ConsolaReporter {
 
 ```ts
 export declare function createBanner(color?: boolean): string;
+```
+
+## createPinoSink
+
+[Source declaration](../src/logging/ConsoleReporter.ts)
+
+```ts
+export declare function createPinoSink(target: PinoLogTarget): StructuredLogSink;
 ```
 
 ## CrossfadeOptions
@@ -370,6 +950,14 @@ export type FailoverOptions = {
     retryJitter?: number;
     preserveOnFailure?: boolean;
 };
+```
+
+## FailoverReasonCode
+
+[Source declaration](../src/typings/Interfaces.ts)
+
+```ts
+export type FailoverReasonCode = 'source-cleanup-failed' | 'intent-cancelled' | 'restart-rejected' | 'migration-error';
 ```
 
 ## FailoverReport
@@ -1083,9 +1671,8 @@ export interface IManagerNodeConfig {
 ```ts
 export interface IManagerOptionsConfig {
     recommendations?: import('../autoplay/RecommendationPreference').RecommendationPreferences;
-    logging?: LoggerOptions & {
-        banner?: boolean;
-    };
+    logging?: AuroraEventOptions;
+    telemetry?: OpenTelemetryOptions;
     clientName?: string;
     userAgent?: string;
     noReplace?: boolean;
@@ -1121,6 +1708,29 @@ export interface IMeaningResponse {
     loadType: string;
     data: Record<string, any>;
 }
+```
+
+## IncidentSnapshot
+
+[Source declaration](../src/logging/AuroraDiagnostics.ts)
+
+```ts
+export interface IncidentSnapshot {
+    operationId: string;
+    state: IncidentState;
+    backend: 'lavalink' | 'nodelink' | 'unknown';
+    durationMs?: number;
+    sourceBackend?: 'lavalink' | 'nodelink' | 'unknown';
+    reasonCode?: FailoverReasonCode;
+}
+```
+
+## IncidentState
+
+[Source declaration](../src/logging/AuroraDiagnostics.ts)
+
+```ts
+export type IncidentState = 'recovering' | 'recovered' | 'degraded' | 'failed' | 'cancelled';
 ```
 
 ## INode
@@ -1208,6 +1818,7 @@ export interface INodeFailoverReport {
     status: 'in-progress' | 'recovered' | 'failed' | 'cancelled';
     positionMs?: number;
     reason?: string;
+    reasonCode?: FailoverReasonCode;
 }
 ```
 
@@ -1254,6 +1865,66 @@ export interface INodeStats {
         systemLoad: number;
         lavalinkLoad: number;
     };
+}
+```
+
+## InspectorEvent
+
+[Source declaration](../src/logging/AuroraInspector.ts)
+
+```ts
+export interface InspectorEvent {
+    code: AuroraEventCode;
+    category: AuroraCategory;
+    level: AuroraLevel;
+    message: string;
+    timestamp?: string;
+    durationMs?: number;
+    backend: 'lavalink' | 'nodelink' | 'unknown';
+    traceId?: string;
+    spanId?: string;
+}
+```
+
+## InspectorPlayer
+
+[Source declaration](../src/logging/AuroraInspector.ts)
+
+```ts
+export interface InspectorPlayer {
+    alias: string;
+    state: 'playing' | 'paused' | 'idle' | 'unknown';
+    backend: 'lavalink' | 'nodelink' | 'unknown';
+}
+```
+
+## InspectorSnapshot
+
+[Source declaration](../src/logging/AuroraInspector.ts)
+
+```ts
+export interface InspectorSnapshot {
+    source: 'live' | 'simulated';
+    nodes: CapabilityNode[];
+    players: InspectorPlayer[];
+    events: InspectorEvent[];
+    spans: InspectorSpan[];
+}
+```
+
+## InspectorSpan
+
+[Source declaration](../src/logging/AuroraInspector.ts)
+
+```ts
+export interface InspectorSpan {
+    name: string;
+    traceId: string;
+    spanId: string;
+    parentSpanId?: string;
+    durationMs: number;
+    startTimeMs?: number;
+    outcome: 'ok' | 'error' | 'unset';
 }
 ```
 
@@ -1723,6 +2394,20 @@ export interface LavaLyricsOptions {
 }
 ```
 
+## LegacyStructuredLogRecord
+
+[Source declaration](../src/logging/ConsoleReporter.ts)
+
+```ts
+export type StructuredLogRecord = {
+    level: number;
+    type: string;
+    module: string;
+    timestamp: string;
+    message: string;
+};
+```
+
 ## LoadType
 
 [Source declaration](../src/typings/types.ts)
@@ -1802,7 +2487,6 @@ export declare class Logger {
     attachLegacyDebug(source: DebugSource): () => void;
     startup(manager: Manager): void;
     managerStatus(manager: Manager): void;
-    attachManager(manager: Manager): () => void;
 }
 ```
 
@@ -1823,6 +2507,7 @@ export type LoggerOptions = {
     unicode?: boolean;
     context?: LogContext;
     transports?: readonly LogTransport[];
+    sink?: StructuredLogSink;
     console?: boolean;
     maxQueue?: number;
     timelineLimit?: number;
@@ -1899,7 +2584,7 @@ export declare class Manager extends EventEmitter<IManagerEvents> {
     guildOwnership?: GuildOwnership;
     get database(): DatabaseManager;
     set database(database: DatabaseManager);
-    readonly logger?: Logger;
+    readonly aurora?: AuroraEvents;
     performanceMonitor?: PerformanceMonitor;
     get destroyed(): boolean;
     get readyNodes(): import("../..").Node[];
@@ -2023,6 +2708,21 @@ export interface MixLayersResponse {
 export interface MixLayerState extends MixLayerCreated {
     position: number;
     startTime: number;
+}
+```
+
+## MusicSnapshot
+
+[Source declaration](../src/logging/AuroraDiagnostics.ts)
+
+```ts
+export interface MusicSnapshot {
+    state: 'playing' | 'paused' | 'idle' | 'ended' | 'unknown';
+    positionMs?: number;
+    durationMs?: number;
+    stream: boolean;
+    estimated: boolean;
+    crossfadeConfigured: boolean;
 }
 ```
 
@@ -2342,6 +3042,14 @@ export declare class NoEligibleNodeError extends Error {
 }
 ```
 
+## normalizeAuroraEvent
+
+[Source declaration](../src/logging/AuroraEvents.ts)
+
+```ts
+export declare function normalizeAuroraEvent(input: unknown): AuroraEvent | undefined;
+```
+
 ## NyxExtension
 
 [Source declaration](../src/extensions/ExtensionHost.ts)
@@ -2362,6 +3070,20 @@ export interface NyxExtension {
 export type NyxLogLevel = 'silent' | 'error' | 'warn' | 'info' | 'debug' | 'trace';
 ```
 
+## OpenTelemetry
+
+[Source declaration](../src/observability/OpenTelemetry.ts)
+
+```ts
+export declare class OpenTelemetry {
+    constructor(manager: Manager, options: OpenTelemetryOptions);
+    search(operation: () => Promise<SearchResult>): Promise<SearchResult>;
+    operation<T>(name: TelemetryOperation, operation: () => Promise<T>, classify?: (result: T) => TelemetryOutcome): Promise<T>;
+    syncOperation<T>(name: TelemetryOperation, operation: () => T, classify?: (result: T) => TelemetryOutcome): T;
+    close(): void;
+}
+```
+
 ## OpenTelemetryLogTransport
 
 [Source declaration](../src/logging/ExternalTransports.ts)
@@ -2370,6 +3092,17 @@ export type NyxLogLevel = 'silent' | 'error' | 'warn' | 'info' | 'debug' | 'trac
 export declare class OpenTelemetryLogTransport implements LogTransport {
     constructor(tracer: TelemetryTracerLike, counter?: TelemetryCounterLike | undefined);
     write(record: StructuredLogRecord): void;
+}
+```
+
+## OpenTelemetryOptions
+
+[Source declaration](../src/observability/OpenTelemetry.ts)
+
+```ts
+export interface OpenTelemetryOptions {
+    meter?: TelemetryMeter;
+    tracer?: TelemetryTracer;
 }
 ```
 
@@ -2457,6 +3190,20 @@ export interface PinoLoggerLike {
     error(fields: object, message: string): unknown;
     flush?(callback: (error?: Error) => void): void;
 }
+```
+
+## PinoLogTarget
+
+[Source declaration](../src/logging/ConsoleReporter.ts)
+
+```ts
+export type PinoLogTarget = {
+    error: (record: PinoLogFields, message: string) => unknown;
+    warn: (record: PinoLogFields, message: string) => unknown;
+    info: (record: PinoLogFields, message: string) => unknown;
+    debug: (record: PinoLogFields, message: string) => unknown;
+    trace: (record: PinoLogFields, message: string) => unknown;
+};
 ```
 
 ## PinoLogTransport
@@ -3409,6 +4156,14 @@ export interface StructuredLogRecord {
 }
 ```
 
+## StructuredLogSink
+
+[Source declaration](../src/logging/ConsoleReporter.ts)
+
+```ts
+export type StructuredLogSink = (record: StructuredLogRecord) => void;
+```
+
 ## TelemetryCounterLike
 
 [Source declaration](../src/logging/ExternalTransports.ts)
@@ -3416,6 +4171,77 @@ export interface StructuredLogRecord {
 ```ts
 export interface TelemetryCounterLike {
     add(value: number, attributes?: Record<string, string | number | boolean>): void;
+}
+```
+
+## TelemetryGauge
+
+[Source declaration](../src/observability/OpenTelemetry.ts)
+
+```ts
+export interface TelemetryGauge {
+    addCallback(callback: (result: TelemetryObservation) => void): void;
+    removeCallback(callback: (result: TelemetryObservation) => void): void;
+}
+```
+
+## TelemetryMeter
+
+[Source declaration](../src/observability/OpenTelemetry.ts)
+
+```ts
+export interface TelemetryMeter {
+    createObservableGauge?(name: string, options?: {
+        unit?: string;
+    }): TelemetryGauge;
+    createCounter(name: string): {
+        add(value: number, attributes?: Attributes): void;
+    };
+    createHistogram(name: string, options?: {
+        unit?: string;
+    }): {
+        record(value: number, attributes?: Attributes): void;
+    };
+}
+```
+
+## TelemetryObservation
+
+[Source declaration](../src/observability/OpenTelemetry.ts)
+
+```ts
+export interface TelemetryObservation {
+    observe(value: number, attributes?: Attributes): void;
+}
+```
+
+## TelemetryOperation
+
+[Source declaration](../src/observability/OpenTelemetry.ts)
+
+```ts
+export type TelemetryOperation = typeof operationNames[number];
+```
+
+## TelemetryOutcome
+
+[Source declaration](../src/observability/OpenTelemetry.ts)
+
+```ts
+export type TelemetryOutcome = 'success' | 'empty' | 'error' | 'cancelled' | 'resolved';
+```
+
+## TelemetrySpan
+
+[Source declaration](../src/observability/OpenTelemetry.ts)
+
+```ts
+export interface TelemetrySpan {
+    setStatus(status: {
+        code: 0 | 1 | 2;
+    }): unknown;
+    setAttribute(key: string, value: string): unknown;
+    end(): void;
 }
 ```
 
@@ -3433,6 +4259,17 @@ export interface TelemetrySpanLike {
 }
 ```
 
+## TelemetryTracer
+
+[Source declaration](../src/observability/OpenTelemetry.ts)
+
+```ts
+export interface TelemetryTracer {
+    startSpan(name: string): TelemetrySpan;
+    startActiveSpan?<T>(name: string, callback: (span: TelemetrySpan) => T): T;
+}
+```
+
 ## TelemetryTracerLike
 
 [Source declaration](../src/logging/ExternalTransports.ts)
@@ -3443,6 +4280,21 @@ export interface TelemetryTracerLike {
         startTime?: number;
         attributes?: Record<string, string | number | boolean>;
     }): TelemetrySpanLike;
+}
+```
+
+## TerminalCoordinator
+
+[Source declaration](../src/logging/TerminalCoordinator.ts)
+
+```ts
+export declare class TerminalCoordinator {
+    constructor(options?: TerminalOptions);
+    get stats(): TerminalStats;
+    write(text: string, priority?: TerminalPriority): boolean;
+    acquire(): TerminalLease | undefined;
+    flush(signal?: AbortSignal): Promise<boolean>;
+    close(signal?: AbortSignal): Promise<boolean>;
 }
 ```
 
@@ -3515,6 +4367,66 @@ export interface TerminalDashboardSnapshot {
     truncatedNodes: number;
     truncatedSources: number;
 }
+```
+
+## TerminalLease
+
+[Source declaration](../src/logging/TerminalCoordinator.ts)
+
+```ts
+export interface TerminalLease {
+    update(text: string): boolean;
+    release(): void;
+}
+```
+
+## TerminalOptions
+
+[Source declaration](../src/logging/TerminalCoordinator.ts)
+
+```ts
+export type TerminalOptions = {
+    stream?: Writable & {
+        isTTY?: boolean;
+        columns?: number;
+    };
+    maxQueued?: number;
+    maxRecordBytes?: number;
+    interactive?: boolean;
+    color?: boolean;
+    onRejected?: (reason: TerminalRejectReason, priority: TerminalPriority) => void;
+    onCriticalRejected?: (reason: TerminalRejectReason, text: string) => void;
+};
+```
+
+## TerminalPriority
+
+[Source declaration](../src/logging/TerminalCoordinator.ts)
+
+```ts
+export type TerminalPriority = 'normal' | 'critical';
+```
+
+## TerminalRejectReason
+
+[Source declaration](../src/logging/TerminalCoordinator.ts)
+
+```ts
+export type TerminalRejectReason = 'capacity' | 'closed' | 'stream-error' | 'invalid-record';
+```
+
+## TerminalStats
+
+[Source declaration](../src/logging/TerminalCoordinator.ts)
+
+```ts
+export type TerminalStats = {
+    queued: number;
+    accepted: number;
+    rejected: number;
+    evicted: number;
+    streamErrors: number;
+};
 ```
 
 ## Track
