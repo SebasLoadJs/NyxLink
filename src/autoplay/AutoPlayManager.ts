@@ -2,6 +2,7 @@ import type { Player } from '../entities/Player';
 import type { Node } from '../entities/Node';
 import type { Track } from '../entities/Track';
 import { playbackGuard } from '../players/PlaybackGuard';
+import { preferredRecommendations } from './RecommendationPreference';
 
 export class AutoPlayManager {
     public static async play(node: Node, player: Player, previous: Track): Promise<boolean> {
@@ -23,7 +24,8 @@ export class AutoPlayManager {
         }
         if (!active() || player.queue.size > 0) return false;
 
-        const candidates = player.recommendations.slice(0, 10);
+        const candidates = preferredRecommendations(player.recommendations.slice(0, 10), previous, player.guildId, player.manager.options.recommendations);
+        if (!active() || player.queue.size > 0) return false;
         const selected = candidates[Math.floor(Math.random() * candidates.length)];
         if (!selected) return false;
 

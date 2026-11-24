@@ -56,7 +56,7 @@ for(const status of [200,501]){
     const server=http.createServer(async (_req,res)=>{
       entered.resolve(); await release.promise;
       res.writeHead(status,{'content-type':'application/json'});
-      res.end(status===200?'[]':'{"message":"disabled"}');
+      res.end(status===200?'{"mixes":[]}':'{"message":"disabled"}');
     });
     server.listen(0,'127.0.0.1'); await once(server,'listening');
     t.after(()=>{server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});

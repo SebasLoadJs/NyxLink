@@ -181,6 +181,12 @@ export class PrivateMetricsServer {
             case '/players/summary':
                 this.send(response, 200, JSON.stringify(this.snapshot().players));
                 return;
+            case '/logging':
+                this.send(response, 200, JSON.stringify({ configured: Boolean(this.manager.logger), ...this.manager.logger?.getStats() }));
+                return;
+            case '/performance':
+                this.send(response, 200, JSON.stringify({ configured: Boolean(this.manager.performanceMonitor), snapshot: this.manager.performanceMonitor?.snapshot() }));
+                return;
             case '/versions':
                 this.send(response, 200, JSON.stringify({
                     nyxlink: version,
@@ -208,9 +214,32 @@ export class PrivateMetricsServer {
                     nyxlink_players_playing: players.playing,
                     nyxlink_players_paused: players.paused,
                 };
+                const logging = this.manager.logger?.getStats();
+                const counters = logging ? {
+                    nyxlink_log_written_total: logging.written,
+                    nyxlink_log_dropped_total: logging.dropped,
+                    nyxlink_log_dropped_critical_total: logging.droppedCritical,
+                    nyxlink_log_transport_errors_total: logging.transportErrors,
+                    nyxlink_log_sampled_total: logging.sampled,
+                    nyxlink_log_suppressed_total: logging.suppressed,
+                } : {};
+                if (logging) values.nyxlink_log_queued = logging.queued;
+                const observed = this.manager.performanceMonitor?.snapshot();
+                if (observed) {
+                    values.nyxlink_pending_requests = observed.resources.pendingRequests;
+                    values.nyxlink_pending_player_commands = observed.resources.pendingPlayerCommands;
+                    values.nyxlink_manager_listeners = observed.resources.managerListeners;
+                    if (observed.runtime.eventLoopP95Ms !== undefined) values.nyxlink_event_loop_delay_p95_ms = observed.runtime.eventLoopP95Ms;
+                    for (const [metric, summary] of Object.entries(observed.durations)) {
+                        if (summary.p50Ms !== undefined) values['nyxlink_' + metric + '_p50_ms'] = summary.p50Ms;
+                        if (summary.p95Ms !== undefined) values['nyxlink_' + metric + '_p95_ms'] = summary.p95Ms;
+                    }
+                }
                 const body = Object.entries(values).map(([name, value]) =>
                     '# TYPE ' + name + ' gauge\n' + name + ' ' + value + '\n').join('');
-                this.send(response, 200, body, 'text/plain; version=0.0.4; charset=utf-8');
+                const counterBody = Object.entries(counters).map(([name, value]) =>
+                    '# TYPE ' + name + ' counter\n' + name + ' ' + value + '\n').join('');
+                this.send(response, 200, body + counterBody, 'text/plain; version=0.0.4; charset=utf-8');
                 return;
             }
             default:

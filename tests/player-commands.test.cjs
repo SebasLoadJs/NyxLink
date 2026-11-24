@@ -2,6 +2,46 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createPlayer, createTrack, deferred } = require('./helpers/player.cjs');
 
+test('late async volume acknowledgement cannot mutate or notify a destroyed player', async t => {
+  const { node, player, manager } = createPlayer(t);
+  const entered = deferred(), release = deferred();
+  const before = player.volume;
+  const changes = [];
+  manager.on('playerChangedVolume', (...args) => changes.push(args));
+  node.rest.updatePlayer = async () => { entered.resolve(); await release.promise; return { volume: 42 }; };
+  const volume = player.setVolumeAsync(42);
+  const rejected = assert.rejects(volume, { code: 'PLAYER_OPERATION_CANCELLED' });
+  await entered.promise;
+  const destroy = player.destroy('test cleanup');
+  release.resolve();
+  await rejected;
+  await destroy;
+  assert.equal(player.volume, before);
+  assert.equal(changes.length, 0);
+});
+
+test('async volume acknowledgement and error are fenced by the backend session', async t => {
+  for (const fail of [false, true]) {
+    const { node, player, manager } = createPlayer(t);
+    const entered = deferred(), release = deferred();
+    const before = player.volume;
+    const changes = [];
+    manager.on('playerChangedVolume', (...args) => changes.push(args));
+    node.rest.updatePlayer = async () => {
+      entered.resolve(); await release.promise;
+      if (fail) throw new Error('old backend failure');
+      return { volume: 42 };
+    };
+    const rejected = assert.rejects(player.setVolumeAsync(42), { code: 'PLAYER_OPERATION_CANCELLED' });
+    await entered.promise;
+    node.sessionId = 'replacement';
+    release.resolve();
+    await rejected;
+    assert.equal(player.volume, before);
+    assert.equal(changes.length, 0);
+  }
+});
+
 test('a delayed play is settled before stop reaches the backend', async t => {
   const { node, player } = createPlayer(t);
   const sent = deferred();

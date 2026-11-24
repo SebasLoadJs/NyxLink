@@ -4,6 +4,37 @@ const { createPlayer } = require('./helpers/player.cjs');
 
 const TOKEN = 'nyxlink-metrics-test-token-with-32-characters';
 
+test('performance endpoint remains private and exports fixed aggregate percentiles only', async t => {
+  const { manager, endpoint, get } = await open(t);
+  assert.deepEqual(await (await get('/performance')).json(), { configured: false });
+  const monitor = manager.startPerformanceMonitor({ sampleLimit: 2 }); t.after(() => monitor.close());
+  monitor.observe('rest', 10); monitor.observe('rest', 30);
+  const result = await (await get('/performance')).json();
+  assert.equal(result.snapshot.durations.rest.p95Ms, 30);
+  assert.equal((await fetch(endpoint.url + '/performance')).status, 401);
+  const metrics = await (await get('/metrics')).text();
+  assert.match(metrics, /# TYPE nyxlink_rest_p95_ms gauge\nnyxlink_rest_p95_ms 30/);
+  assert.doesNotMatch(JSON.stringify(result), /123456789012345678|test-node|test-voice-token/);
+});
+
+test('logging diagnostics expose counters without payloads or a public endpoint', async t => {
+  const { manager, endpoint, get } = await open(t);
+  const { Logger } = require('../dist');
+  assert.deepEqual(await (await get('/logging')).json(), { configured: false });
+  manager.logger = new Logger({ level: 'info', maxQueue: 1, transports: [{ write() {} }] });
+  t.after(() => manager.logger.close());
+  manager.logger.info('Node', 'password=PRIVATE_LOG_METRICS'); manager.logger.error('Node', 'critical');
+  await manager.logger.flush();
+  const counters = await (await get('/logging')).json();
+  assert.equal(counters.configured, true);
+  assert.equal(counters.dropped, 1);
+  const metrics = await (await get('/metrics')).text();
+  assert.match(metrics, /# TYPE nyxlink_log_dropped_total counter/);
+  assert.match(metrics, /nyxlink_log_dropped_total 1/);
+  assert.ok(!JSON.stringify(counters).includes('PRIVATE_LOG_METRICS'));
+  assert.equal((await fetch(endpoint.url + '/logging')).status, 401);
+});
+
 async function open(t) {
   const { manager, node, player } = createPlayer(t);
   const endpoint = await manager.startPrivateMetricsServer({ token: TOKEN });

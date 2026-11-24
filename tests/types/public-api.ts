@@ -19,6 +19,7 @@ const search = manager.search({ query: 'test' });
 const queue: Queue = player.queue;
 const health = NodeHealthMonitor.inspect(node);
 const selected = NodeSelector.select([node]);
+NodeSelector.select([node], {}, { scoreWeights: { players: 1, cpu: 100, memory: 20, latency: 0.1, priority: 1 }, preferredNode: node.identifier, minimumScoreImprovement: 2 });
 const failover: Promise<FailoverResult> = NodeFailover.move(player, node, { maxAttempts: 2 });
 const backend = BackendDetector.detect({ version: { semver: '4.2.2' } });
 const configuredNode: Parameters<NodeManager['add']>[0] = { host: 'localhost', port: 2333, password: 'test', secure: false, retryAmount: 0, readyTimeoutMs: 10000 };
@@ -28,6 +29,7 @@ void [asyncVolume, detach, playing, stopping, volume, autoplay, transfer, search
 const snapshot: TrackSnapshot = TrackCodec.serialize(track);
 const restored: Track = TrackCodec.restore(snapshot);
 const resolved: Promise<Track> = TrackResolver.resolve(track, node);
+const abortableResolved: Promise<Track> = TrackResolver.resolve(track, node, undefined, AbortSignal.timeout(1000));
 const adapter: StorageAdapter = new Memory();
 const local: StorageAdapter = new Local();
 const configured = new Manager({ nodes: [configuredNode], options: { database: { type: 'memory', adapter } } });
@@ -42,9 +44,12 @@ const disposed: void = connector.dispose();
 void [shuttingDown, isClosed, disposed];
 
 const searchConfig = new Manager({ nodes: [configuredNode], options: { search: { timeoutMs: 1000, fallbackPlatforms: ['soundcloud'], cache: { ttlMs: 5000, maxEntries: 10 }, resolver: async (_query, _node) => null } } });
+const metadataResolutionConfig = new Manager({ nodes: [configuredNode], options: { search: {
+  trackResolution: { sources: ['youtube', 'soundcloud'], minimumScore: 0.85, durationToleranceMs: 9000, maxCandidates: 20, timeoutMs: 2500 },
+} } });
 const cancellable = manager.search({ query: 'local fixture', signal: AbortSignal.timeout(1000) });
 const streaming = node.rest.loadStream({ encodedTrack: track.encoded, format: 'wav' }, { signal: AbortSignal.timeout(1000), timeoutMs: 1000 });
-void [searchConfig, cancellable, streaming];
+void [searchConfig, metadataResolutionConfig, abortableResolved, cancellable, streaming];
 
 const requirements: NodeRequirements = { backend: 'nodelink', requiredCapabilities: ['source:http'] as const, region: 'eu', regionPolicy: 'require' };
 const selection: NodeSelectionOptions = { ...requirements, exclude: ['maintenance'] as const, allowUnhealthyFallback: false };
@@ -262,3 +267,33 @@ const badGatewayOpcode: import('../../dist').GuildVoiceGatewayPacket = { op: 5, 
 // @ts-expect-error Fenced voice IPC requires a boolean Discord self_mute flag.
 const invalidGatewayMute: import('../../dist').GuildVoiceGatewayPacket = { op: 4, d: { ...voiceGatewayPacket.d, self_mute: 'no' } };
 void [outboundEnvelope, routedPacket, badGatewayOpcode, invalidGatewayMute];
+
+const diagnosticLogger = new (require('../../dist').Logger)({
+    profile: 'diagnostic', mode: 'json', layout: 'compact', timelineLimit: 100,
+    sampleRate: 0.5, deduplicateMs: 1000,
+    transports: [{ write(record: import('../../dist').StructuredLogRecord) { void record.context; } }],
+} satisfies import('../../dist').LoggerOptions) as import('../../dist').Logger;
+const correlated = diagnosticLogger.child({ guildId: '123456789012345678' });
+const operationResult: Promise<number> = correlated.traceOperation('test', async log => { log.event('info', 'Test', 'observed'); return 1; });
+const structuredEvents: import('../../dist').StructuredLogRecord[] = correlated.timeline({ limit: 10 });
+const loggerStats: Readonly<import('../../dist').LogPipelineStats> = diagnosticLogger.getStats();
+const diagnostic: import('../../dist').ErrorDiagnostic = diagnosticLogger.reportError(new Error('fixture'));
+const mixCreated: Promise<import('../../dist').MixLayerCreated | null> = player.addMix('encoded', { volume: 0.5 });
+const mixList: Promise<import('../../dist').MixLayersResponse | null> = player.getMixes();
+// @ts-expect-error Mixer volume is numeric.
+player.updateMixVolume('mix-id', 'loud');
+// @ts-expect-error Structured log levels do not include arbitrary strings.
+diagnosticLogger.event('invalid', 'Node', 'event');
+void [operationResult, structuredEvents, loggerStats, diagnostic, mixCreated, mixList];
+
+const optionalExtension: import('../../dist').NyxExtension = { name: 'typed-observer', setup(context) {
+    context.on('trackStart', (playingPlayer, track) => { const ids: [string, string | undefined] = [playingPlayer.guildId, track.identifier]; void ids; });
+    // @ts-expect-error Event names must be from the manager contract.
+    context.on('inventedEvent', () => {});
+    void context.signal;
+} };
+const extensionDisposer: Promise<() => Promise<void>> = manager.useExtension(optionalExtension);
+void extensionDisposer;
+const playerTraceRecords: import('../../dist').StructuredLogRecord[] = diagnosticLogger.playerTrace('123456789012345678', { limit: 10 });
+const migrationStage: import('../../dist').MigrationStage = 'persist-snapshot';
+void [playerTraceRecords, migrationStage];
