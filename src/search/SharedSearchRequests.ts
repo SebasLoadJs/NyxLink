@@ -16,11 +16,18 @@ export class SharedSearchRequests<T> {
         entry.users++;
         try {
             return await new Promise<T>((resolve, reject) => {
+                const shared = entry!;
                 const abort = () => { cleanup(); reject(signal.reason ?? new Error('Search aborted')); };
-                const cleanup = () => signal.removeEventListener('abort', abort);
+                const cancelShared = () => { cleanup(); reject(shared.controller.signal.reason ?? new Error('Search aborted')); };
+                const cleanup = () => {
+                    signal.removeEventListener('abort', abort);
+                    shared.controller.signal.removeEventListener('abort', cancelShared);
+                };
                 signal.addEventListener('abort', abort, { once: true });
-                entry!.promise.then(value => { cleanup(); resolve(value); }, error => { cleanup(); reject(error); });
+                shared.controller.signal.addEventListener('abort', cancelShared, { once: true });
+                shared.promise.then(value => { cleanup(); resolve(value); }, error => { cleanup(); reject(error); });
                 if (signal.aborted) abort();
+                else if (shared.controller.signal.aborted) cancelShared();
             });
         } finally {
             entry.users--;
