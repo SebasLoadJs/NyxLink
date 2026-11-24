@@ -201,3 +201,16 @@ removed on close. A new capability negotiation span wraps the existing
 coalesced metadata request. Counts are not audio audibility measurements.
 Legacy text redaction remains best effort: arbitrary prose without known
 credential keys cannot be guaranteed safe. Prefer Aurora's fixed schema.
+
+## REST and handshake timing
+
+The remaining Rest transport calls now use the same operation instrument
+as loadtracks and player PATCH without adding nested duplicate spans to
+those existing paths. HTTP streaming spans end when response headers arrive,
+not when audio is consumed. Transport resolution is not proof of schema
+validation or playback. Lifecycle handshake spans measure CONNECTING
+through READY, DISCONNECTED, DESTROYED or observer shutdown, including any
+scheduled reconnect delay represented by CONNECTING. They are separate
+from the connection setup span and never include credentials or endpoints.
+No additional timers or global hooks. Integration/regression tests and CI
+are required for this increment.

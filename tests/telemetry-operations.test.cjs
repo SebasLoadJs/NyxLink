@@ -45,3 +45,43 @@ test('observable gauges report real counts and detach on close',async()=>{
   t.close();assert.equal(callbacks.size,0);
  }finally{m.nodes.nodes.clear();t.close();await m.shutdown();}
 });
+
+test('handshake spans end once on ready, disconnect, destroy or telemetry close',async()=>{
+ const {NodeState}=require('../dist');
+ const m=make(),spans=[],metrics=[];
+ const tracer={startSpan(name){const s={name,outcome:undefined,ends:0,setStatus(){},setAttribute(_key,value){this.outcome=value;},end(){this.ends++;}};spans.push(s);return s;}};
+ const meter={createCounter(){return{add(){}};},createHistogram(name){return{record(value,attrs){metrics.push({name,value,attrs});}};}};
+ const t=new OpenTelemetry(m,{tracer,meter});
+ const node={backend:{kind:'lavalink'}};
+ try{
+  const state=(from,to)=>m.emit('nodeStateChange',node,from,to);
+  state(NodeState.DISCONNECTED,NodeState.CONNECTING);
+  state(NodeState.CONNECTING,NodeState.CONNECTING);
+  state(NodeState.CONNECTING,NodeState.CONNECTED);
+  state(NodeState.CONNECTED,NodeState.READY);
+  state(NodeState.READY,NodeState.READY);
+  state(NodeState.READY,NodeState.CONNECTING);
+  state(NodeState.CONNECTING,NodeState.DISCONNECTED);
+  state(NodeState.DISCONNECTED,NodeState.CONNECTING);
+  t.close();
+  assert.deepEqual(spans.map(s=>[s.name,s.outcome,s.ends]),[
+   ['nyxlink.handshake','success',1],['nyxlink.handshake','error',1],['nyxlink.handshake','cancelled',1]]);
+  assert.equal(metrics.length,3);assert.ok(metrics.every(x=>x.value>=0));
+ }finally{t.close();await m.shutdown();}
+});
+test('additional REST calls emit transport spans without recording URL or response payload',async()=>{
+ const http=require('node:http'),spans=[];
+ const server=http.createServer((req,res)=>{res.setHeader('content-type','application/json');res.end(JSON.stringify({private:'secret-response'}));});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ const m=new Manager({nodes:[{host:'127.0.0.1',port:server.address().port,password:'private-auth',secure:false}]});
+ const t=new OpenTelemetry(m,{tracer:{startSpan(name){const span={name,attributes:{},setStatus(){},setAttribute(k,v){this.attributes[k]=v;},end(){spans.push(this);}};return span;}}});
+ try{
+  m.nodes.add({identifier:'fixture',host:'127.0.0.1',port:server.address().port,password:'private-auth',secure:false});
+  const node=m.nodes.nodes.get('fixture');
+  assert.deepEqual(await node.rest.getInfo(),{private:'secret-response'});
+  const response=await node.rest.getInfoWithHeaders();
+  assert.deepEqual(response.data,{private:'secret-response'});
+  assert.deepEqual(spans.map(x=>x.name),['nyxlink.rest','nyxlink.rest']);
+  assert.doesNotMatch(JSON.stringify(spans),/private-auth|secret-response/);
+ }finally{t.close();await m.shutdown();await new Promise(resolve=>server.close(resolve));}
+});

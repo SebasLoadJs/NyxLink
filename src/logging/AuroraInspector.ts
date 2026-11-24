@@ -39,7 +39,7 @@ const backend = (value: unknown): InspectorPlayer['backend'] =>
 const hex = (value: unknown, size: number): value is string =>
     typeof value === 'string' && value.length === size && /^[a-f0-9]+$/.test(value) && !/^0+$/.test(value);
 const duration = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
-const spanNames = new Set(['nyxlink.search', 'nyxlink.rest', 'nyxlink.connect', 'nyxlink.reconnect',
+const spanNames = new Set(['nyxlink.search', 'nyxlink.rest', 'nyxlink.connect', 'nyxlink.handshake', 'nyxlink.reconnect',
     'nyxlink.failover', 'nyxlink.player.play', 'nyxlink.player.seek', 'nyxlink.player.stop',
     'nyxlink.resolve', 'nyxlink.capabilities', 'nyxlink.node.select', 'nyxlink.session.restore', 'nyxlink.autoplay', 'nyxlink.crossfade']);
 function append<T>(items: T[], value: T, limit: number): void {
