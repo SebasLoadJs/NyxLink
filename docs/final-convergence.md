@@ -6,15 +6,15 @@ This branch initially applies 83 disjoint file changes from #32 to the integrate
 
 ## Overlapping files awaiting reconciliation
 
-- [ ] `.github/workflows/pr.yml`
+- [x] `.github/workflows/pr.yml` — initial reconciliation; CI pending
 - [ ] `CHANGELOG.md`
 - [ ] `README.md`
 - [ ] `docs/live-voice-verification.md`
 - [ ] `docs/master-plan-reconciliation.md`
 - [x] `index.ts` — initial reconciliation; compile and contract checks pending
-- [ ] `package.json`
-- [ ] `scripts/check-package.cjs`
-- [ ] `scripts/endurance-worker.cjs`
+- [x] `package.json` — initial reconciliation; CI pending
+- [x] `scripts/check-package.cjs` — initial reconciliation; CI pending
+- [x] `scripts/endurance-worker.cjs` — initial reconciliation; CI pending
 - [ ] `scripts/test-package.cjs`
 - [x] `src/core/Manager.ts` — initial reconciliation; compile and contract checks pending
 - [ ] `src/entities/Node.ts`

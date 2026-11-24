@@ -11,10 +11,10 @@ const { event } = require('../tests/helpers/v4-server.cjs');
 const lab = JSON.parse(process.env.NYXLINK_BACKENDS_JSON || 'null');
 if (!lab) throw new Error('Run test:endurance to create the isolated server lab');
 const durationSeconds = Number(process.argv[2]);
-// A dirty local checkout may still run diagnostic tests, but cannot certify a release.
 let revision = null;
 try { revision = sourceRevision(); } catch { /* unverified source */ }
-if (!Number.isInteger(durationSeconds) || durationSeconds < 10 || durationSeconds > 7200) throw new Error('Invalid endurance duration');
+const maximumDuration = process.env.NYXLINK_ENDURANCE_SOAK === '1' ? 72 * 3600 : 7200;
+if (!Number.isInteger(durationSeconds) || durationSeconds < 10 || durationSeconds > maximumDuration) throw new Error('Invalid endurance duration');
 const contexts = [];
 const samples = [];
 const failures = [];
@@ -138,7 +138,6 @@ async function main() {
       assert.deepEqual(failures, []);
       assert.equal(process.getActiveResourcesInfo().filter(name => name === 'Timeout').length, 0);
     } catch (error) { passed = false; errorMessage ??= error.message; }
-    // The exact source must remain unchanged throughout the run.
     try { if (sourceRevision() !== revision) revision = null; } catch { revision = null; }
     const report = {
       sourceRevision: revision, timestamp: new Date().toISOString(), scope: 'local backend endurance; no Discord voice or audible playback', durationSeconds,
@@ -151,7 +150,7 @@ async function main() {
       cleanup: { players: contexts.reduce((sum, c) => sum + c.manager.players.size, 0), nodes: contexts.reduce((sum, c) => sum + c.manager.nodes.nodes.size, 0), activeResources: process.getActiveResourcesInfo() },
       ...(errorMessage ? { error: errorMessage } : {}),
     };
-    await fs.writeFile(path.resolve(lab.directory, '../endurance-report.json'), JSON.stringify(report, null, 2) + '\n');
+    await fs.writeFile(process.env.NYXLINK_ENDURANCE_REPORT || path.resolve(lab.directory, '../endurance-report.json'), JSON.stringify(report, null, 2) + '\n');
     console.log(`Endurance report: passed=${report.passed}, elapsed=${report.elapsedSeconds.toFixed(1)}s`);
     if (!report.passed) process.exitCode = 1;
   }

@@ -32,7 +32,12 @@
     "release:check-tag": "node scripts/check-release-tag.cjs",
     "release:check-voice-evidence": "node scripts/check-live-voice-evidence.cjs",
     "release:check-registry": "node scripts/check-npm-registry.cjs",
-    "release:check-endurance-evidence": "node scripts/check-endurance-evidence.cjs"
+    "release:check-endurance-evidence": "node scripts/check-endurance-evidence.cjs",
+    "bench:logging": "pnpm run build && node --expose-gc scripts/benchmark-logging.cjs",
+    "test:live": "node scripts/test-live-suite.cjs",
+    "test:soak": "node scripts/test-soak.cjs",
+    "fixtures:live": "node scripts/create-live-fixtures.cjs",
+    "docs:api": "pnpm run build && node scripts/generate-api-reference.cjs"
   },
   "homepage": "https://github.com/SebasLoadJs/NyxLink#readme",
   "bugs": {
