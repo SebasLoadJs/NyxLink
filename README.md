@@ -292,6 +292,8 @@ Los requisitos se copian y se conservan durante failover y `transferNode()`. Un 
 
 `manager.nodes.findNode()` acepta las mismas restricciones, además de `exclude` y `allowUnhealthyFallback`; devuelve `undefined` si no hay candidato. Al crear un reproductor, ese caso lanza `NoEligibleNodeError` con código `NO_ELIGIBLE_NODE` y `rejections` por identificador, motivo y capacidades faltantes. También puedes consultar `NodeSelector.rejections(nodes, options, selection)` para obtener el diagnóstico.
 
+La [selección ponderada e histéresis](docs/node-selection.md) es opt-in por llamada, usa métricas observadas y conserva las restricciones de elegibilidad. El [cierre técnico](docs/implementation-closure.md) separa implementación de los [pendientes de aceptación real](docs/pending-real-world-acceptance.md), que ejecutará el operador.
+
 Para apartar temporalmente un nodo con fallos repetidos, configura `options.node.circuitBreaker`:
 
 ```js
@@ -465,10 +467,17 @@ Llama a esta función desde el cierre de tu aplicación. `manager.shutdown()` es
 
 ## Guías para migración y versiones
 
+- [Guía de API](docs/api-reference.md) — contratos, lifecycle, recuperación y funciones opcionales
+- [Referencia completa de declaraciones](docs/api-generated.md) — todos los exports públicos, generada desde los tipos y verificada en CI
+- [Logging y observabilidad](docs/logging-guide.md) — perfiles, JSON, trazas, destinos y dashboard opt-in
+- [Mixer NodeLink](docs/mixer.md) — respuestas tipadas, volumen y concurrencia
+- [Extensiones opcionales](docs/extensions.md) — registro, hooks tipados, errores y cierre
+- [Estado de modernización](docs/modernization-status.md) — implementación, evidencia y puertas pendientes
 - [Migrar de Moonlink a NyxLink](docs/migrating-from-moonlink.md) — imports, cambios de comportamiento, sesiones, backends y rollback
 - [Cambios previstos para v5.3](CHANGELOG.md) — funcionalidades implementadas y limitaciones aún pendientes de verificar
 - [Plan de aceptación de v5.3](docs/release-5.3-plan.md) — fases, pruebas y condiciones necesarias antes de la publicación estable
 - [Prueba de voz real](docs/live-voice-verification.md) — validación manual de reproducción audible y crossfade
+- [Ejecutar las cinco pruebas de voz](docs/run-live-tests-es.md) — plantilla privada, revisión sin red y runner para el operador
 
 La rama `dev` es de desarrollo. Una versión estable no debe anunciarse hasta aprobar la suite completa, el paquete instalable y las comprobaciones de audio real.
 
