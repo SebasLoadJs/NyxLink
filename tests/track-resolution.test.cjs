@@ -187,3 +187,46 @@ test('partial tracks retain source URI and complete duration during cross-backen
   assert.equal(resolved.encoded,'target-partial');
   assert.equal(resolved.getInfo().length,180000);
 });
+
+test('stop aborts an in-flight destination track lookup instead of waiting for its timeout', async t => {
+  const { manager, player } = createPlayer(t);
+  const destination = target(manager);
+  player.node = destination;
+  const queued = createTrack('cancelled-network-lookup');
+  queued.backend = 'lavalink';
+  player.queue.add(queued);
+  const entered = deferred();
+  let signal;
+  destination.rest.loadTracks = async (_uri, options) => {
+    signal = options.signal;
+    entered.resolve();
+    return new Promise((_resolve, reject) => {
+      const abort = () => reject(signal.reason);
+      signal.addEventListener('abort', abort, { once: true });
+      if (signal.aborted) abort();
+    });
+  };
+  const playing = player.play();
+  await entered.promise;
+  const stopping = player.stop();
+  assert.equal(signal.aborted, true, 'stop must immediately cancel the active HTTP request');
+  assert.equal(await playing, false);
+  await stopping;
+  assert.deepEqual(player.queue.tracks, [queued]);
+  assert.equal(player.current, null);
+});
+
+test('PlaybackGuard invalidates the previous network signal but not the next intent', () => {
+  const { PlaybackGuard } = require('../dist/src/players/PlaybackGuard');
+  const guard = new PlaybackGuard();
+  const initialSignal = guard.signal;
+  const initialTicket = guard.ticket;
+  const currentTicket = guard.invalidate();
+  assert.equal(initialSignal.aborted, true);
+  assert.equal(guard.isCurrent(initialTicket), false);
+  assert.equal(guard.isCurrent(currentTicket), true);
+  assert.equal(guard.signal.aborted, false);
+  guard.invalidate();
+  assert.equal(guard.signal.aborted, false);
+  assert.equal(initialSignal.aborted, true);
+});
