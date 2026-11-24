@@ -4,6 +4,19 @@ El usuario pidió implementar **todo** el documento `C:\Users\kangu\Downloads\NY
 
 Repositorio: `C:\Users\kangu\Desktop\Proyectos\NyxLink`. Rama: `codex/resume-stabilization`. [PR #32 hacia dev](https://github.com/SebasLoadJs/NyxLink/pull/32). No modificar `v5.2`. Commit/push/PR ya están autorizados; merge/tag/publicación no. El usuario hará después las pruebas reales: no volver a pedir credenciales ni ejecutar Discord. Registro: [pending-real-world-acceptance.md](pending-real-world-acceptance.md).
 
+## Continuación de implementación: resoluciones y búsquedas (24/11/2026)
+
+**Checkpoint de código, no aceptación:** `270efb2f11362430e6f9da5d6f6861ed20d9b3f3` en `codex/resume-stabilization` / [PR #32](https://github.com/SebasLoadJs/NyxLink/pull/32). Las verificaciones del SHA final **están pendientes** al redactar este bloque. No asumir que resultados verdes anteriores certifican este checkpoint.
+
+- Redacción de credenciales URL sin regex polinómica; nueva prueba adversaria y CodeQL aprobado en un SHA anterior.
+- `SearchService`: invalida resultados/cache cuando cambia la instancia/sesión/backend de un nodo; `SharedSearchRequests`: cancelación de consumidores separada, cierre que desbloquea promesas de transportes colgados, tope de 128 operaciones y rechazo de nuevos usos tras shutdown. Regresiones incluidas.
+- `MetadataTrackResolver`: presupuesto global configurable (1–60000 ms, 10000 por defecto) entre fuentes/consultas, timeout/cancelación que desbloquea incluso adapters que ignoran AbortSignal, descarte de ISRC explícitamente contradictorios y consumo de rechazos tardíos.
+- `TrackResolver`: aborta lecturas URL directas cuando cambia la intención, con timeout propio de 10000 ms; verifica identidad de sesión/socket/backend/nodo registrado antes de aceptar encodings resueltos.
+- `PlaybackGuard`, Player y PlayerMigration: propagan signal de la intención actual a resolución, precarga y transferencia; `stop()` no espera indefinidamente a un adaptador no cooperativo.
+- Pruebas añadidas de cancelación, límite, cierre, reintentos, registros ISRC, sesión/nodo reemplazado, migración, promesas tardías y tipos TS; guías y referencia API sincronizadas.
+
+**Siguiente orden:** (1) CI completo del HEAD en Node 22/24, CodeQL, Docker backend/plugins, Redis, package/consumer y endurance >=600 s; (2) corregir todas las regresiones detectadas por log; (3) continuar pruebas restantes del catálogo F01–F27, 38 IDs, extensiones A–J y capítulos 0–23, empezando por telemetría ante eventos tardíos y metadatos adversarios; (4) completar los criterios externos de aceptación antes de la RC. No fusionar, borrar ramas, etiquetar ni publicar npm hasta autorización y cierre de gates.
+
 ## Última base aceptada y alcance del checkpoint
 
 `e4d67d336bbbae4c8b403688b24e11b185804ae3` tuvo 963 pruebas Node 22/24, siete checks de consumidor por versión y nueve workflows aprobados, incluida endurance 600,7 s. Esa evidencia **no certifica** el código nuevo del presente checkpoint. Las afirmaciones previas de que todo el plan estaba implementado fueron demasiado amplias; no repetirlas.
