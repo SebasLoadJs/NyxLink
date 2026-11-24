@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/SebasLoadJs/NyxLink/dev/assets/nyxlink_banner.png" alt="NyxLink — A modern Lavalink &amp; NodeLink client for Discord bots" width="100%">
+  <img src="https://raw.githubusercontent.com/SebasLoadJs/NyxLink/v5.3/assets/nyxlink_banner.png" alt="NyxLink — A modern Lavalink &amp; NodeLink client for Discord bots" width="100%">
 </p>
 
 <h1 align="center">NyxLink</h1>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/SebasLoadJs/NyxLink/dev/assets/nyxlink-wave.svg" alt="NyxLink · Audio client for Discord" width="600">
+  <img src="https://raw.githubusercontent.com/SebasLoadJs/NyxLink/v5.3/assets/nyxlink-wave.svg" alt="NyxLink · Audio client for Discord" width="600">
 </p>
 
 <p align="center">
@@ -72,7 +72,7 @@ Para integrar Discord.js:
 npm install discord.js@14
 ```
 
-Consulta las [versiones publicadas en npm](https://www.npmjs.com/package/nyxlink) y los [releases de GitHub](https://github.com/SebasLoadJs/NyxLink/releases). La rama `dev` contiene el desarrollo de 5.3; no representa por sí misma una publicación estable.
+Consulta las [versiones publicadas en npm](https://www.npmjs.com/package/nyxlink) y los [releases de GitHub](https://github.com/SebasLoadJs/NyxLink/releases). La rama `v5.3` contiene la candidata `5.3.0-rc.1` en validación. El canal `next` solo estará disponible tras una publicación confirmada; los comandos anteriores instalan el canal de desarrollo publicado.
 
 <a name="inicio-rapido"></a>
 

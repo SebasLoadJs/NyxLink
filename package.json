@@ -1,7 +1,7 @@
 {
   "name": "nyxlink",
-  "version": "0.1.0-dev.3",
-  "description": "NyxLink — Lavalink v4 and NodeLink client for Discord bots (development)",
+  "version": "5.3.0-rc.1",
+  "description": "NyxLink — Lavalink v4 and NodeLink client for Discord bots (release candidate)",
   "keywords": [
     "nyxlink",
     "lavalink",
@@ -79,7 +79,7 @@
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
     "access": "public",
-    "tag": "dev"
+    "tag": "next"
   },
   "peerDependencies": {
     "pino-pretty": "13.2.0",

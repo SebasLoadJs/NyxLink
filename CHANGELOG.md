@@ -1,8 +1,8 @@
 # Changelog
 
-This changelog describes the unreleased NyxLink 5.3 development line and its verified scope. **No GitHub `v5.3.0` tag or npm `5.3.0` stable package has been published.** Changes may still be refined before the release candidate.
+This changelog describes the unreleased NyxLink 5.3 development line and its verified scope. **No GitHub `v5.3.0` tag or npm `5.3.0` stable package has been published.** The first release candidate is prepared in the release-stabilization branch; tagging and publication remain subject to acceptance.
 
-## [Unreleased — v5.3]
+## [5.3.0-rc.1 — candidate, not yet published]
 
 ### Observability and terminal
 
