@@ -23,6 +23,8 @@ function canonical(record) {
         const value=record.sanitizedContext?.[key];
         if(Number.isSafeInteger(value)&&value>=0)safe.sanitizedContext[key]=value;
     }
+    const reason=record.sanitizedContext?.reasonCode;
+    if(['source-cleanup-failed','intent-cancelled','restart-rejected','migration-error'].includes(reason))safe.sanitizedContext.reasonCode=reason;
     if(typeof record.durationMs==='number'&&Number.isFinite(record.durationMs)&&record.durationMs>=0)safe.durationMs=record.durationMs;
     if(typeof record.operationId==='string'&&/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(record.operationId))safe.operationId=record.operationId;
     const traceId=record.traceId??record.trace_id, spanId=record.spanId??record.span_id;
@@ -65,7 +67,8 @@ export function createAuroraPipeline(options={}){
         if(!incident&&record.operationId&&record.eventCode.startsWith('FAILOVER_')&&incidents.snapshot().some(x=>x.operationId===record.operationId))return;
         if(incident&&incident.state!=='recovering'){
             const content=['FAILOVER '+incident.state.toUpperCase(),incident.sourceBackend?incident.sourceBackend.toUpperCase()+' -> '+incident.backend.toUpperCase():incident.backend.toUpperCase(),
-                incident.durationMs===undefined?'Duration: N/A':'Duration: '+prettyMs(incident.durationMs)].join('\n');
+                incident.durationMs===undefined?'Duration: N/A':'Duration: '+prettyMs(incident.durationMs),
+                ...(incident.reasonCode?['Evidence: '+incident.reasonCode]:[])].join('\n');
             if(width()>=40&&options.unicode!==false)write(boxen(content,{padding:1,borderStyle:'round'}),record);
             else write(content,record);
             return;

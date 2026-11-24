@@ -84,3 +84,12 @@ test('incident retains observed source backend and terminal destination without 
  const result=engine.accept({eventCode:'FAILOVER_RECOVERED',operationId,sanitizedContext:{backend:'nodelink'},durationMs:25});
  assert.equal(result.sourceBackend,'lavalink');assert.equal(result.backend,'nodelink');assert.equal(result.durationMs,25);
 });
+
+test('confirmed destination plus failed source cleanup is a degraded incident, not a failed transfer',()=>{
+ const engine=new AuroraIncidentEngine();
+ const operationId='11111111-1111-4111-8111-111111111111';
+ engine.accept({eventCode:'FAILOVER_STARTED',operationId,sanitizedContext:{backend:'lavalink'}});
+ const result=engine.accept({eventCode:'FAILOVER_RECOVERED',operationId,sanitizedContext:{backend:'nodelink',reasonCode:'source-cleanup-failed'}});
+ assert.equal(result.state,'degraded');assert.equal(result.reasonCode,'source-cleanup-failed');
+ assert.equal(result.sourceBackend,'lavalink');
+});

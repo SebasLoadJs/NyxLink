@@ -1,3 +1,4 @@
+import type { FailoverReasonCode } from '../typings/Interfaces';
 import type { Player } from '../entities/Player';
 import type { Node } from '../entities/Node';
 import type { Track } from '../entities/Track';
@@ -25,9 +26,9 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
         player.manager.nodes.nodes.get(target.identifier) === registeredTarget &&
         player.manager.players.get(player.guildId) === registeredPlayer &&
         guard.isCurrent(ticket) && NodeSelector.matches(target, player.nodeSelection);
-    const report = (status: 'in-progress' | 'recovered' | 'failed' | 'cancelled', reason?: string) => {
+    const report = (status: 'in-progress' | 'recovered' | 'failed' | 'cancelled', reason?: string, reasonCode?: FailoverReasonCode) => {
         player.manager.emit('playerNodeFailover', player, {
-            source: source.identifier, target: target.identifier, status, positionMs: player.current?.position, reason,
+            source: source.identifier, target: target.identifier, status, positionMs: player.current?.position, reason, ...(reasonCode ? { reasonCode } : {}),
         });
     };
     const cleanup = async (node: Node): Promise<string | undefined> => {
@@ -50,10 +51,10 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
     try {
         if (!active() || source === target) return false;
         report('in-progress');
-        if (!active()) { report('cancelled'); return false; }
+        if (!active()) { report('cancelled', undefined, 'intent-cancelled'); return false; }
         const original = player.current;
         const resolved = original ? await TrackResolver.resolve(original, target, source) : null;
-        if (!active() || player.current !== original) { report('cancelled'); return false; }
+        if (!active() || player.current !== original) { report('cancelled', undefined, 'intent-cancelled'); return false; }
         const snapshot = {
             position: original?.getInfo().position, playing: player.playing, paused: player.paused,
             lastState: player.get('lastState'), lastKnownPosition: player.get('lastKnownPosition'),
@@ -97,7 +98,7 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
         player.set('lastState', undefined);
         if (!await player.restart({ destroyOnFailure: false, startQueued: false, [migrationRestart]: true }) || !active()) {
             await runRollback();
-            report(guard.isCurrent(ticket) ? 'failed' : 'cancelled');
+            report(guard.isCurrent(ticket) ? 'failed' : 'cancelled', undefined, guard.isCurrent(ticket) ? 'restart-rejected' : 'intent-cancelled');
             return false;
         }
         for (const track of [...player.queue.tracks, ...player.previous]) {
@@ -109,7 +110,7 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
         await persist();
         if (!active()) {
             await runRollback();
-            report('cancelled');
+            report('cancelled', undefined, 'intent-cancelled');
             return false;
         }
         committed = true;
@@ -121,7 +122,7 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
             try { callback(); } catch { /* consumer listener failure */ }
         };
         notify(() => player.manager.emit('playerSwitchedNode', player, source, target));
-        notify(() => report('recovered', reason));
+        notify(() => report('recovered', reason, reason === undefined ? undefined : 'source-cleanup-failed'));
         if (original && !player.destroyed && guard.isCurrent(ticket) && player.node === target) {
             notify(() => player.manager.emit('playerResumed', player));
         }
@@ -129,7 +130,7 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
     } catch (error) {
         if (committed) throw error;
         if (rollback) await runRollback();
-        report(guard.isCurrent(ticket) ? 'failed' : 'cancelled', (error as Error).message);
+        report(guard.isCurrent(ticket) ? 'failed' : 'cancelled', (error as Error).message, guard.isCurrent(ticket) ? 'migration-error' : 'intent-cancelled');
         return false;
     } finally {
         attempts.retain(ticket);

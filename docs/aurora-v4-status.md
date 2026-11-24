@@ -291,3 +291,14 @@ and capacity-limited across nodes; absent readings are not synthesized.
 The view samples while active and stops refreshing when paused.
 New tests require CI acceptance. Report exports assume the supplied
 source is the sanitized Inspector store, not arbitrary user objects.
+
+## Incident evidence and standalone Log Update acceptance
+
+Migration reports now carry a fixed optional reason code at the actual
+cancellation, restart-rejection, exception or source-cleanup failure site.
+The raw legacy reason is not copied into Aurora. A committed destination
+with failed source cleanup produces a degraded diagnostic incident, while
+the underlying transfer remains confirmed. This is not an audibility
+claim. The standalone Log Update renderer has a real PTY fixture driven
+by explicit input changes and clean exit. Eight PTY sessions are expected
+in the packed acceptance test; new results remain pending.

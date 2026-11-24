@@ -1,3 +1,4 @@
+import type { FailoverReasonCode } from '../typings/Interfaces';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import type { Manager } from '../core/Manager';
@@ -31,6 +32,7 @@ export type AuroraContext = {
     backend?: 'lavalink' | 'nodelink' | 'unknown';
     attempt?: number;
     trackCount?: number;
+    reasonCode?: FailoverReasonCode;
 };
 export type AuroraEvent = {
     eventCode: AuroraEventCode;
@@ -60,6 +62,9 @@ const backend = (value: unknown): NonNullable<AuroraContext['backend']> =>
     value === 'lavalink' || value === 'nodelink' ? value : 'unknown';
 const count = (value: unknown): number | undefined =>
     typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+export function safeFailoverReason(value: unknown): FailoverReasonCode | undefined {
+    return value === 'source-cleanup-failed' || value === 'intent-cancelled' || value === 'restart-rejected' || value === 'migration-error' ? value : undefined;
+}
 const validHex = (value: unknown, length: number): value is string =>
     typeof value === 'string' && value.length === length && /^[a-f0-9]+$/.test(value) && !/^0+$/.test(value);
 type Operation = { id: string; started: number };
@@ -89,6 +94,8 @@ export class AuroraEvents {
         const attempt = count(input.attempt), trackCount = count(input.trackCount);
         if (attempt !== undefined) context.attempt = attempt;
         if (trackCount !== undefined) context.trackCount = trackCount;
+        const reasonCode = safeFailoverReason(input.reasonCode);
+        if (reasonCode) context.reasonCode = reasonCode;
         const event: AuroraEvent = {
             eventCode: code, category: definition.category, severity: definition.level, outcome: definition.outcome,
             timestamp: new Date().toISOString(), sanitizedContext: context,
@@ -125,7 +132,7 @@ export class AuroraEvents {
             manager.on('queueEnd', player => this.emit('QUEUE_ENDED', { backend: backend(player.node.backend?.kind) })),
             manager.on('autoPlayed', player => this.emit('AUTOPLAY_INSERTED', { backend: backend(player.node.backend?.kind) })),
             manager.on('playerNodeFailover', (player, report) => {
-                const context = { backend: backend(player.node.backend?.kind) };
+                const context = { backend: backend(player.node.backend?.kind), reasonCode: safeFailoverReason(report.reasonCode) };
                 if (report.status === 'in-progress') {
                     const operation = { id: randomUUID(), started: performance.now() };
                     this.operations.set(player, operation);

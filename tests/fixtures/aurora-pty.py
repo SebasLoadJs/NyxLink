@@ -94,4 +94,7 @@ resize = session("resize", ["aurora-pty-region.mjs", "--resize"], width=40,
 assert b"\x1b[2Kabcdefghijklmnopqrstuvwxyz" in resize
 assert b"\x1b[2Kabcdefghijk\r\x1b[2KRESIZED" in resize
 assert b"\x1b[?25l" not in resize
-print("PTY acceptance: 7 sessions passed")
+log_update = session("log-update", ["aurora-log-update-pty.mjs"],
+    steps=((b"MUSIC PLAYING 1s", b"n\n"), (b"MUSIC PLAYING 5s", b"q\n")))
+assert b"VIEW CLOSED" in log_update
+print("PTY acceptance: 8 sessions passed")
