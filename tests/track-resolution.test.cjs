@@ -296,3 +296,46 @@ test('destination resolution discards an encoding after the registered node is r
   await rejected;
   assert.equal(original.encoded, 'encoded-node-replaced');
 });
+
+test('stop releases a pending direct URL lookup even when the REST adapter ignores abort', async t => {
+  const { manager, player } = createPlayer(t);
+  const destination = target(manager);
+  player.node = destination;
+  const queued = createTrack('direct-abort-ignored');
+  queued.backend = 'lavalink';
+  player.queue.add(queued);
+  const entered = deferred();
+  let activeSignal;
+  destination.rest.loadTracks = async (_uri, { signal }) => {
+    activeSignal = signal;
+    entered.resolve();
+    return new Promise(() => {});
+  };
+  const playing = player.play();
+  await entered.promise;
+  const stopping = player.stop();
+  assert.equal(activeSignal.aborted, true);
+  assert.equal(await playing, false, 'a cancelled lookup must unblock the player command queue');
+  await stopping;
+  assert.deepEqual(player.queue.tracks, [queued]);
+  assert.equal(player.current, null);
+});
+
+test('direct URL lookup consumes late backend rejection after user cancellation', async t => {
+  const { manager, player } = createPlayer(t);
+  const destination = target(manager);
+  player.node = destination;
+  const queued = createTrack('late-direct-reject');
+  queued.backend = 'lavalink';
+  player.queue.add(queued);
+  const entered = deferred(), pending = deferred();
+  destination.rest.loadTracks = async () => { entered.resolve(); return pending.promise; };
+  const playing = player.play();
+  await entered.promise;
+  const stopping = player.stop();
+  assert.equal(await playing, false);
+  await stopping;
+  pending.reject(new Error('late backend failure after stop'));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(player.queue.tracks, [queued]);
+});
