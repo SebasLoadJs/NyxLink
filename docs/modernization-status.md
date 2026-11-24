@@ -32,17 +32,17 @@ Continuación solicitada: las pruebas externas y puertas de publicación se cons
 | 4 — Smart node orchestration | Implementado; aceptación externa separada | Selector por restricciones, fuentes/salud/circuitos; pesos e histéresis opt-in; LIVE-06/11 para carga/regiones/continuidad |
 | 5 — Player engine/audio | Cliente implementado; aceptación de audio separada | Cola/replay/preload/crossfade y mixer tipado/concurrente; AutoMix interno del servidor; LIVE-05/07 para audio/cleanup remoto |
 | 6 — NodeLink intelligence | Contratos de revisión fijada implementados | Salud/fuentes/stream/grupos/lyrics/mixer; AutoMix y workers delimitados como servidor, sin inventar endpoints; proveedores activos en LIVE-08 |
-| 7 — Observability engine | Implementado localmente; aceptación operativa pendiente | Pipeline, JSON/destinos, privacidad, counters, HTTP/open-stream spans y eventos de lifecycle; sin inferir internos del servidor |
-| 8 — Terminal design system | Implementado localmente; refinamiento visual abierto | Layouts diferenciados compact/standard/detailed/diagnostic, ASCII/NO_COLOR, ancho y paneles observados |
-| 9 — Structured event timeline | Implementado localmente | Retención opt-in acotada, filtros por trace/guild, records inmutables; no almacenamiento durable |
-| 10 — Player trace view | Implementado localmente | Vista terminal/JSON por guild/trace, límites explícitos, sin estado inferido; profundidad depende de los eventos observados |
-| 11 — Failover visual reporter | Implementado localmente; aceptación live pendiente | Etapas observadas de resolución/restauración/persistencia/cleanup/rollback con IDs/duración; fallos parciales conservados; sin redibujar panel por etapa |
-| 12 — Advanced error diagnostics | Implementado localmente | Códigos/status existentes, causas redactadas y recomendaciones fundamentadas; los errores desconocidos quedan sin causa inventada |
-| 13 — Live terminal dashboard | Implementado como snapshots opt-in | TTY periódico/no-TTY estático, nodos/fuentes/proceso reales; no interfaz fullscreen ni métricas no instrumentadas |
-| 14 — Logging profiles | Implementado localmente | Perfiles de detalle independientes de JSON/pretty y destino; explícito nivel tiene prioridad |
-| 15 — Logging API/DX | Implementado localmente | API anterior conservada, child/context/spans, destinations, flush/close y tipos compilables |
-| 16 — Rendimiento/fiabilidad logger | Parcial | Cola/backpressure acotados, quarantine, sampling/grouping y benchmark; falta soak representativo |
-| 17 — Dependencias | Baseline auditado, sin upgrades gratuitos | Consola 3.4.2 es la única dependencia runtime, licencia MIT; lockfile intacto; no añadir paquetes sin necesidad |
+| 7 — Observability engine | Implementado en convergencia; aceptación final por SHA pendiente | AuroraEvents/Pino nativo, destinos excluyentes, Inspector, métricas y OTLP opt-in; LIVE-12 pendiente. |
+| 8 — Terminal design system | Implementado en convergencia; aceptación final por SHA pendiente | Aurora adaptativa, colores, ancho, fallback ASCII, modos JSON/pretty/Aurora y terminal PTY; no replicar los layouts del logger retirado. |
+| 9 — Structured event timeline | Implementado en convergencia; aceptación final por SHA pendiente | AuroraInspectorStore acotado, eventos canónicos y trazas observadas sin identificadores de guild sin procesar; exportación local explícita. |
+| 10 — Player trace view | Implementado en convergencia; aceptación final por SHA pendiente | Inspector: navegación y correlación por trazas/spans, eventos y alias anonimizados; no conservar el playerTrace de guild del logger retirado. |
+| 11 — Failover visual reporter | Implementado en convergencia; aceptación final por SHA pendiente | AuroraIncidentEngine y eventos de migración observados, fallo/cancelación/degradación separados; LIVE-06 pendiente. |
+| 12 — Advanced error diagnostics | Implementado en convergencia; aceptación final por SHA pendiente | diagnoseError y SafeDiagnostics; causas conocidas, redacción; sin inventar diagnóstico. |
+| 13 — Live terminal dashboard | Implementado en convergencia; aceptación final por SHA pendiente | TerminalDashboard con snapshots y eventos agregados en la ruta existente; Inspector de solo lectura y regiones coordinadas. |
+| 14 — Logging profiles | Implementado en convergencia; aceptación final por SHA pendiente | Nivel/categorías canónicas y modos de salida Silent/JSON/Pretty/Aurora/Custom. Los perfiles y child loggers arbitrarios anteriores quedan sustituidos por el diseño Aurora aprobado. |
+| 15 — Logging API/DX | Implementado en convergencia; aceptación final por SHA pendiente | Manager logging target/level; API nativa Pino y entradas Aurora; sin adaptadores legacy; guía de migración explícita. |
+| 16 — Rendimiento/fiabilidad logger | Implementado en convergencia; aceptación final por SHA pendiente | Cola de terminal y archivo acotadas, instrumentación HDR para soak, Tinybench; faltan evidencia prolongada y pruebas reales. |
+| 17 — Dependencias | Implementado en convergencia; aceptación final por SHA pendiente | Pino y Consola runtime, dependencias de presentación/OTel opcionales, Node PTY aislado para tests; auditoría aprobada en 9d4ba78, revalidar HEAD. |
 | 18 — Plugin/extension system | Implementado localmente | Setup/dispose, hooks tipados aislados, AbortSignal y cleanup; servicios/adaptadores especializados siguen siendo de la aplicación |
 | 19 — Sharding/distribuido | Redis verificado en CI en 2981fd84; aceptación audible pendiente | CAS/leases/IPC v2; integración Redis Node 22/24 aprobada; voice handoff aún no escuchado |
 | 20 — QA | Automatizado local y CI por SHA; gates humanos abiertos | Node 22/24, tipos/consumidor, backend/plugins/Redis/CodeQL/endurance verificados; repetir en HEAD y completar aceptación del operador |
@@ -89,3 +89,5 @@ El benchmark existente de persistencia de cola también pasó: cinco muestras de
 5. Revisión de atribución OSL-3.0 y derechos de assets, verificación de titularidad npm, decisión de versión nueva y autorizaciones separadas para RC y estable.
 
 No se marca ninguna tarea contractual como Done ni se crea una RC para eludir estos requisitos.
+
+Vigencia: las decisiones del logger antiguo quedaron superadas por Aurora V4 y la retirada completa de su API. Ver [matriz de cierre](plan-acceptance-matrix.md) para trazabilidad actual y puertas abiertas.

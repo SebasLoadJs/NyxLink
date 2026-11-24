@@ -111,11 +111,16 @@ async function main() {
     for (const context of contexts) context.nextResume = start + 15000;
     loop.enable(); sample();
     let tick = 0;
+    let nextSample = start + samplingEverySeconds*1000;
     while (performance.now() - start < durationSeconds * 1000) {
       const iteration = performance.now();
       await Promise.all(contexts.map(cycle));
       assert.deepEqual(failures, []);
-      if (++tick % samplingEverySeconds === 0) sample();
+      ++tick;
+      if (performance.now() >= nextSample) {
+        sample();
+        nextSample = performance.now() + samplingEverySeconds*1000;
+      }
       if (tick % 30 === 0) console.log(`Endurance ${Math.round((performance.now() - start) / 1000)}s: ${contexts.map(c => `${c.backend.kind} cycles=${c.cycles} resumes=${c.resumes}`).join(', ')}`);
       await delay(Math.max(0, 1000 - (performance.now() - iteration)));
     }

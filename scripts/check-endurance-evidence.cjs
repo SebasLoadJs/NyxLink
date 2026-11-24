@@ -42,7 +42,7 @@ function inspectSoak(revision,report,hours){
   if(!Number.isSafeInteger(hours)||hours<24||hours>72)throw new TypeError('Invalid soak duration');
   const base=inspectEndurance(revision,report);
   const checks={...base.checks,exactDuration:report?.durationSeconds===hours*3600,
-    boundedSampling:Number.isSafeInteger(report?.samplingEverySeconds)&&report.samplingEverySeconds===60&&Array.isArray(report?.samples)&&report.samples.length<=Math.ceil(hours*3600/60)+2};
+    boundedSampling:Number.isSafeInteger(report?.samplingEverySeconds)&&report.samplingEverySeconds===60&&Array.isArray(report?.samples)&&report.samples.length<=Math.ceil(hours*3600/60)+2&&report.samples.every((s,i,a)=>i===0||s?.elapsedSeconds-a[i-1]?.elapsedSeconds<=180)};
   return {revision,checks,soakEvidenceComplete:Object.values(checks).every(Boolean),audioVerified:false,releaseApproved:false};
 }
 if (require.main === module) {

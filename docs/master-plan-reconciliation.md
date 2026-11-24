@@ -37,7 +37,7 @@ La implementación posterior agrega pipeline/JSON/correlación/diagnósticos y d
 | P1-015 | 1 (P1) | Health y selección de nodos | CI verificado | `src/nodes/NodeSelector.ts`, `tests/node-selection.test.cjs` | Medir selección bajo carga real |
 | P1-016 | 1 (P1) | Resume 404 y reconexión WS | CI verificado | `src/nodes/SessionRecovery.ts`, `tests/node-recovery-rest.test.cjs` | Confirmar recuperación de voz |
 | P1-017 | 1 (P1) | Failover y transferNode | CI verificado | `src/nodes/NodeFailover.ts`, `tests/player-migration-regression.test.cjs` | Confirmar continuidad audible y fallo en vivo |
-| P1-018 | 1 (P1) | Logging/eventos estructurados | Aurora #48 y logger #32 con CI histórico aprobado; convergencia pendiente de CI | `src/logging/`, `src/observability/`, `docs/aurora-v4-status.md`, `docs/logging-guide.md` | Validar convergencia y LIVE-12 sobre candidata |
+| P1-018 | 1 (P1) | Logging/eventos estructurados | Aurora único; retiro del logger #32 y validación principal de 9d4ba78 aprobada; revalidar HEAD | `src/logging/AuroraEvents.ts`, `src/logging/PinoEngine.ts`, `tests/aurora-events.test.cjs`, `docs/logging-guide.md` | Validar convergencia y LIVE-12 sobre candidata |
 | P1-019 | 1 (P1) | Staging Lavalink con audio real | Harness de comandos y reconexión para Lavalink/NodeLink y crossfade NodeLink implementado; aceptación audible manual pendiente | `scripts/test-live-voice.cjs`, `scripts/live-voice-commands.cjs`, `tests/live-voice-safety.test.cjs`, `tests/live-voice-commands.test.cjs`, `docs/live-voice-verification.md` | Ejecutar los tres modos autorizados, certificar audio, seek, crossfade, voz recuperada y fallos reales de nodo/partición |
 | P1-020 | 2 (P1) | Detección NodeLink/capabilities | CI verificado | `src/backends/BackendDetector.ts`, `tests/backend-features.test.cjs` | Fijar matriz por versión del servidor |
 | P1-021 | 2 (P1) | REST/WS NodeLink y errores | CI verificado | `scripts/test-nodelink-modern.cjs`, `tests/nodelink-modern-contracts.test.cjs` | Probar audio real de NodeLink actualizado |
@@ -90,3 +90,5 @@ La personalización de gustos por usuario y la UI/catálogo musical de OBEY **no
 ## Actualización 2026-11-24
 
 PR #48 integrado en dev (`a03829c`); PR #40, #41 y #47 cerrados por consolidación sin borrar ramas. La aceptación automatizada del PR #48 está aprobada, pero las puertas de voz, atribución, propiedad npm y candidata inmutable siguen abiertas. Véase `docs/release-5.3-plan.md`.
+
+La [matriz de cierre](plan-acceptance-matrix.md) vincula estas 38 tareas y F01–F27 con las 10 ampliaciones originales A–J y 24 capítulos. Las excepciones y las puertas externas siguen explícitas.

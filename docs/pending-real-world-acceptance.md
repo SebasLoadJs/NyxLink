@@ -44,3 +44,7 @@ Para cada ID: `estado = pendiente | aprobado | falló`, SHA completo, fecha, bac
 - **Pruebas externas mixtas:** LIVE-08 (proveedores, lyrics, plugins y 429) y LIVE-11 (selección de regiones/carga), así como la parte no-Discord de LIVE-12 (privacidad/observabilidad), se implementan y comprueban mediante los laboratorios automáticos cuando son reproducibles y legalmente accesibles. Las porciones que realmente requieren voz/escucha quedan en el registro humano. Las pruebas con proveedores reales sin acceso no se marcan como aprobadas ni se transfieren silenciosamente al usuario.
 - **Publicación/organización:** aprobación del propietario para licencias/activos, titularidad npm, merge, RC, estable y eliminación de ramas; esas decisiones no son pruebas técnicas delegables.
 
+
+### Evidencia de soak
+
+El ensayo de protocolo ahora utiliza histogramas HDR acotados y muestreo de memoria periódico. Su verificador exige misma revisión, ambas familias de backend, duración exacta y limpieza. La infraestructura sigue siendo una dependencia externa: no se ha ejecutado una sesión continua de 24–72 h. No sustituirla por el endurance de 600 s. Los ensayos del usuario permanecen separados.

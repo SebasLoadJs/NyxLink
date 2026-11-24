@@ -1,12 +1,12 @@
 # Matriz de contratos F01–F27 — NyxLink 5.3
 
-Revisión: 24-11-2026. Rama de trabajo: `codex/resume-stabilization`; PR #32 hacia `dev`. Esta matriz recupera **el catálogo de 27 funcionalidades del Plan Maestro v1** y documenta los módulos reales observados en el repositorio. El inventario de las **38 tareas P0–P3** está separado en [master-plan-reconciliation.md](master-plan-reconciliation.md); los capítulos de modernización 0–23 están en [modernization-status.md](modernization-status.md).
+Revisión: 24-11-2026. Rama de convergencia: `integration/5.3-final-convergence`; PR #50 hacia `dev`. Esta matriz recupera **el catálogo de 27 funcionalidades del Plan Maestro v1** y documenta los módulos reales observados en el repositorio. El inventario de las **38 tareas P0–P3** está separado en [master-plan-reconciliation.md](master-plan-reconciliation.md); los capítulos de modernización 0–23 están en [modernization-status.md](modernization-status.md).
 
 **Regla de evidencia:** «Automatizado» indica que existen pruebas y workflows, *no* que pasaron en el HEAD final. Ninguna fila con LIVE, SOAK o RELEASE pendiente está aceptada contractualmente. El código descrito no garantiza acceso real a contenido, continuidad audible, ni éxito de Spotify/Deezer o plugins del servidor. F26/F27 son exclusiones **deliberadas**, no trabajos incompletos.
 
 | ID | Contrato | Código existente | Pruebas automatizadas relacionadas | Guía / ejemplo | Puerta pendiente |
 | --- | --- | --- | --- | --- | --- |
-| `F01` | Logger configurable y privado | src/logging/Logger.ts; LogFormatter.ts | logger.test.cjs; diagnostic-redaction.test.cjs; structured-logging.test.cjs | logging-guide.md; observability.ts | Automatizado; LIVE-12 pendiente |
+| `F01` | Logger configurable y privado | src/logging/AuroraEvents.ts; src/logging/PinoEngine.ts; src/logging/SafeDiagnostics.ts | logger.test.cjs; diagnostic-redaction.test.cjs; structured-logging.test.cjs | logging-guide.md; observability.ts | Automatizado; LIVE-12 pendiente |
 | `F02` | Lavalink v4 REST/WS | src/backends/LavalinkAdapter.ts; src/entities/Rest.ts | backends.test.cjs; tests/integration/backends.test.cjs | backend-compatibility.md; discordjs.ts | Laboratorios CI; LIVE-01/03 pendiente |
 | `F03` | NodeLink y detección | src/backends/NodeLinkAdapter.ts; BackendDetector.ts | backend-features.test.cjs; nodelink-modern-contracts.test.cjs | backend-compatibility.md | Laboratorios CI; LIVE-02/04/08 pendiente |
 | `F04` | Manager y lifecycle | src/core/Manager.ts; src/managers/ | manager-lifecycle.test.cjs; event-emitter-lifecycle.test.cjs | api-reference.md; discordjs.ts | Automatizado; aceptación SDK final pendiente |
@@ -25,7 +25,7 @@ Revisión: 24-11-2026. Rama de trabajo: `codex/resume-stabilization`; PR #32 hac
 | `F17` | VoiceReceiver opcional | src/entities/VoiceReceiver.ts | voice-receiver-lifecycle.test.cjs | phase-3-nodelink.md | Opt-in; permisos/consentimiento LIVE-10 |
 | `F18` | Streams NodeLink opcionales | src/backends/NodeLinkStreamResponse.ts; src/entities/Node.ts | nodelink-stream-format.test.cjs; stream-errors.test.cjs | backend-compatibility.md | Automatizado; fuente real LIVE-08 |
 | `F19` | LiveChat NodeLink opcional | src/entities/YouTubeLiveChat.ts | youtube-livechat-lifecycle.test.cjs | phase-3-nodelink.md | Opt-in; proveedor/permisos LIVE-10 |
-| `F20` | Eventos/observabilidad estructurada | src/logging/StructuredLog.ts; src/observability/PerformanceMonitor.ts | structured-logging.test.cjs; performance-monitor.test.cjs | logging-guide.md; observability.ts | Automatizado; LIVE-12 y soak |
+| `F20` | Eventos/observabilidad estructurada | src/logging/AuroraInspector.ts; src/logging/AuroraEvents.ts; src/observability/PerformanceMonitor.ts | aurora-events.test.cjs; aurora-inspector.test.cjs; performance-monitor.test.cjs | logging-guide.md; observability.ts | Automatizado; LIVE-12 y soak |
 | `F21` | Cache TTL y deduplicación | src/search/SearchService.ts; SharedSearchRequests.ts | search.test.cjs; shared-search-requests.test.cjs | api-reference.md | Automatizado; pruebas proveedor real pendientes |
 | `F22` | Storage pluggable/Redis | src/database/StorageAdapter.ts; RedisStorage.ts; src/cluster/RedisGuildIpcRouter.ts | storage-adapter.test.cjs; redis-guild-ipc.test.cjs; tests/integration/redis-guild-ipc.test.cjs | redis-storage.md | CI Redis; LIVE-09 |
 | `F23` | Ejemplos/guías/API | docs/api-generated.md; docs/api-reference.md; examples/ | tests/types/public-api.ts; scripts/test-package.cjs | api-reference.md; migrating-from-moonlink.md | Consumidor CI; revisión final al release |
@@ -46,7 +46,7 @@ Para aprobar cualquier fila se necesita: requisito inequívoco, implementación 
 
 ## Auditorías técnicas pendientes de cierre
 
-- Consolidar ampliaciones A–J con evidencias concretas de tests, tipos y ejemplos; no darlas por terminadas a partir de una tabla.
+- Contrastar las ampliaciones A–J y sus pruebas con [la matriz de cierre](plan-acceptance-matrix.md); no darlas por terminadas a partir de referencias estáticas.
 - Revisar la implementación en CI del último HEAD, especialmente búsqueda/fallback, auditoría de dependencias, transportes observabilidad y NodeLink moderno.
 - Cumplir los controles de seguridad, atribución, derechos de distribución, seguridad operacional del receptor de voz y los criterios LIVE/SOAK sin inventar resultados.
 

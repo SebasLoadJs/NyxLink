@@ -52,9 +52,10 @@ test('600 seconds cannot certify a 24-hour soak, complete synthetic schema can',
  assert.equal(inspectSoak(revision,sample(),24).soakEvidenceComplete,false);
  const report={...sample(),durationSeconds:86400,elapsedSeconds:86401,samplingEverySeconds:60,
  backends:sample().backends.map(b=>({...b,cycles:43200})),
- samples:[sample().samples[0],{elapsedSeconds:86400,heapUsedBytes:101,rssBytes:1000}]};
+ samples:Array.from({length:1441},(_,i)=>({elapsedSeconds:i*60,heapUsedBytes:100,rssBytes:1000}))};
  assert.equal(inspectSoak(revision,report,24).soakEvidenceComplete,true);
  assert.equal(inspectSoak(revision,report,48).soakEvidenceComplete,false);
+ assert.equal(inspectSoak(revision,{...report,samples:[report.samples[0],report.samples.at(-1)]},24).soakEvidenceComplete,false);
  assert.equal(inspectSoak(revision,{...report,samplingEverySeconds:10},24).soakEvidenceComplete,false);
  assert.equal(inspectSoak(revision,{...report,error:'failure'},24).soakEvidenceComplete,false);
  assert.equal(inspectSoak(revision,report,24).releaseApproved,false);
