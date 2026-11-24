@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {fitLabel,wrapRecord,viewport,measure,latencyChart,readinessChart,stateMarker,terminalUnicode} from './aurora-terminal-tools.mjs';
+import {fitLabel,wrapRecord,viewport,measure,latencyChart,readinessChart,stateMarker,terminalUnicode,helpLink,canLink,clearHelpLine} from './aurora-terminal-tools.mjs';
 assert.ok(measure(fitLabel('A界B界C',5))<=5);
 assert.ok(wrapRecord('abcdefghi',4).split('\n').every(line=>measure(line)<=4));
 assert.equal(viewport('abcdef',2,3),'cde');
@@ -22,3 +22,8 @@ assert.equal(readinessChart(0,0),'N/A');
 assert.equal(stateMarker(true,false),'+');
 assert.equal(terminalUnicode(false),false);
 assert.equal(typeof terminalUnicode(),'boolean');
+
+assert.equal(canLink({isTTY:false}),false);
+assert.match(helpLink({isTTY:false}),/^Aurora documentation: https:\/\/github\.com\//);
+assert.equal(clearHelpLine({isTTY:false}),'');
+assert.doesNotMatch(helpLink({isTTY:false}),/\x1b/);

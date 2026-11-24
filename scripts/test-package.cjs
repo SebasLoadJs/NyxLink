@@ -52,7 +52,7 @@ async function main() {
         listr2: '8.3.3', ora: '8.2.0', 'cli-progress': '3.12.0',
         'cli-table3': '0.6.5', 'pretty-bytes': '6.1.1', 'log-update': '6.1.0', ink: '5.2.1', react: '18.3.1', 'ink-testing-library': '4.0.0',
         'cli-truncate':'4.0.0','wrap-ansi':'9.0.0','slice-ansi':'7.1.0','is-unicode-supported':'2.1.0','figures':'6.1.0',
-        'fuse.js':'7.5.0','ink-text-input':'6.0.0','ink-select-input':'6.2.0','ink-spinner':'5.0.0' } }));
+        '@opentelemetry/api-logs':'0.208.0','@opentelemetry/sdk-logs':'0.208.0','@opentelemetry/exporter-logs-otlp-http':'0.208.0','ansi-escapes':'7.3.0','terminal-link':'3.0.0','supports-hyperlinks':'2.3.0','ink-link':'4.1.0','pino-abstract-transport':'3.0.0','tinybench':'6.2.1','fuse.js':'7.5.0','ink-text-input':'6.0.0','ink-select-input':'6.2.0','ink-spinner':'5.0.0' } }));
     const pnpm = 'pnpm';
     run(pnpm, ['install', fromRegistry ? '--prefer-offline=false' : '--prefer-offline', ...(fromRegistry ? ['--force'] : []), '--registry=https://registry.npmjs.org/', '--ignore-scripts', '--no-frozen-lockfile'], consumer);
     checks.push(fromRegistry ? 'install exact published version from public npm in isolated consumer' : 'install packed artifact in isolated consumer');
@@ -162,7 +162,10 @@ async function main() {
     await fs.copyFile(path.join(root,'tests/fixtures/aurora-sdk-consumer.cjs'),path.join(consumer,'aurora-sdk-consumer.cjs'));
     const sdk = run(process.execPath,['aurora-sdk-consumer.cjs'],consumer);
     assert.equal(sdk.stdout,''); assert.equal(sdk.stderr,'');
-    checks.push('host SDK automatic Pino correlation and local OTLP traces/metrics without duplicate log export');
+    checks.push('host SDK automatic Pino correlation and opt-in canonical OTLP logs/traces/metrics');
+    await fs.copyFile(path.join(root,'tests/fixtures/aurora-file-consumer.mjs'),path.join(consumer,'aurora-file-consumer.mjs'));
+    run(process.execPath,['aurora-file-consumer.mjs'],consumer);
+    checks.push('exclusive native Pino file destination, redaction and no overwrite');
     const acceptance = path.join(root,'.runtime/aurora-acceptance',process.version);
     await fs.mkdir(acceptance,{recursive:true});
     for(const fixture of ['aurora-pty.py','aurora-pty-region.mjs','aurora-benchmark.mjs','aurora-log-update-pty.mjs'])

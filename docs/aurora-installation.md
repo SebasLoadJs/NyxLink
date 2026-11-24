@@ -31,3 +31,7 @@ Acceptance: the packed-consumer test compiles and executes the installed subpath
 Terminal latency and readiness charts are rendered directly by Aurora. The former `@crafter/charts@0.2.5` peer was removed because its published ESM entrypoint failed native Node 22/24 packed-consumer imports. No consumer patch or special loader is required.
 
 Inspector search prefers literal matches and falls back to Fuse.js fuzzy matching for queries of at least three characters. Search runs only over the sanitized read-only snapshot; existing severity/category/backend filters apply first. Escape returns to navigation.
+
+## Advanced destinations and links
+
+Install `ansi-escapes@7.3.0 terminal-link@3.0.0 supports-hyperlinks@2.3.0 ink-link@4.1.0 pino-abstract-transport@3.0.0` for Inspector documentation links and exclusive native file output. `nyxlink/aurora/file` provides `await createAuroraFilePipeline(path, {level:'info'})`; configure its target on Manager and await close after shutdown. Creates a new private file, refuses overwrite. The destination uses Pino's existing Sonic Boom implementation, not a separate log engine. Optional OTLP logging requires `@opentelemetry/api-logs@0.208.0 @opentelemetry/sdk-logs@0.208.0 @opentelemetry/exporter-logs-otlp-http@0.208.0`, explicit `createHostSDK({endpoint,exportLogs:true})`, and `onEvent:event=>sdk.emitAuroraEvent(event)` on the selected pipeline. Disabled by default. Never enable Pino automatic log sending; only normalized canonical events are exported. Tinybench is development-only.

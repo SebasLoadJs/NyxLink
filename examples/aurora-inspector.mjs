@@ -6,7 +6,8 @@ import SelectInput from 'ink-select-input';
 import Spinner from 'ink-spinner';
 import prettyBytes from 'pretty-bytes';
 import Fuse from 'fuse.js';
-import { latencyChart, readinessChart, fitLabel, viewport, terminalUnicode, stateMarker } from './aurora-terminal-tools.mjs';
+import Link from 'ink-link';
+import { latencyChart, readinessChart, fitLabel, viewport, terminalUnicode, stateMarker, canLink, documentationUrl } from './aurora-terminal-tools.mjs';
 
 /** Retained spans only; absent parents are not fabricated. Iterative traversal avoids cycles. */
 export function traceRows(spans, traceId, limit=30){
@@ -59,7 +60,7 @@ function matchRecords(records, query) {
     return matched.map(result => records[result.item.index]);
 }
 
-export function Inspector({ source, initialTab = 'Overview', interactive = true, reportPath, columns=80, unicode=terminalUnicode() }) {
+export function Inspector({ source, initialTab = 'Overview', interactive = true, reportPath, columns=80, unicode=terminalUnicode(), hyperlinks=false }) {
     const { exit } = useApp();
     const [snapshot, setSnapshot] = useState(() => source.snapshot());
     const [tab, setTab] = useState(Math.max(0, tabs.indexOf(initialTab)));
@@ -154,6 +155,7 @@ export function Inspector({ source, initialTab = 'Overview', interactive = true,
         ...(choosing?[h(Text,{key:'jump-label'},'Jump to view:'),h(SelectInput,{key:'jump',items:tabs.map((label,value)=>({label,value})),onSelect:item=>{if(inputMode.current==='jump'){setTab(item.value);setCursor(0);setDetail(false);changeMode('navigation');}}})]:[]),
         ...rows.map((line,i)=>h(Text,{key:i,color:line.startsWith('> ')?'#55E9B6':undefined},fitLabel(line,Math.max(10,columns-1)))),
         ...(exportStatus?[h(Text,{key:'export'},exporting&&interactive?h(Spinner,{type:'dots'}):null,exportStatus)]:[]),
+        ...(hyperlinks?[h(Link,{key:'docs',url:documentationUrl,fallback:false},'Aurora documentation')]:[]),
         h(Text,{dimColor:true},'Tab/arrows: navigate | g: jump | Enter: detail | p: pause | f/c/b: filters | /: search | q: quit'+(reportPath?' | e: export':''))
     );
 }
@@ -167,5 +169,5 @@ export function startInspector(source, options = {}) {
         return undefined;
     }
     // Explicit standalone mode. Do not run other stdout renderers beside Ink.
-    return render(h(Inspector,{source,reportPath:options.reportPath,columns:stdout.columns??80}),{stdout,stdin,patchConsole:false});
+    return render(h(Inspector,{source,reportPath:options.reportPath,columns:stdout.columns??80,hyperlinks:canLink(stdout)}),{stdout,stdin,patchConsole:false});
 }

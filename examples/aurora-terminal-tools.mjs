@@ -6,6 +6,14 @@ import stripAnsi from 'strip-ansi';
 import isUnicodeSupported from 'is-unicode-supported';
 import figures from 'figures';
 import prettyMs from 'pretty-ms';
+import ansiEscapes from 'ansi-escapes';
+import terminalLink from 'terminal-link';
+import supportsHyperlinks from 'supports-hyperlinks';
+export const documentationUrl = 'https://github.com/SebasLoadJs/NyxLink/blob/dev/docs/aurora-installation.md';
+export const canLink = (stream=process.stdout) => stream===process.stdout && stream.isTTY===true && supportsHyperlinks.stdout && !process.env.CI && !('NO_COLOR' in process.env) && process.env.TERM!=='dumb';
+export const helpLink = (stream=process.stdout) => canLink(stream) ? terminalLink('Aurora documentation',documentationUrl,{fallback:false}) : 'Aurora documentation: '+documentationUrl;
+// Used only by an explicitly owned, interactive terminal region.
+export const clearHelpLine = (stream=process.stdout) => stream.isTTY===true && !process.env.CI && !('NO_COLOR' in process.env) && process.env.TERM!=='dumb' ? ansiEscapes.cursorLeft+ansiEscapes.eraseLine : '';
 
 export const terminalUnicode = (requested=true) => requested!==false&&isUnicodeSupported();
 export const fitLabel = (text,width) => cliTruncate(String(text),Math.max(1,Math.floor(width)));

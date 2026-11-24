@@ -57,7 +57,8 @@
   "devDependencies": {
     "@types/node": "^24.10.0",
     "discord.js": "^14.25.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "tinybench": "6.2.1"
   },
   "private": false,
   "packageManager": "pnpm@10.34.5",
@@ -113,7 +114,15 @@
     "@opentelemetry/sdk-metrics": "2.2.0",
     "@opentelemetry/exporter-trace-otlp-http": "0.208.0",
     "@opentelemetry/exporter-metrics-otlp-http": "0.208.0",
-    "fuse.js": "7.5.0"
+    "fuse.js": "7.5.0",
+    "@opentelemetry/api-logs": "0.208.0",
+    "@opentelemetry/sdk-logs": "0.208.0",
+    "@opentelemetry/exporter-logs-otlp-http": "0.208.0",
+    "ansi-escapes": "7.3.0",
+    "terminal-link": "3.0.0",
+    "supports-hyperlinks": "2.3.0",
+    "ink-link": "4.1.0",
+    "pino-abstract-transport": "3.0.0"
   },
   "peerDependenciesMeta": {
     "pino-pretty": {
@@ -214,6 +223,30 @@
     },
     "fuse.js": {
       "optional": true
+    },
+    "@opentelemetry/api-logs": {
+      "optional": true
+    },
+    "@opentelemetry/sdk-logs": {
+      "optional": true
+    },
+    "@opentelemetry/exporter-logs-otlp-http": {
+      "optional": true
+    },
+    "ansi-escapes": {
+      "optional": true
+    },
+    "terminal-link": {
+      "optional": true
+    },
+    "supports-hyperlinks": {
+      "optional": true
+    },
+    "ink-link": {
+      "optional": true
+    },
+    "pino-abstract-transport": {
+      "optional": true
     }
   },
   "exports": {
@@ -245,6 +278,10 @@
     "./aurora/sdk": {
       "types": "./examples/aurora-sdk.d.cts",
       "default": "./examples/aurora-sdk.cjs"
+    },
+    "./aurora/file": {
+      "types": "./examples/aurora-file.d.mts",
+      "import": "./examples/aurora-file.mjs"
     }
   },
   "bin": {

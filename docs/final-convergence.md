@@ -90,3 +90,7 @@ After the ESM peer correction, packed Node 22/24 advanced through 11 checks; the
 ## Approved Inspector enhancement
 
 Packed consumer reached the search assertion, then failed when a rapid navigation key was consumed by the previously focused input. Guard callbacks and navigation with a synchronous mode reference. Keep exact search first, add optional Fuse.js 7.5.0 for typo-tolerant matching, and verify actual filtered results in packed tests. No new log engine or transport adapter. Full CI remains required.
+
+## Advanced Aurora integrations (candidate)
+
+Explicit terminal hyperlink capability checks and Ink documentation link, native Pino exclusive file destination using pino-abstract-transport and Pino's Sonic Boom, opt-in canonical OTLP log export, and Tinybench measurement have been implemented as a candidate. Lock entries use exact resolved versions. Packed tests and CI must certify them; no release is implied. Cross-platform Node PTY and retirement of standalone historical Logger API remain open.

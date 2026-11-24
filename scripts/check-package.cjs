@@ -23,7 +23,7 @@ for (const required of ['package.json', 'README.md', 'LICENSE', 'NOTICE.md', 'di
   assert.ok(files.includes(required), `Package missing ${required}`);
 }
 for (const file of files) {
-  assert.ok(/^(dist\/|assets\/nyxlink_banner\.png$|package\.json$|README\.md$|LICENSE$|NOTICE\.md$|examples\/aurora-(?:pipeline|visual|terminal-tools|bootstrap|diagnostics|inspector|otel|demo)\.(?:mjs|d\.mts)$|examples\/aurora-sdk\.(?:cjs|d\.cts)$)/.test(file), `Unexpected package file: ${file}`);
+  assert.ok(/^(dist\/|assets\/nyxlink_banner\.png$|package\.json$|README\.md$|LICENSE$|NOTICE\.md$|examples\/aurora-(?:pipeline|visual|terminal-tools|bootstrap|diagnostics|inspector|otel|demo|file)\.(?:mjs|d\.mts)$|examples\/aurora-sdk\.(?:cjs|d\.cts)$)/.test(file), `Unexpected package file: ${file}`);
   assert.ok(!/(^|\/)(\.env(?:\.|$)|node_modules|datastore|\.moonlink)|\.(?:log|tgz)$/.test(file), `Private runtime data in package: ${file}`);
 }
 console.log(`Package verified: ${files.length} files, ${archive.size} bytes; no publication performed.`);
