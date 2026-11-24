@@ -55,6 +55,15 @@ try{
  assert.doesNotMatch(app.lastFrame(),/QUEUE_ADDED/);
  app.stdin.write('\r');await frame(/Search: NODE_READY/);
  assert.doesNotMatch(app.lastFrame(),/Search \(editing\)/);
+ await delay(100); // allow Ink to dispose the old focused child listener
  app.stdin.write('g');await frame(/Jump to view:/);await delay(50);
  app.stdin.write('\r');await frame(/\[Overview\]/);
+ await delay(100);
+ app.stdin.write('/');await frame(/Search \(editing\):/);await delay(50);
+ for(let i=0;i<'NODE_READY'.length;i++){app.stdin.write('\x7f');await delay(35);}
+ app.stdin.write('NODE_REDY');await frame(/Search \(editing\): NODE_REDY/);
+ app.stdin.write('\r');await frame(/Search: NODE_REDY/);
+ await delay(100);
+ for(let i=0;i<3;i++){app.stdin.write('\t');await delay(100);}
+ await frame(/\[Events\]/);assert.match(app.lastFrame(),/NODE_READY/);assert.doesNotMatch(app.lastFrame(),/QUEUE_ADDED/);
 }finally{app.unmount();app.cleanup();}

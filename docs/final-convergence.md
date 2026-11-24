@@ -86,3 +86,7 @@ The packed consumer failed to import `nyxlink/aurora/inspector` under native Nod
 ## Inspector input acceptance
 
 After the ESM peer correction, packed Node 22/24 advanced through 11 checks; the remaining observed failure is interactive Inspector search. Expose editing/jump state, explicitly focus the text field, close detail on mode entry, and synchronize the packed consumer with rendered input states before sending further keys. The fixture also requires a non-matching event to disappear. Do not mark the package accepted until CI confirms the actual interaction.
+
+## Approved Inspector enhancement
+
+Packed consumer reached the search assertion, then failed when a rapid navigation key was consumed by the previously focused input. Guard callbacks and navigation with a synchronous mode reference. Keep exact search first, add optional Fuse.js 7.5.0 for typo-tolerant matching, and verify actual filtered results in packed tests. No new log engine or transport adapter. Full CI remains required.
