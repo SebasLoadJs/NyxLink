@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {fitLabel,wrapRecord,viewport,measure,latencyChart,readinessChart,stateMarker,terminalUnicode} from './aurora-terminal-tools.mjs';
+assert.ok(measure(fitLabel('A界B界C',5))<=5);
+assert.ok(wrapRecord('abcdefghi',4).split('\n').every(line=>measure(line)<=4));
+assert.equal(viewport('abcdef',2,3),'cde');
+assert.equal(latencyChart([]),'N/A');
+assert.equal(latencyChart([{latencyMs:10}]),'10ms');
+const history=[10,20,5,40].map(latencyMs=>({latencyMs}));
+assert.match(latencyChart(history,{unicode:true}),/40ms$/);
+assert.equal(latencyChart(history,{unicode:false}),'20ms / 5ms / 40ms');
+assert.equal(readinessChart(1,2,{unicode:false,width:10}),'[=====-----]');
+assert.notEqual(readinessChart(1,2,{unicode:true}), 'N/A');
+assert.equal(readinessChart(0,0),'N/A');
+assert.equal(stateMarker(true,false),'+');
+assert.equal(terminalUnicode(false),false);
+assert.equal(typeof terminalUnicode(),'boolean');
