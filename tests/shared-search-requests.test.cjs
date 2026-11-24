@@ -106,3 +106,15 @@ test('shared search coalescing stays within its 128-operation capacity and drain
   requests.close();
   assert.deepEqual(new Set(await Promise.all(pending)), new Set(['cancelled']));
 });
+
+test('closed shared searches cannot restart new backend operations', async () => {
+  const requests = new SharedSearchRequests();
+  requests.close();
+  requests.close();
+  let called = false;
+  await assert.rejects(requests.run('after-shutdown', new AbortController().signal, async () => {
+    called = true;
+    return 'wrong';
+  }), /shut down/i);
+  assert.equal(called, false);
+});
