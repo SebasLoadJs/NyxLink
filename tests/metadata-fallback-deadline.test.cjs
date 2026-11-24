@@ -173,3 +173,35 @@ test('accent-insensitive metadata matching avoids a different live version and d
   node.rest.loadTracks = async () => ({ loadType: 'search', data: [different] });
   assert.equal(await resolveMetadata(original, node, { sources: ['youtube'] }), undefined);
 });
+
+test('metadata fallback never queries disabled providers or accepts their tracks', async t => {
+  const { manager, node } = createPlayer(t);
+  const original = createTrack('disabled-source');
+  manager.options.sources.disabledSources = ['youtube'];
+  const incoming = original.toJSON();
+  const calls = [];
+  node.rest.loadTracks = async identifier => {
+    calls.push(identifier);
+    return { loadType: 'track', data: {
+      ...incoming, encoded: 'soundcloud-match',
+      info: { ...incoming.info, sourceName: 'soundcloud' },
+    } };
+  };
+  const matching = await resolveMetadata(original, node, { sources: ['youtube', 'soundcloud'] });
+  assert.equal(matching.encoded, 'soundcloud-match');
+  assert.equal(calls.length, 1);
+  assert.match(calls[0], /^scsearch:/);
+
+  node.rest.loadTracks = async () => ({ loadType: 'track', data: {
+    ...incoming, encoded: 'disabled-track',
+    info: { ...incoming.info, sourceName: 'youtube' },
+  } });
+  const blocked = await resolveMetadata(original, node, { sources: ['soundcloud'] });
+  assert.equal(blocked, undefined, 'result source must be checked, not only query prefix');
+
+  manager.options.sources.disabledSources = ['youtube', 'soundcloud'];
+  let forbiddenCalls = 0;
+  node.rest.loadTracks = async () => { forbiddenCalls++; throw new Error('never called'); };
+  assert.equal(await resolveMetadata(original, node, { sources: ['youtube', 'soundcloud'] }), undefined);
+  assert.equal(forbiddenCalls, 0);
+});
