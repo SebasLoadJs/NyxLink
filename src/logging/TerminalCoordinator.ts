@@ -42,7 +42,7 @@ export class TerminalCoordinator {
     private readonly queue: Pending[] = [];
     private readonly waiters = new Set<(ok: boolean) => void>();
     private region?: { owner: symbol; text: string };
-    private drawn = false;
+    private drawn = '';
     private blocked = false;
     private pumping = false;
     private closed = false;
@@ -131,7 +131,7 @@ export class TerminalCoordinator {
         this.streamErrors++;
         for (const item of this.queue.splice(0)) this.reject('stream-error', item.priority);
         this.region = undefined;
-        this.drawn = false;
+        this.drawn = '';
         for (const done of this.waiters) done(false);
         this.waiters.clear();
     }
@@ -148,7 +148,7 @@ export class TerminalCoordinator {
             while (!this.blocked && !this.failed && this.queue.length) {
                 const item = this.queue.shift()!;
                 const prefix = this.drawn ? CLEAR : '';
-                this.drawn = false;
+                this.drawn = '';
                 this.send(prefix + item.text);
                 if (this.failed) this.reject('stream-error', item.priority);
             }
@@ -156,10 +156,12 @@ export class TerminalCoordinator {
                 if (this.region && !this.closing) {
                     const width = Math.max(0, (this.stream.columns ?? 80) - 1);
                     const line = this.region.text.slice(0, width);
-                    if (this.drawn || line) this.send(CLEAR + line);
-                    this.drawn = Boolean(line);
+                    if (line !== this.drawn) {
+                        this.drawn = line;
+                        this.send(CLEAR + line);
+                    }
                 } else if (this.drawn) {
-                    this.drawn = false;
+                    this.drawn = '';
                     this.send(CLEAR);
                 }
             }
