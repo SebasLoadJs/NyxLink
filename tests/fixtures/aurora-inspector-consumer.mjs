@@ -33,3 +33,21 @@ try{
  assert.equal(data.schemaVersion,1);assert.equal(data.source,'simulated');
  await assert.rejects(exportInspectorReport(source,report),{code:'EEXIST'});
 }finally{await fs.rm(dir,{recursive:true,force:true});}
+
+const measuredSource={...source,latencyHistory:()=>[10,25,12,40].map(latencyMs=>({latencyMs}))};
+for(const columns of [40,80,120]){
+ const app=render(React.createElement(Inspector,{source:measuredSource,initialTab:'Overview',interactive:false,columns,unicode:true}));
+ try{assert.match(app.lastFrame(),/Network readiness:/);assert.match(app.lastFrame(),/40ms/);}
+ finally{app.unmount();app.cleanup();}
+}
+const app=render(React.createElement(Inspector,{source,initialTab:'Events',interactive:true,columns:80}));
+try{
+ const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+ app.stdin.write('/');await delay(80);
+ app.stdin.write('NODE_READY');await delay(80);
+ app.stdin.write('\r');await delay(80);
+ assert.match(app.lastFrame(),/Search: NODE_READY/);
+ app.stdin.write('g');await delay(80);
+ app.stdin.write('\r');await delay(80);
+ assert.match(app.lastFrame(),/\[Overview\]/);
+}finally{app.unmount();app.cleanup();}
