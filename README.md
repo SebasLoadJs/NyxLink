@@ -22,11 +22,11 @@
 </p>
 
 <p align="center">
-  <a href="#instalación">Instalación</a> ·
-  <a href="#inicio-rápido">Inicio rápido</a> ·
-  <a href="#reproducción">Reproducción</a> ·
+  <a href="#instalacion">Instalación</a> ·
+  <a href="#inicio-rapido">Inicio rápido</a> ·
+  <a href="#reproduccion">Reproducción</a> ·
   <a href="#aurora">Aurora</a> ·
-  <a href="#documentación">Documentación</a> ·
+  <a href="#documentacion">Documentación</a> ·
   <a href="https://github.com/SebasLoadJs/NyxLink/releases">Releases</a>
 </p>
 
@@ -50,6 +50,8 @@ NyxLink es un cliente TypeScript para bots musicales de Discord que conecta **La
 
 NyxLink controla un servidor de audio externo. El servidor Lavalink o NodeLink proporciona la reproducción, las fuentes y los plugins. La disponibilidad de funciones específicas se determina por las capacidades detectadas, no solo por el nombre del backend.
 
+<a name="instalacion"></a>
+
 ## 📦 Instalación
 
 **Node.js 22.12.0 o superior.** Un servidor Lavalink v4 o NodeLink operativo.
@@ -71,6 +73,8 @@ npm install discord.js@14
 ```
 
 Consulta las [versiones publicadas en npm](https://www.npmjs.com/package/nyxlink) y los [releases de GitHub](https://github.com/SebasLoadJs/NyxLink/releases). La rama `dev` contiene el desarrollo de 5.3; no representa por sí misma una publicación estable.
+
+<a name="inicio-rapido"></a>
 
 ## 🚀 Inicio rápido
 
@@ -127,6 +131,8 @@ client.login(token).catch(console.error);
 
 El conector se registra antes de iniciar sesión en Discord. El evento `nodeReady` indica que el nodo ha establecido su sesión.
 
+<a name="reproduccion"></a>
+
 ## 🎵 Reproducción
 
 ```js
@@ -168,7 +174,7 @@ La búsqueda acepta texto o URL. Para encolar todos los resultados de una playli
 | Posición (ms) | `await player.seek(60000)` |
 | Volumen confirmado | `await player.setVolumeAsync(50)` |
 | Detener | `await player.stop()` |
-| Repetición | `player.setLoop('track' \| 'queue' \| 'off')` |
+| Repetición | `player.setLoop('track')`, `player.setLoop('queue')` o `player.setLoop('off')` |
 | Autoplay | `player.setAutoPlay(true)` |
 | Migrar de nodo | `await player.transferNode(identifier)` |
 | Destruir | `await player.destroy()` |
@@ -220,6 +226,8 @@ const player = manager.players.create({
 ```
 
 La selección respeta los requisitos de backend, capacidades y región. Las migraciones conservan el reproductor de origen hasta confirmar el destino; los fallos desencadenan rollback y limpieza. Las capacidades opcionales pueden devolver `FeatureUnavailableError`. Consulta [selección de nodos](docs/node-selection.md) y [compatibilidad de backends](docs/backend-compatibility.md).
+
+<a name="aurora"></a>
 
 ## ✨ Aurora
 
@@ -281,6 +289,8 @@ La demostración usa eventos simulados. La API de logging acepta `options.loggin
 | `playerDestroy` | Reproductor destruido. |
 
 Todos los eventos y argumentos se definen en [IManagerEvents](src/typings/Interfaces.ts) y en la [referencia de API generada](docs/api-generated.md).
+
+<a name="documentacion"></a>
 
 ## 📚 Documentación
 
