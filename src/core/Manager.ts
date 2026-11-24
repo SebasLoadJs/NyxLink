@@ -21,6 +21,7 @@ import { SpotifySource } from "../sources/spotify";
 import { DeezerSource } from "../sources/deezer";
 import { Logger } from "../logging/Logger";
 import { AuroraEvents } from '../logging/AuroraEvents';
+import { getManagerLogRoute } from '../logging/ManagerLogRoute';
 import { OpenTelemetry } from '../observability/OpenTelemetry';
 import { ExtensionHost, type NyxExtension, type ExtensionOptions } from '../extensions/ExtensionHost';
 import { PrivateMetricsServer, type PrivateMetricsOptions } from '../observability/PrivateMetricsServer';
@@ -391,7 +392,8 @@ export class Manager extends EventEmitter<IManagerEvents> {
     public async search(options: ISearchQuery): Promise<SearchResult> {
         this.performanceMonitor?.recordSearch();
         const search = () => this.searches.search(options);
-        const run = () => this.aurora ? this.aurora.observe('search', search, {}, result => result.isError ? 'failed' : result.tracks.length ? 'completed' : 'empty') : search();
+        const route = getManagerLogRoute(this);
+        const run = () => route ? route.observe('search', search, {}, result => result.isError ? 'failed' : result.tracks.length ? 'completed' : 'empty') : search();
         return this.telemetry ? this.telemetry.search(run) : run();
     }
 

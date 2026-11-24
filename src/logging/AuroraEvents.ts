@@ -159,7 +159,7 @@ export class AuroraEvents {
 
     attach(manager: Manager): void {
         if (this.closed || this.disposers.length) throw new Error('Aurora event route is already attached or closed');
-        this.disposers.push(claimManagerLogRoute(manager));
+        this.disposers.push(claimManagerLogRoute(manager, this));
         if (this.minimum === Infinity) return;
         this.disposers.push(
             manager.on('nodeReady', node => this.emit('NODE_READY', { backend: backend(node.backend?.kind) })),

@@ -110,3 +110,20 @@ test('preferred logging option and deprecated aurora alias share one route; manu
   assert.equal(records.length,1);
  }finally{duplicate.close();await legacy.close();await manager.shutdown();}
 });
+
+test('deprecated Manager logger consumes the canonical route without raw debug or duplicate search events',async()=>{
+ const records=[];
+ const manager=new Manager({nodes:[{host:'localhost',port:2333,password:'fixture',secure:false}],options:{logging:{level:'debug',transports:[{write(record){records.push(record);}}]}}});
+ try{
+  manager.emit('debug','private-raw-debug');
+  manager.emit('nodeReady',{backend:{kind:'nodelink'},identifier:'private-node'},{token:'private-token'});
+  manager.searches.search=async()=>({isError:false,tracks:[{title:'private-title'}]});
+  await manager.search({query:'private-query'});
+  await manager.logger.flush();
+  assert.deepEqual(records.map(r=>r.event),['NODE_READY','SEARCH_COMPLETED']);
+  assert.doesNotMatch(JSON.stringify(records),/private-/);
+  manager.detachLogger();
+  manager.emit('nodeReady',{backend:{kind:'lavalink'}},{});
+  await manager.logger.flush();assert.equal(records.length,2);
+ }finally{await manager.shutdown();}
+});

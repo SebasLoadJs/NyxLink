@@ -1,4 +1,5 @@
 import { observeOperation } from '../observability/OpenTelemetry';
+import { getManagerLogRoute } from '../logging/ManagerLogRoute';
 import { requireGroupId, requireGuildId, groupCreateBody, groupPatchBody, validateGroup, validateGroups, validateGroupPatch, sponsorOptionsBody, sponsorSegmentsBody, validateSponsorState, type PlayerGroup, type GroupCreate, type GroupPatch, type GroupPatchResult, type SponsorBlockOptions, type SponsorBlockSegment, type SponsorBlockState } from '../backends/NodeLinkOrchestration';
 import { lyricsParameters, validateSourceHealth, validateNodeLinkStreamFormats, type LyricsRequestOptions, type SourceHealthResponse, type NodeLinkStreamFormats } from '../backends/NodeLinkContracts';
 import { hasLavaLyricsPlugin, lavaLyricsParameters, validateLavaLyrics, type LavaLyricsData, type LavaLyricsOptions } from '../backends/LavaLyricsContracts';
@@ -68,7 +69,7 @@ export class Rest {
             const monitor = this.node.manager.performanceMonitor;
             const execute = () => monitor ? monitor.measure(operation === 'REST.http' ? 'rest' : 'streamOpen', () => Reflect.apply(target, receiver, args)) : Reflect.apply(target, receiver, args);
             const run = () => observeOperation(this.node.manager, 'nyxlink.rest', async () => {
-                const aurora = this.node.manager.aurora;
+                const aurora = getManagerLogRoute(this.node.manager);
                 return aurora ? aurora.observe(operation === 'REST.http' ? 'rest' : 'stream', async () => execute(), { backend: this.node.backend?.kind }) : execute();
             }, result => {
                 if (result == null) return 'empty';
@@ -82,7 +83,7 @@ export class Rest {
                 return 'resolved';
             });
             const logger = this.node.manager.logger;
-            if (!logger?.isEnabled('error')) return run();
+            if (getManagerLogRoute(this.node.manager) || !logger?.isEnabled('error')) return run();
             let route = 'invalid-url';
             try {
                 // Credentials, hostname, query strings, session and guild path
@@ -133,7 +134,7 @@ export class Rest {
     private async featureRequest<T = any>(operation: ExtensionOperation, params: ExtensionRouteParameters, options: http.RequestOptions & { body?: any }, validate?: (response: unknown) => void): Promise<T> {
         const logger = this.node.manager.logger;
         const run = () => this.runFeatureRequest<T>(operation, params, options, validate);
-        return logger && logger.isEnabled('error')
+        return !getManagerLogRoute(this.node.manager) && logger && logger.isEnabled('error')
             ? logger.traceOperation('REST.' + operation, run, { nodeId: this.node.identifier, ...(params.guildId ? { guildId: params.guildId } : {}) })
             : run();
     }
@@ -288,7 +289,7 @@ export class Rest {
     public async updatePlayer(guildId: string, data: PlayerUpdatePayload, noReplace: boolean = false): Promise<PlayerUpdateAcknowledgement | null> {
         const logger = this.node.manager.logger;
         const run = () => this.updatePlayerRequest(guildId, data, noReplace);
-        return logger && logger.isEnabled('error')
+        return !getManagerLogRoute(this.node.manager) && logger && logger.isEnabled('error')
             ? logger.traceOperation('REST.updatePlayer', run, { nodeId: this.node.identifier, guildId }) : run();
     }
 

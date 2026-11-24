@@ -35,13 +35,15 @@ test('attached manager logger shows real node counts and detaches all its listen
     m.nodes.add({identifier:'measured-node',host:'127.0.0.1',port:2333,password:'test',secure:false});
     const logger=new Logger({level:'debug',color:false,timestamps:false});
     const detach=logger.attachManager(m);
-    m.emit('debug','Moonlink.js > Node >> visible-before-detach');
+    m.emit('debug','Moonlink.js > Node >> private-before-detach');
+    m.emit('nodeReady',{backend:{kind:'lavalink'}},{});
     logger.managerStatus(m);
     detach(); detach();
     m.emit('debug','Moonlink.js > Node >> hidden-after-detach');
-    m.emit('nodeConnected',m.nodes.nodes.get('measured-node'));
+    m.emit('nodeReady',{backend:{kind:'nodelink'}},{});
   `);
-  assert.match(output.stdout, /visible-before-detach/);
+  assert.equal((output.stdout.match(/Backend session ready/g)||[]).length,1);
+  assert.doesNotMatch(output.stdout,/private-before-detach/);
   assert.match(output.stdout, /SYSTEM STATUS/);
   assert.match(output.stdout, /measured-node/);
   assert.match(output.stdout, /0 players/);
@@ -51,8 +53,9 @@ test('attached manager logger shows real node counts and detaches all its listen
 });
 
 test('manager options can opt into logging without printing an automatic banner', () => {
-  const output = run(`const {Manager}=require('./dist'); const m=new Manager({nodes:[{host:'127.0.0.1',port:2333,password:'test',secure:false}],options:{logging:{level:'debug',color:false,timestamps:false}}}); m.emit('debug','Moonlink.js > Player >> enabled-by-config');`);
-  assert.match(output.stdout, /enabled-by-config/);
+  const output = run(`const {Manager}=require('./dist'); const m=new Manager({nodes:[{host:'127.0.0.1',port:2333,password:'test',secure:false}],options:{logging:{level:'debug',color:false,timestamps:false}}}); m.emit('nodeReady',{backend:{kind:'nodelink'}},{}); m.emit('debug','Moonlink.js > Player >> private-by-config');`);
+  assert.match(output.stdout, /Backend session ready/);
+  assert.doesNotMatch(output.stdout,/private-by-config/);
   assert.doesNotMatch(output.stdout, /AUDIO CLIENT/);
 });
 
@@ -68,9 +71,9 @@ test('failover panel follows the confirmed failure result and never prints Recov
     new Logger({level:'info',color:false}).attachManager(m);
     p.transferNode(target).then(result=>{if(result)throw new Error('false success');});
   `);
-  assert.match(output.stdout, /In progress/);
-  assert.match(output.stdout, /Failed/);
-  assert.doesNotMatch(output.stdout, /Recovered/);
+  assert.match(output.stdout, /Recovery initiated/);
+  assert.match(output.stdout + output.stderr, /Recovery failed/);
+  assert.doesNotMatch(output.stdout + output.stderr, /Recovery confirmed/);
 });
 
 test('opt-in logger redacts credentials from strings, objects and errors', () => {

@@ -1,13 +1,15 @@
 import type { Manager } from '../core/Manager';
+import type { AuroraEvents } from './AuroraEvents';
 
-// One manager may own only one automatic logging subscription, irrespective
-// of which public configuration alias or manual attachment was used.
-const owners = new WeakMap<Manager, symbol>();
-export function claimManagerLogRoute(manager: Manager): () => void {
+// One automatic canonical event subscription per manager.
+const owners = new WeakMap<Manager, AuroraEvents>();
+export function claimManagerLogRoute(manager: Manager, route: AuroraEvents): () => void {
     if (owners.has(manager)) throw new Error('Manager already has a logging route');
-    const owner = Symbol('manager-logging-route');
-    owners.set(manager, owner);
+    owners.set(manager, route);
     return () => {
-        if (owners.get(manager) === owner) owners.delete(manager);
+        if (owners.get(manager) === route) owners.delete(manager);
     };
+}
+export function getManagerLogRoute(manager: Manager): AuroraEvents | undefined {
+    return owners.get(manager);
 }

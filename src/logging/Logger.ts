@@ -12,7 +12,7 @@ import { formatDashboardObservation, formatErrorDiagnostic } from './TerminalFor
 import { formatPlayerTrace, type PlayerTraceOptions } from './PlayerTrace';
 import { LogPipeline, safeLogValue, type LogContext, type LogTransport, type StructuredLogRecord } from './StructuredLog';
 import type { Manager } from '../core/Manager';
-import { claimManagerLogRoute } from './ManagerLogRoute';
+import { AuroraEvents, type AuroraPinoTarget, type AuroraEvent } from './AuroraEvents';
 import { NodeState } from '../typings/types';
 import { terminalColor, terminalDepth, trueColor } from './TerminalCapabilities';
 import { formatStartupObservation } from './TerminalFormatter';
@@ -332,50 +332,35 @@ export class Logger {
     if (this.closed || this.pipeline.stats().closed) return () => {};
     const existing = this.managers.get(manager);
     if (existing) return existing;
-    const releaseRoute = claimManagerLogRoute(manager);
-    const detachDebug = this.attachLegacyDebug(manager);
-    const detachStatus = manager.on('nodeStateChange', () => this.managerStatus(manager));
-    const detachReady = manager.on('nodeReady', () => this.managerStatus(manager));
-    const detachDestroy = manager.on('nodeDestroy', () => this.managerStatus(manager));
-    const detachFailover = manager.on('playerNodeFailover', (player, report) => {
-      this.failover({ ...report, guildId: player.guildId });
-    });
-    const detachEvents = [
-      manager.on('nodeError', (node, error) => this.event('error', 'Node', 'node.error', { nodeId: node.identifier, error })),
-      manager.on('nodeReconnect', node => this.event('warn', 'Node', 'node.reconnect', { nodeId: node.identifier })),
-      manager.on('nodeDisconnect', (node, code) => this.event('warn', 'Node', 'node.disconnected', { nodeId: node.identifier, code })),
-      manager.on('trackStart', player => this.event('info', 'Player', 'track.started', { guildId: player.guildId, nodeId: player.node.identifier })),
-      manager.on('trackEnd', (player, _track, reason) => this.event('info', 'Player', 'track.ended', { guildId: player.guildId, nodeId: player.node.identifier, reason })),
-      manager.on('playerRecoveryStarted', player => this.event('info', 'Recovery', 'recovery.started', { guildId: player.guildId, nodeId: player.node.identifier })),
-      manager.on('playerRecoverySuccess', player => this.event('info', 'Recovery', 'recovery.completed', { guildId: player.guildId, nodeId: player.node.identifier })),
-      manager.on('playerRecoveryFailed', player => this.event('error', 'Recovery', 'recovery.failed', { guildId: player.guildId, nodeId: player.node.identifier })),
-      manager.on('sourceHealthChange', (node, event) => this.event('debug', 'Sources', 'source.health.changed', { nodeId: node.identifier, source: event.source, status: event.status })),
-      manager.on('queueAdd', player => this.event('debug', 'Queue', 'queue.added', { guildId: player.guildId, size: player.queue.size })),
-      manager.on('playerDestroy', player => this.event('info', 'Player', 'player.destroyed', { guildId: player.guildId, nodeId: player.node.identifier })),
-      manager.on('playerConnecting', player => this.event('debug', 'Voice', 'voice.connecting', { guildId: player.guildId, nodeId: player.node.identifier })),
-      manager.on('playerConnected', player => this.event('info', 'Voice', 'voice.connected', { guildId: player.guildId, nodeId: player.node.identifier })),
-      manager.on('playerDisconnected', player => this.event('info', 'Voice', 'voice.disconnected', { guildId: player.guildId, nodeId: player.node.identifier })),
-      manager.on('playerResuming', player => this.event('debug', 'Recovery', 'player.resuming', { guildId: player.guildId, nodeId: player.node.identifier })),
-      manager.on('playerResumed', player => this.event('info', 'Recovery', 'player.resumed', { guildId: player.guildId, nodeId: player.node.identifier })),
-      manager.on('playerSeek', (player, position) => this.event('debug', 'Player', 'player.seek', { guildId: player.guildId, positionMs: position })),
-      manager.on('playerPause', (player, paused) => this.event('debug', 'Player', 'player.pause', { guildId: player.guildId, paused })),
-      manager.on('playerStop', player => this.event('info', 'Player', 'player.stopped', { guildId: player.guildId })),
-      manager.on('queueEnd', player => this.event('info', 'Queue', 'queue.ended', { guildId: player.guildId })),
-      manager.on('filtersUpdate', player => this.event('debug', 'Filters', 'filters.updated', { guildId: player.guildId, nodeId: player.node.identifier })),
-    ];
+    // The former listener collection is replaced by the canonical event route.
+    // The deprecated transport API receives a projection, not raw Manager debug.
+    const legacyNames: Partial<Record<AuroraEvent['eventCode'], string>> = {
+      TRACK_STARTED: 'track.started', TRACK_ENDED: 'track.ended',
+      NODE_ERROR: 'node.error', NODE_DISCONNECTED: 'node.disconnected',
+      QUEUE_ADDED: 'queue.added', QUEUE_ENDED: 'queue.ended',
+      PLAYER_RESUMED: 'player.resumed', PLAYER_SEEKED: 'player.seek',
+      PLAYER_STOPPED: 'player.stopped', FILTERS_UPDATED: 'filters.updated',
+    };
+    const deliver = (record: AuroraEvent, message: string): void => {
+      const level = record.severity === 'fatal' ? 'error' : record.severity;
+      const context = { ...record.sanitizedContext,
+        ...(record.operationId ? { operationId: record.operationId } : {}),
+        ...(record.durationMs !== undefined ? { durationMs: record.durationMs } : {}),
+        ...(record.traceId ? { traceId: record.traceId, spanId: record.spanId } : {}),
+      };
+      this.event(level, record.category, legacyNames[record.eventCode] ?? record.eventCode, context, message);
+    };
+    const target: AuroraPinoTarget = { trace: deliver, debug: deliver, info: deliver, warn: deliver, error: deliver, fatal: deliver };
+    // The compatibility logger's own level is mutable; the bridge filters at delivery.
+    const route = new AuroraEvents({ level: 'trace', target });
+    route.attach(manager);
     let detached = false;
     const dispose = () => {
       if (detached) return;
       detached = true;
-      detachDebug();
-      detachStatus();
-      detachReady();
-      detachDestroy();
-      detachFailover();
-      for (const detach of detachEvents) detach();
+      route.close();
       this.disposers.delete(dispose);
       this.managers.delete(manager);
-      releaseRoute();
     };
     this.disposers.add(dispose);
     this.managers.set(manager, dispose);
