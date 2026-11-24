@@ -13,7 +13,7 @@ test('extended evidence is SHA bound and cannot approve release',()=>{
 test('rejects stale, short, failed, single-backend and incomplete reports',()=>{
  for(const change of [
  {sourceRevision:'b'.repeat(40)},{durationSeconds:60},{elapsedSeconds:599},{passed:false},{error:'failure'},
- {backends:[sample().backends[0]]},{cleanup:{players:1,nodes:0,activeResources:[]}},
+ {backends:[sample().backends[0]]},{backends:[null,null]},{samples:[null,null]},{cleanup:{players:1,nodes:0,activeResources:[]}},
  {cleanup:{players:0,nodes:0,activeResources:['Timeout']}},{samples:[]}
  ])assert.equal(inspectEndurance(revision,{...sample(),...change}).enduranceEvidenceComplete,false);
  assert.equal(inspectEndurance(revision,null).enduranceEvidenceComplete,false);

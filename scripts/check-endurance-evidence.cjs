@@ -20,7 +20,7 @@ function inspectEndurance(revision, report) {
     duration: Number.isInteger(report?.durationSeconds) && report.durationSeconds >= 600 &&
       Number.isFinite(report.elapsedSeconds) && report.elapsedSeconds >= report.durationSeconds,
     backends: Array.isArray(report?.backends) && report.backends.length === 2 &&
-      ['lavalink', 'nodelink'].every(kind => report.backends.some(b => b.backend === kind &&
+      ['lavalink', 'nodelink'].every(kind => report.backends.some(b => b && b.backend === kind &&
         typeof b.version === 'string' && b.version.length > 0 &&
         typeof b.image === 'string' && b.image.length > 0 &&
         Number.isSafeInteger(b.cycles) && b.cycles >= Math.floor(report.durationSeconds / 2) &&
@@ -29,7 +29,7 @@ function inspectEndurance(revision, report) {
     cleanup: report?.cleanup?.players === 0 && report?.cleanup?.nodes === 0 &&
       Array.isArray(report?.cleanup?.activeResources) && !report.cleanup.activeResources.includes('Timeout'),
     samples: Array.isArray(report?.samples) && report.samples.length >= 2 &&
-      report.samples.every(s => Number.isFinite(s.elapsedSeconds) && s.elapsedSeconds >= 0 &&
+      report.samples.every(s => s && Number.isFinite(s.elapsedSeconds) && s.elapsedSeconds >= 0 &&
         Number.isFinite(s.heapUsedBytes) && s.heapUsedBytes >= 0 &&
         Number.isFinite(s.rssBytes) && s.rssBytes >= 0),
   };

@@ -24,6 +24,8 @@ The NyxLink development line contains substantial modifications, including:
   improvements with regression and integration tests.
 - Optional Redis persistence, distributed guild ownership, voice IPC fencing,
   and private metrics.
+- Opt-in Aurora structured logging, terminal diagnostics and host-owned
+  OpenTelemetry integration; no mandatory telemetry SDK in the audio core.
 - Updated examples, TypeScript declarations, diagnostic redaction and
   automated release and backend compatibility tests.
 

@@ -53,3 +53,33 @@ Remaining unknowns: provenance and distribution rights for `assets/nyxlink_banne
 **Do not silently relicense the upstream work.** The final release must not
 be tagged or published until the attribution review, package integrity,
 ownership checks and live voice acceptance all pass.
+
+## Source-level notice inventory — 2026-11-24
+
+Upstream default branch returned by GitHub: `v5.2`. Inspected revision
+[`3d76632abc6c9759427b3529e9b6701006464d9b`](https://github.com/Ecliptia/moonlink.js/commit/3d76632abc6c9759427b3529e9b6701006464d9b).
+The upstream root `index.ts` and all 25 files under `src/` were read.
+A line-level search for copyright, @license, SPDX-License-Identifier,
+all rights reserved, @author and attribution returned no matching lines.
+This is a targeted notice inventory, not a full plagiarism or license
+audit. It does not establish whether a different historical fork point
+contained notices or whether additional contributor grants are necessary.
+
+The upstream recursive tree exposed only one path matching
+license/notice/copyright/authors/contributors: `LICENSE`, Git blob
+`cee9c3cff349671ef36ff601176679e452f3e5a5`. The same-path source comparison
+found one byte-identical source file, `src/connectors/index.ts`; this
+does not imply the remaining files lack derivative content.
+
+| Asset | Git blob identity | Decision |
+| --- | --- | --- |
+| Upstream `assets/moonlink_banner.png` | `c0f532c701e1db4a337c35d9d3e9a34e9a364b5d` | Not shipped at that path by NyxLink |
+| NyxLink `assets/nyxlink_banner.png` | `6524e8ce36bf86b2df1dbfa0e93acca82e898b8d` | Different bytes; creation provenance and distribution rights still unverified |
+
+The root license blob is now checked by the package gate, independently
+of the packaged-file presence check. The modification notice now also
+records Aurora and the optional host telemetry integration. Review of
+asset provenance, historical notices, dependency licenses, OSL obligations
+and npm account authorization remains open. No legal or release approval
+is inferred. CodeQL workflow success is not equivalent to an empty alert
+inventory; repository alert endpoints were not accessible in this review.
