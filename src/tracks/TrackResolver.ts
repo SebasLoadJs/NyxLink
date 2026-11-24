@@ -1,6 +1,7 @@
 import { Track } from '../entities/Track';
 import type { Node } from '../entities/Node';
 import { resolveMetadata } from './MetadataTrackResolver';
+import { awaitWithAbort } from './AbortableLookup';
 
 export class TrackResolutionError extends Error {
     public readonly code = 'TRACK_RESOLUTION_FAILED';
@@ -39,7 +40,20 @@ export class TrackResolver {
         }
         // Resolve against the destination itself, never through Manager.search/native-source shortcuts.
         // v4 loading contract: https://lavalink.dev/api/rest#track-loading
-        const loaded = uri && /^https?:\/\//i.test(uri) ? await target.rest.loadTracks(uri, { timeoutMs: 10000, signal }) : undefined;
+        let loaded: Awaited<ReturnType<typeof target.rest.loadTracks>> | undefined;
+        if (uri && /^https?:\/\//i.test(uri)) {
+            const timeout = new AbortController();
+            const timer = setTimeout(() => timeout.abort(new TrackResolutionError('Destination track lookup timed out')), 10000);
+            const activeSignal = signal ? AbortSignal.any([signal, timeout.signal]) : timeout.signal;
+            try {
+                loaded = await awaitWithAbort(Promise.resolve().then(() => {
+                    activeSignal.throwIfAborted();
+                    return target.rest.loadTracks(uri, { timeoutMs: 10000, signal: activeSignal });
+                }), activeSignal);
+            } finally {
+                clearTimeout(timer);
+            }
+        }
         assertDestination();
         const data = loaded?.loadType === 'track' ? loaded.data : metadata ? await resolveMetadata(track, target, metadata, signal) : undefined;
         assertDestination();
