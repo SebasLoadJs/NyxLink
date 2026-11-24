@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { Manager } = require('../dist');
 const { NodeState } = require('../dist/src/typings/types.js');
+const { NodeSelector } = require('../dist');
 
 function audioNode(identifier, overrides = {}) {
   return {
@@ -24,6 +25,99 @@ function managerWith(nodes, options = {}) {
   for (const node of nodes) manager.nodes.nodes.set(node.identifier, node);
   return manager;
 }
+
+test('weighted selection combines measured costs and preserves legacy selection by default', () => {
+  const a = audioNode('a', { latency: 100, statsReceivedAt: Date.now() });
+  const b = audioNode('b', { latency: 5, statsReceivedAt: Date.now() });
+  b.stats.players = 5;
+  assert.equal(NodeSelector.select([a, b]), a);
+  assert.equal(NodeSelector.select([a, b], {}, { scoreWeights: { players: 1, latency: 0.1 } }), b);
+  b.stats.memory.used = 99;
+  assert.equal(NodeSelector.select([a, b], {}, { scoreWeights: { memory: 100 } }), a);
+});
+
+test('weighted selection rejects stale, future, absent and nonfinite measurements as winning costs', () => {
+  const valid = audioNode('valid', { latency: 20, statsReceivedAt: Date.now() });
+  for (const receivedAt of [undefined, NaN, Date.now() + 100000, Date.now() - 200000]) {
+    const invalid = audioNode('invalid', { statsReceivedAt: receivedAt });
+    invalid.stats.players = 0;
+    assert.equal(NodeSelector.select([invalid, valid], {}, { scoreWeights: { players: 1 } }), valid);
+  }
+  const unknown = audioNode('unknown', { latency: -1 });
+  assert.equal(NodeSelector.select([unknown, valid], {}, { scoreWeights: { latency: 1 } }), valid);
+  valid.statsReceivedAt = undefined;
+  assert.equal(NodeSelector.select([unknown, valid], {}, { scoreWeights: { latency: 1 } }), valid);
+});
+
+test('weighted costs support configured negative priorities and ignore disabled metrics', () => {
+  const a = audioNode('a', { priority: -10 });
+  const b = audioNode('b', { priority: 1 });
+  assert.equal(NodeSelector.select([a, b], {}, { scoreWeights: { priority: 1, memory: 0 } }), a);
+});
+
+test('memory costs reject invalid denominators rather than converting Infinity into idle usage', () => {
+  const valid = audioNode('valid', { statsReceivedAt: Date.now() });
+  for (const allocated of [0, -1, NaN, Infinity]) {
+    const invalid = audioNode('invalid', { statsReceivedAt: Date.now() });
+    invalid.stats.memory.allocated = allocated;
+    assert.equal(NodeSelector.select([invalid, valid], {}, { scoreWeights: { memory: 1 } }), valid);
+  }
+});
+
+test('hysteresis retains an eligible preferred node at the margin and switches above it', () => {
+  const preferred = audioNode('preferred');
+  const candidate = audioNode('candidate');
+  preferred.stats.players = 10;
+  candidate.stats.players = 9;
+  const options = { preferredNode: 'preferred', minimumScoreImprovement: 1 };
+  assert.equal(NodeSelector.select([candidate, preferred], { selectionStrategy: 'leastPlayers' }, options), preferred);
+  candidate.stats.players = 8;
+  assert.equal(NodeSelector.select([candidate, preferred], { selectionStrategy: 'leastPlayers' }, options), candidate);
+});
+
+test('hysteresis cannot retain excluded, draining, incompatible or unhealthy preferred nodes', () => {
+  const preferred = audioNode('preferred');
+  const candidate = audioNode('candidate');
+  const options = { preferredNode: 'preferred', minimumScoreImprovement: 1000 };
+  for (const selection of [{ exclude: ['preferred'] }, { allowUnhealthyFallback: false }]) {
+    preferred.stats.cpu.systemLoad = 0.99;
+    assert.equal(NodeSelector.select([preferred, candidate], {}, { ...options, ...selection }), candidate);
+  }
+  preferred.draining = true;
+  assert.equal(NodeSelector.select([preferred, candidate], {}, options), candidate);
+});
+
+test('hysteresis cannot retain unknown weighted costs over an observed candidate', () => {
+  const preferred = audioNode('preferred', { latency: -1 });
+  const candidate = audioNode('candidate', { latency: 5 });
+  assert.equal(NodeSelector.select([preferred, candidate], {}, {
+    preferredNode: 'preferred', minimumScoreImprovement: 1000, scoreWeights: { latency: 1 },
+  }), candidate);
+});
+
+test('weighted selection keeps stable fallback order when every selected measurement is unknown', () => {
+  const a = audioNode('a'), b = audioNode('b');
+  assert.equal(NodeSelector.select([a, b], {}, { scoreWeights: { latency: 1 } }), a);
+});
+
+test('region and source preferences precede weighted cost and hysteresis', () => {
+  const preferred = audioNode('preferred', { regions: ['eu'], latency: 1 });
+  const candidate = audioNode('candidate', { regions: ['us'], latency: 100 });
+  const options = { scoreWeights: { latency: 1 }, preferredNode: 'preferred', minimumScoreImprovement: 1000 };
+  assert.equal(NodeSelector.select([preferred, candidate], {}, { ...options, region: 'us' }), candidate);
+  preferred.sourceHealth = new Map([['youtube', { receivedAt: Date.now(), health: { status: 'unavailable' } }]]);
+  candidate.sourceHealth = new Map([['youtube', { receivedAt: Date.now(), health: { status: 'healthy' } }]]);
+  assert.equal(NodeSelector.select([preferred, candidate], {}, { ...options, preferSource: 'youtube' }), candidate);
+});
+
+test('invalid weighted selection and hysteresis configurations fail before selection', () => {
+  for (const scoreWeights of [{}, { cpu: -1 }, { cpu: NaN }, { memory: Infinity }, { unknown: 1 }, { players: 0 }, [], null]) {
+    assert.throws(() => NodeSelector.select([], {}, { scoreWeights }), TypeError);
+  }
+  for (const selection of [{ preferredNode: '' }, { minimumScoreImprovement: 1 }, { preferredNode: 'a', minimumScoreImprovement: -1 }]) {
+    assert.throws(() => NodeSelector.select([], {}, selection), TypeError);
+  }
+});
 
 test('excluding the only READY node still permits a connected fallback node', () => {
   const excluded = audioNode('ready');

@@ -3,6 +3,7 @@ import type { INodeOptions } from '../typings/Interfaces';
 import { NodeState } from '../typings/types';
 import { NodeHealthMonitor } from './NodeHealthMonitor';
 import type { BackendKind } from '../backends/BackendAdapter';
+import { weightedNodeScore, validateScoreWeights, type NodeScoreWeights } from './NodeScoring';
 
 /** Hard requirements survive failover; region defaults to a soft preference. */
 export type NodeRequirements = {
@@ -12,6 +13,11 @@ export type NodeRequirements = {
     readonly regionPolicy?: 'prefer' | 'require';
 };
 export type NodeSelectionOptions = NodeRequirements & {
+    /** Opt-in weighted cost; lower is better. Missing/stale selected metrics cost Infinity. */
+    scoreWeights?: NodeScoreWeights;
+    /** Retain this eligible node unless another improves cost by more than this absolute margin. */
+    preferredNode?: string;
+    minimumScoreImprovement?: number;
     exclude?: readonly string[];
     allowUnhealthyFallback?: boolean;
     /** Soft preference only; unknown or stale provider telemetry is not a failure. */
@@ -29,6 +35,8 @@ export class NodeSelector {
         const strings = (value: unknown): value is readonly string[] => Array.isArray(value) &&
             Array.from(value).every(item => typeof item === 'string' && item.trim().length > 0);
         if (!selection || typeof selection !== 'object' || Array.isArray(selection) ||
+            selection.preferredNode !== undefined && (typeof selection.preferredNode !== 'string' || !selection.preferredNode.trim()) ||
+            selection.minimumScoreImprovement !== undefined && (!Number.isFinite(selection.minimumScoreImprovement) || selection.minimumScoreImprovement < 0 || !selection.preferredNode) ||
             selection.backend !== undefined && !['lavalink', 'nodelink'].includes(selection.backend) ||
             selection.requiredCapabilities !== undefined && !strings(selection.requiredCapabilities) ||
             selection.exclude !== undefined && !strings(selection.exclude) ||
@@ -40,6 +48,7 @@ export class NodeSelector {
             selection.sourceHealthMaxAgeMs !== undefined && (!Number.isSafeInteger(selection.sourceHealthMaxAgeMs) || selection.sourceHealthMaxAgeMs < 1 || selection.sourceHealthMaxAgeMs > 3600000)) {
             throw new TypeError('Invalid node selection requirements');
         }
+        if (selection.scoreWeights !== undefined) validateScoreWeights(selection.scoreWeights);
     }
 
     private static rejection(node: Node, selection: NodeSelectionOptions): NodeRejection | undefined {
@@ -119,8 +128,10 @@ export class NodeSelector {
             candidates = candidates.filter((_node,index) => ranks[index] === best);
         }
         const strategy = options.selectionStrategy ?? 'leastLoad';
-        if (strategy === 'random') return candidates[Math.floor(Math.random() * candidates.length)];
+        if (strategy === 'random' && !selection.scoreWeights) return candidates[Math.floor(Math.random() * candidates.length)];
+        const now = Date.now();
         const score = (node: Node): number => {
+            if (selection.scoreWeights) return weightedNodeScore(node, selection.scoreWeights, options.maxStatsAgeMs ?? 120000, now);
             const stats = node.stats;
             switch (strategy) {
                 case 'players': case 'leastPlayers': return measured(stats?.players);
@@ -134,6 +145,11 @@ export class NodeSelector {
             }
         };
         // Strict comparison preserves insertion order for equal/unknown scores.
-        return candidates.reduce((best, node) => score(node) < score(best) ? node : best);
+        const costs = new Map(candidates.map(node => [node, score(node)]));
+        const best = candidates.reduce((best, node) => costs.get(node)! < costs.get(best)! ? node : best);
+        const preferred = candidates.find(node => node.identifier === selection.preferredNode);
+        if (preferred && Number.isFinite(costs.get(preferred)) &&
+            costs.get(preferred)! - costs.get(best)! <= (selection.minimumScoreImprovement ?? 0)) return preferred;
+        return best;
     }
 }

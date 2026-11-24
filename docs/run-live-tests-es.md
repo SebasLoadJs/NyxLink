@@ -2,6 +2,8 @@
 
 El responsable ejecutará estas pruebas más adelante. No se ha conectado el bot ni reproducido audio en esta sesión. El ejecutor permite revisar toda la configuración **sin red** antes de armar la prueba real.
 
+El [registro de pendientes](pending-real-world-acceptance.md) reúne los escenarios, criterios y evidencia por ID. Este procedimiento automatiza cinco escenarios; pruebas de fallo/partición, mixer, proveedores activos, distribuido y carga representativa requieren además el ejercicio manual indicado allí.
+
 ## 1. Preparar las dos configuraciones privadas
 
 Desde la raíz del repositorio, en PowerShell:

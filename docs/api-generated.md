@@ -2242,12 +2242,23 @@ export type NodeRequirements = {
 };
 ```
 
+## NodeScoreWeights
+
+[Source declaration](../src/nodes/NodeScoring.ts)
+
+```ts
+export type NodeScoreWeights = Partial<Record<'players' | 'cpu' | 'memory' | 'latency' | 'priority', number>>;
+```
+
 ## NodeSelectionOptions
 
 [Source declaration](../src/nodes/NodeSelector.ts)
 
 ```ts
 export type NodeSelectionOptions = NodeRequirements & {
+    scoreWeights?: NodeScoreWeights;
+    preferredNode?: string;
+    minimumScoreImprovement?: number;
     exclude?: readonly string[];
     allowUnhealthyFallback?: boolean;
     preferSource?: string;

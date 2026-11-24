@@ -2,6 +2,8 @@
 
 Fecha de revisión: **23 de noviembre de 2026**. Rama: `dev` (no `v5.2`).
 
+Actualización de continuación — **24 de noviembre**, rama `codex/resume-stabilization`, [PR #32](https://github.com/SebasLoadJs/NyxLink/pull/32): nueve workflows aprobados en `770053d8`, incluidos Node 22/24, protocolos baseline/modern, plugins, Redis, CodeQL y endurance 600,6 s. Esa evidencia reemplaza el fallo transitorio histórico descrito abajo, pero no certifica automáticamente cambios posteriores. Las pruebas externas quedan en [un único registro pendiente](pending-real-world-acceptance.md); el [cierre técnico](implementation-closure.md) incluye el refactor incremental y la selección ponderada/histéresis del nuevo incremento, a revalidar en HEAD.
+
 ## Procedencia y reglas
 
 Este inventario restaura los IDs de `NyxLink-Plan-Maestro-v1/08-ROADMAP/BACKLOG.csv` (plan del 1 de noviembre). Las fases **0–5 aquí son las del plan original**. No deben confundirse con los documentos técnicos `docs/phase-1-audit.md` a `docs/phase-5-playback-recovery.md`, que describen incrementos posteriores con numeración distinta.
@@ -35,17 +37,17 @@ La implementación posterior agrega pipeline/JSON/correlación/diagnósticos y d
 | P1-015 | 1 (P1) | Health y selección de nodos | CI verificado | `src/nodes/NodeSelector.ts`, `tests/node-selection.test.cjs` | Medir selección bajo carga real |
 | P1-016 | 1 (P1) | Resume 404 y reconexión WS | CI verificado | `src/nodes/SessionRecovery.ts`, `tests/node-recovery-rest.test.cjs` | Confirmar recuperación de voz |
 | P1-017 | 1 (P1) | Failover y transferNode | CI verificado | `src/nodes/NodeFailover.ts`, `tests/player-migration-regression.test.cjs` | Confirmar continuidad audible y fallo en vivo |
-| P1-018 | 1 (P1) | Logging/eventos estructurados | Implementado parcialmente | `src/logging/Logger.ts`, `tests/logger.test.cjs` | Cerrar revisión de observabilidad y seguridad de sinks |
+| P1-018 | 1 (P1) | Logging/eventos estructurados | Implementado; regresiones de sinks/redacción/cierre | `src/logging/Logger.ts`, `tests/logger.test.cjs`, `docs/logging-guide.md` | LIVE-12: aceptación operativa real |
 | P1-019 | 1 (P1) | Staging Lavalink con audio real | Harness de comandos y reconexión para Lavalink/NodeLink y crossfade NodeLink implementado; aceptación audible manual pendiente | `scripts/test-live-voice.cjs`, `scripts/live-voice-commands.cjs`, `tests/live-voice-safety.test.cjs`, `tests/live-voice-commands.test.cjs`, `docs/live-voice-verification.md` | Ejecutar los tres modos autorizados, certificar audio, seek, crossfade, voz recuperada y fallos reales de nodo/partición |
 | P1-020 | 2 (P1) | Detección NodeLink/capabilities | CI verificado | `src/backends/BackendDetector.ts`, `tests/backend-features.test.cjs` | Fijar matriz por versión del servidor |
 | P1-021 | 2 (P1) | REST/WS NodeLink y errores | CI verificado | `scripts/test-nodelink-modern.cjs`, `tests/nodelink-modern-contracts.test.cjs` | Probar audio real de NodeLink actualizado |
-| P2-022 | 2 (P2) | Mixer y lifecycle | Implementado parcialmente | `src/backends/NodeLinkOrchestration.ts`, `tests/nodelink-orchestration.test.cjs` | Mezcla audible, cleanup, error y concurrencia |
+| P2-022 | 2 (P2) | Mixer y lifecycle | Contratos/serialización/cancelación implementados | `src/backends/NodeLinkMixContracts.ts`, `src/entities/Player.ts`, pruebas mixer | LIVE-07: mezcla audible y cleanup del servidor activo |
 | P2-023 | 2 (P2) | Lyrics y chapters tipados | CI verificado | `src/backends/NodeLinkContracts.ts`, `tests/nodelink-modern-contracts.test.cjs` | Proveedores reales, idiomas y ausencias |
 | P2-024 | 2 (P2) | Direct stream opcional | CI verificado | `src/backends/NodeLinkStreamResponse.ts`, `tests/nodelink-stream-format.test.cjs` | Verificar proveedor autorizado y límites reales |
 | P2-025 | 2 (P2) | Eventos extendidos NodeLink | CI verificado | `src/nodes/SourceHealthMonitor.ts`, `tests/source-health-events.test.cjs` | Inventario de eventos según versión exacta |
 | P2-026 | 3 (P2) | Resolver search y fuentes | CI verificado | `src/search/SearchService.ts`, `tests/search.test.cjs` | Recomendaciones reales y degradación de proveedores |
 | P2-027 | 3 (P2) | Caché opcional búsqueda TTL | Implementado; CI actual pendiente | `src/search/SearchService.ts`, `tests/search.test.cjs` | Revalidar identidad de nodos y reemplazo en CI |
-| P2-028 | 3 (P2) | Documentación y migración | Implementado parcialmente | `docs/migrating-from-moonlink.md`, `README.md` | Guías de API completas, recetas y changelog de release |
+| P2-028 | 3 (P2) | Documentación y migración | Implementado | API generada, guías/recetas compiladas, migración y CHANGELOG unreleased | Notas de versión publicada cuando se autorice RELEASE-03 |
 | P2-029 | 3 (P2) | API pública CJS/TS end-to-end | CI verificado | `tests/types/public-api.ts`, `scripts/test-package.cjs` | Repetir tras fijar la versión candidata |
 | P2-030 | 4 (P2) | Nombre y titularidad npm | Implementado parcialmente | `package.json`, `scripts/release-policy.cjs` | Verificar propiedad npm y permisos de distribución |
 | P2-031 | 4 (P2) | Release candidate | Pendiente | `docs/release-5.3-plan.md` | Preparar 5.3.0-rc.1, probar instalación npm next |
@@ -55,7 +57,7 @@ La implementación posterior agrega pipeline/JSON/correlación/diagnósticos y d
 | P3-035 | 5 (P3) | YouTube LiveChat | Implementado, lifecycle con regresiones | `src/entities/YouTubeLiveChat.ts`, `tests/youtube-livechat-lifecycle.test.cjs`, `docs/phase-3-nodelink.md` | Verificar chat real, permisos del proveedor y rate limits |
 | P3-036 | 5 (P3) | Storage externo y multi-proceso | Redis CAS, leases e IPC de voz v2 con secuencias y entrega serializada; CI final en verificación | `src/database/RedisStorage.ts`, `src/database/RedisGuildLeaseCoordinator.ts`, `src/cluster/GuildOwnership.ts`, `src/cluster/RedisGuildIpcRouter.ts`, `tests/integration/redis-guild-ipc.test.cjs`, `tests/redis-guild-ipc.test.cjs`, `docs/redis-storage.md` | Completar CI del SHA definitivo, migrar clientes IPC v1 a v2, enlazar gateway autenticado y probar traspaso audible entre shards |
 | P3-037 | 5 (P3) | API privada de métricas opt-in | Implementado, CI final pendiente | `src/observability/PrivateMetricsServer.ts`, `tests/private-metrics.test.cjs`, `tests/types/public-api.ts`, `docs/private-metrics.md` | Verificar CI en HEAD, integración con panel autorizado y privacidad operativa real |
-| P3-038 | 5 (P3) | Refactor gradual Node/Player | Implementado parcialmente | `src/players/PlayerMigration.ts`, `src/nodes/SessionRecovery.ts` | Completar límites de módulos sin romper API |
+| P3-038 | 5 (P3) | Refactor gradual Node/Player | Incremento implementado; revalidar nuevo HEAD | SessionRecovery, VoiceRecovery, PlayerMigration, QueuePreload, comandos y PlaybackAttempt | API conservada; validar checks por SHA, sin reescritura adicional obligatoria |
 
 ## Ampliaciones acordadas después del plan original
 

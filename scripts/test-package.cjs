@@ -100,8 +100,9 @@ async function main() {
     const example = run(process.execPath, ['example-smoke.cjs'], consumer); assert.equal(example.stdout, ''); assert.equal(example.stderr, '');
     checks.push('TypeScript example compile and CommonJS factory/cleanup without login');
     await fs.copyFile(path.join(root, 'examples/observability.ts'), path.join(consumer, 'observability.ts'));
-    run(process.execPath, [tsc, '--noEmit', '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', 'observability.ts'], consumer);
-    checks.push('structured logging, diagnostics and typed mix example compile from installed package');
+    await fs.copyFile(path.join(root, 'examples/node-selection.ts'), path.join(consumer, 'node-selection.ts'));
+    run(process.execPath, [tsc, '--noEmit', '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', 'observability.ts', 'node-selection.ts'], consumer);
+    checks.push('logging, diagnostics, typed mix and weighted node-selection examples compile from installed package');
     passed = true;
   } finally {
     const report = { timestamp: new Date().toISOString(), scope: fromRegistry ? 'published public npm installation; no Discord' : 'packed local installation; no registry publication or Discord',

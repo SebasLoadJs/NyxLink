@@ -6,6 +6,8 @@ Tras autorización explícita del responsable se creó el commit de implementaci
 
 El responsable confirmó que hará las pruebas de voz más adelante. Quedaron preparados el [handoff en español](run-live-tests-es.md), cinco escenarios armados explícitamente y un runner separado de soak 24–72 h. No se usaron credenciales reales ni se conectó el bot.
 
+Continuación solicitada: las pruebas externas y puertas de publicación se consolidaron en [pending-real-world-acceptance.md](pending-real-world-acceptance.md), con IDs, criterios y responsable. El [cierre técnico](implementation-closure.md) inventaría los módulos y la frontera upstream. Este incremento añade selección ponderada/histéresis opt-in, separa política/planificador de preload y corrige confirmaciones de volumen tras destroy o reemplazo de sesión. La evidencia CI de `770053d8` fue satisfactoria (nueve workflows, endurance 600,6 s); el nuevo incremento requiere sus propios checks en el HEAD del PR.
+
 ## Cambios de este bloque
 
 | Componente | Antes | Cambio concreto | Verificación | Estado |
@@ -24,12 +26,12 @@ El responsable confirmó que hará las pruebas de voz más adelante. Quedaron pr
 | Capítulo | Estado conservador | Evidencia o deuda específica |
 | --- | --- | --- |
 | 0 — Misión principal | En desarrollo | Cliente Lavalink v4/NodeLink conservado; publicación y aceptación final pendientes |
-| 1 — Auditoría técnica completa | Parcial | Auditorías previas más correcciones de recuperación/mixer/logging; no auditoría exhaustiva ni eliminación certificada de todos los bugs |
-| 2 — Modernización del núcleo | Parcial | Módulos existentes preservados; nueva extracción VoiceRecovery; Node y Player siguen requiriendo revisión incremental |
+| 1 — Auditoría técnica completa | Revisión técnica documentada | Inventario por subsistema, defectos corregidos y límites upstream en implementation-closure.md; no certifica ausencia de todos los bugs |
+| 2 — Modernización del núcleo | Incremento gradual implementado | Límites SessionRecovery/VoiceRecovery/PlayerMigration/comandos/intentos/QueuePreload; fachadas públicas conservadas y volumen async cercado |
 | 3 — Multi-backend engine 2.0 | Verificado en CI en 2981fd84; revalidar HEAD | Adapters/capacidades y laboratorios baseline/modern/plugins aprobados; la voz real permanece separada |
-| 4 — Smart node orchestration | Parcial | Selector, salud, circuitos y failover existentes; carga/regiones y continuidad real pendientes |
-| 5 — Player engine/audio | Parcial | Cola/replay/preload/crossfade existentes y mixer tipado/concurrente; AutoMix/audio real y cleanup remoto por backend pendientes |
-| 6 — NodeLink intelligence | Parcial | Salud/fuentes/stream/grupos/lyrics existentes; contrato mixer revisado en revisión fijada; falta aceptación de todas las funciones/versiones upstream |
+| 4 — Smart node orchestration | Implementado; aceptación externa separada | Selector por restricciones, fuentes/salud/circuitos; pesos e histéresis opt-in; LIVE-06/11 para carga/regiones/continuidad |
+| 5 — Player engine/audio | Cliente implementado; aceptación de audio separada | Cola/replay/preload/crossfade y mixer tipado/concurrente; AutoMix interno del servidor; LIVE-05/07 para audio/cleanup remoto |
+| 6 — NodeLink intelligence | Contratos de revisión fijada implementados | Salud/fuentes/stream/grupos/lyrics/mixer; AutoMix y workers delimitados como servidor, sin inventar endpoints; proveedores activos en LIVE-08 |
 | 7 — Observability engine | Implementado localmente; aceptación operativa pendiente | Pipeline, JSON/destinos, privacidad, counters, HTTP/open-stream spans y eventos de lifecycle; sin inferir internos del servidor |
 | 8 — Terminal design system | Implementado localmente; refinamiento visual abierto | Layouts diferenciados compact/standard/detailed/diagnostic, ASCII/NO_COLOR, ancho y paneles observados |
 | 9 — Structured event timeline | Implementado localmente | Retención opt-in acotada, filtros por trace/guild, records inmutables; no almacenamiento durable |
@@ -49,6 +51,9 @@ El responsable confirmó que hará las pruebas de voz más adelante. Quedaron pr
 | 23 — Criterios de aceptación | No cerrados | No se declara modernización completa ni release estable con gates externos y deuda técnica abiertos |
 
 ## Validación ejecutada
+
+- Continuación de implementación: **963/963 pruebas en Node 22.23.5 y 24.11.1**, sin fallos ni cancelaciones, concurrencia local 4; build estricto y contratos públicos aprobados. Referencia regenerada de **209 exports**, incluyendo NodeScoreWeights; ejemplo de selección compilado por el consumidor empaquetado. Logs locales privados: `.runtime/modernization/continuation-node22-tests.log` y `continuation-node24-tests.log`. El CI del nuevo commit se registra en el PR por SHA, separado de los resultados históricos siguientes.
+- Consumidor del incremento en Node 24: siete comprobaciones aprobadas, incluyendo la receta de selección ponderada; pack de 275 archivos aprobado, sin publicación. Reporte: `.runtime/modernization/continuation-package-node24.json`.
 
 - Primer candidato: 930 pruebas aprobadas en Node.js 24.11.1 y 22.23.5, además de CI. El incremento de trazas/HTTP y handoff eleva el inventario; los resultados locales finales están en `.runtime/modernization/final-node24-coverage.log` y `final-node22-tests.log`.
 - Incremento final: **951/951 pruebas aprobadas en cada versión de Node.js**, sin fallos ni cancelaciones; cobertura recogida en Node 24. Concurrencia local limitada a cuatro procesos por suite. Incluye nueve pruebas del runner de voz, dos de configuración de soak, trazas HTTP/stream y etapas de migración.
@@ -80,7 +85,7 @@ El benchmark existente de persistencia de cola también pasó: cinco muestras de
 1. Mantener CI sobre el mismo SHA final, con baseline/modern, plugins, Redis, CodeQL y endurance >=600 s; los resultados de 2981fd84 son históricos para cambios posteriores.
 2. Cinco reportes Discord ligados al candidato y observación humana de audio/crossfade/reconexión. El responsable aplazó estas ejecuciones; el runner y las configuraciones vacías están listos.
 3. Soak de 24–72 horas y carga representativa. El runner aislado está preparado para un host Linux con contenedores; un benchmark de segundos no sustituye esa evidencia ni la carga de voz real.
-4. Deuda explícita de las filas parciales: revisión adicional de Node/Player y aceptación de capacidades/versiones con evidencia upstream/backend, sin reescrituras ni promesas de audio no escuchado.
+4. Mantener la frontera de compatibilidad fijada y revisar nuevas versiones cuando se adopten; el incremento Node/Player y la revisión de contratos están documentados en implementation-closure.md. El audio y proveedores activos siguen en la aceptación externa.
 5. Revisión de atribución OSL-3.0 y derechos de assets, verificación de titularidad npm, decisión de versión nueva y autorizaciones separadas para RC y estable.
 
 No se marca ninguna tarea contractual como Done ni se crea una RC para eludir estos requisitos.

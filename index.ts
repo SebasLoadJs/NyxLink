@@ -31,6 +31,7 @@ export { BackendDetector } from './src/backends/BackendDetector';
 export { LavalinkAdapter } from './src/backends/LavalinkAdapter';
 export { NodeLinkAdapter } from './src/backends/NodeLinkAdapter';
 export { NodeSelector } from './src/nodes/NodeSelector';
+export type { NodeScoreWeights } from './src/nodes/NodeScoring';
 export type { NodeRequirements, NodeSelectionOptions, NodeRejection, NodeRejectionReason } from './src/nodes/NodeSelector';
 export { NodeHealthMonitor } from './src/nodes/NodeHealthMonitor';
 export { NodeCircuitBreaker } from './src/nodes/NodeCircuitBreaker';

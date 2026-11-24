@@ -1,5 +1,20 @@
 # Backend compatibility matrix — verified baseline
 
+## Latest verified development checkpoint — 2026-11-24
+
+At NyxLink `770053d892939650cd0e44f5603ed8af49727409`, [validation](https://github.com/SebasLoadJs/NyxLink/actions/runs/45318101584), [baseline/modern protocols and plugins](https://github.com/SebasLoadJs/NyxLink/actions/runs/45318101522), [Redis](https://github.com/SebasLoadJs/NyxLink/actions/runs/45318101657) and [600-second endurance](https://github.com/SebasLoadJs/NyxLink/actions/runs/45318101691) passed. The image and plugin pins remain those in `tests/integration/backend-servers.json`. This supersedes the transient download failure recorded in the historical resume checkpoint below. New commits require their own checks in [PR #32](https://github.com/SebasLoadJs/NyxLink/pull/32).
+
+| Fixed profile | Scope accepted by automated checks | Scope still pending |
+| --- | --- | --- |
+| Lavalink 4.2.2 | v4 REST/WS/authentication/session recovery/empty-player migration | Audible commands, track-active filters, voice recovery and production sources |
+| NodeLink baseline 804e0d6 | Common v4 protocol plus enabled/disabled extension route scenarios | Live voice, populated providers and active mixer audio |
+| NodeLink modern 97bbce1 | Common protocol, Source Health, groups CRUD, SponsorBlock, crossfade control, lyrics/captions request contracts and direct PCM | Actual synchronization, crossfade/AutoMix, audible skipping, populated providers |
+| LavaLyrics 1.1.0 / SponsorBlock 3.0.1 | Pinned plugin detection and enabled/disabled HTTP/WS contracts | Provider permissions/content/rate limits and actual audio effects |
+
+NodeLink seek patch acceptance is tracked separately; it does not certify unpatched images. [Operator acceptance](pending-real-world-acceptance.md) remains pending. The sections below retain historical observations rather than claiming all versions behave identically.
+
+## Earlier baseline
+
 Evidence: commit [4c0f60e](https://github.com/SebasLoadJs/NyxLink/commit/4c0f60eb467cc2fb451b7eb27746280ee44f9db6), [554 unit/contract tests](https://github.com/SebasLoadJs/NyxLink/actions/runs/44990871520), [26 integration tests and extension scenarios](https://github.com/SebasLoadJs/NyxLink/actions/runs/44990871485), [endurance](https://github.com/SebasLoadJs/NyxLink/actions/runs/44990871556). This records the tested baseline, not the result of subsequent unverified changes.
 
 | Contract | Lavalink 4.2.2 | NodeLink 3.10.0-dev.2026-10-20.1 |

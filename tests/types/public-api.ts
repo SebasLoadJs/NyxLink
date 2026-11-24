@@ -19,6 +19,7 @@ const search = manager.search({ query: 'test' });
 const queue: Queue = player.queue;
 const health = NodeHealthMonitor.inspect(node);
 const selected = NodeSelector.select([node]);
+NodeSelector.select([node], {}, { scoreWeights: { players: 1, cpu: 100, memory: 20, latency: 0.1, priority: 1 }, preferredNode: node.identifier, minimumScoreImprovement: 2 });
 const failover: Promise<FailoverResult> = NodeFailover.move(player, node, { maxAttempts: 2 });
 const backend = BackendDetector.detect({ version: { semver: '4.2.2' } });
 const configuredNode: Parameters<NodeManager['add']>[0] = { host: 'localhost', port: 2333, password: 'test', secure: false, retryAmount: 0, readyTimeoutMs: 10000 };

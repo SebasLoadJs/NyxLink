@@ -20,6 +20,7 @@ import { VoiceReceiver, VoiceReceiverOptions } from "./VoiceReceiver";
 import { PlayerSnapshotCodec, recordRevision, type PlayerSnapshot } from '../database/PlayerSnapshot';
 import { mixCreateBody, type MixCreateOptions, type MixLayerCreated, type MixLayersResponse } from '../backends/NodeLinkMixContracts';
 import { PlayerOperationCancelledError } from '../errors/PlayerOperationCancelledError';
+import { desiredPreload, QueuePreloadScheduler } from '../players/QueuePreload';
 
 export class Player {
     public readonly manager: Manager;
@@ -64,10 +65,8 @@ export class Player {
     private nextTrack?: { encoded: string; userData?: Record<string, any> };
     private preloadOptions?: QueuePreloadOptions;
     private queuePreload?: { track: Track; node: Node; session: string };
-    private preloadJob?: Promise<void>;
-    /** Queue changes while a preload request is in flight need one reconciliation pass. */
-    private preloadRefreshRequested = false;
-    private preloadRetryAt = 0;
+    private readonly preloadScheduler = new QueuePreloadScheduler();
+    private get preloadJob(): Promise<void> | undefined { return this.preloadScheduler.pending; }
     private audioTrackId?: string;
     private loudnessNormalizer?: boolean;
     private endTime?: number;
@@ -798,29 +797,14 @@ export class Player {
     /** @internal Coalesces queue/position changes into the existing player command queue. */
     public requestQueuePreload(): void {
         if (this.destroyed || this.manager.destroyed || (!this.preloadOptions?.enabled && !this.queuePreload)) return;
-        if (this.preloadJob) {
-            this.preloadRefreshRequested = true;
-            return;
-        }
         const ticket = playbackGuard(this).ticket;
         const node = this.node;
         const session = node.sessionId;
         const active = () => !this.destroyed && !this.manager.destroyed && this.node === node &&
             node.connected && !node.destroyed && node.sessionId === session && playbackGuard(this).isCurrent(ticket);
-        const desired = (): Track | undefined => {
-            const current = this.current;
-            const next = this.queue.first;
-            if (!active() || !node.isNodeLink || node.backend?.featureStatus('nextTrack') === 'unavailable' ||
-                !this.preloadOptions?.enabled || !this.crossfade?.enabled || this.loop !== 'off' || !this.playing ||
-                !current || !next || next === current || next.encoded === current.encoded) return undefined;
-            const info = current.getInfo();
-            const remaining = info.length - info.position;
-            if (info.isStream || !Number.isFinite(remaining) || remaining <= 0 ||
-                remaining > (this.preloadOptions.leadMs ?? 35000)) return undefined;
-            return next;
-        };
-        const operation = this.commands.enqueue(async () => {
-            if (!active() || Date.now() < this.preloadRetryAt) return;
+        const desired = (): Track | undefined => active() ? desiredPreload(this, this.preloadOptions, !!this.crossfade?.enabled) : undefined;
+        this.preloadScheduler.request(operation => this.commands.enqueue(operation), async () => {
+            if (!active()) return;
             const reservation = this.queuePreload;
             if (reservation && (reservation.node !== node || reservation.session !== session)) {
                 this.queuePreload = undefined;
@@ -838,19 +822,9 @@ export class Player {
             const resolved = await TrackResolver.resolve(candidate, node);
             if (this.current !== current || desired() !== candidate || this.paused || this.nextTrack) return;
             await this.sendPlayerUpdate({ nextTrack: { encoded: resolved.encoded, userData: resolved.userData } }, undefined, candidate);
-        }).catch(() => {
-            // Avoid retry storms from frequent position updates on an incompatible server.
-            this.preloadRetryAt = Date.now() + 10000;
+        }, () => {
             this.manager.emit('debug', 'NyxLink > Queue preload request failed');
-        }).finally(() => {
-            if (this.preloadJob !== operation) return;
-            this.preloadJob = undefined;
-            if (this.preloadRefreshRequested) {
-                this.preloadRefreshRequested = false;
-                this.requestQueuePreload();
-            }
-        });
-        this.preloadJob = operation;
+        }, () => this.requestQueuePreload());
     }
 
     /** @internal Called only after PlaybackAttempt accepts a preloaded TrackStart. */
@@ -1199,7 +1173,16 @@ export class Player {
         const revision = ++this.volumeRevision;
         return this.commands.enqueue(async () => {
             if (this.destroyed) throw new Error("Cannot update volume on a destroyed player");
-            await this.sendPlayerUpdate({ volume });
+            const node = this.node, session = node.sessionId, socket = node.socket, backend = node.backend;
+            const active = () => !this.destroyed && !this.manager.destroyed && !node.destroyed && node.connected &&
+                this.node === node && node.sessionId === session && node.socket === socket && node.backend === backend;
+            if (!active()) throw new PlayerOperationCancelledError('volume');
+            try { await this.sendPlayerUpdate({ volume }); }
+            catch (error) {
+                if (!active()) throw new PlayerOperationCancelledError('volume');
+                throw error;
+            }
+            if (!active()) throw new PlayerOperationCancelledError('volume');
             if (this.optimisticVolumeRevision > revision) return this;
             const oldVolume = this.volume;
             this.volume = volume;

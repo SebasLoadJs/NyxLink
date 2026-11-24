@@ -12,6 +12,9 @@ This changelog describes the unreleased NyxLink 5.3 development line and its ver
 
 ### Architecture and public API
 
+- Added opt-in weighted node costs from observed latency, fresh CPU/memory/player statistics and configured priority, with caller-scoped hysteresis that cannot bypass eligibility or source/region preferences. Existing strategies retain their defaults.
+- Extracted queue-preload eligibility and coalescing/backoff from Player; player commands retain ownership of reservations, serialized updates and backend acknowledgments.
+
 - Extracted the worker/special-voice recovery transaction into a shared internal module, preventing nested restart failures from destroying a newer user intent and preserving retry budgets on unacknowledged recovery.
 - Added optional trusted extension setup/dispose with typed isolated event hooks, AbortSignal, lifecycle deadlines and manager-owned shutdown.
 - Introduced a multi-backend client architecture with explicit Lavalink v4 and NodeLink adapters, capability discovery, connection-scoped inventories, selection constraints and backend-specific contracts.
@@ -19,6 +22,8 @@ This changelog describes the unreleased NyxLink 5.3 development line and its ver
 - Extended playback snapshots, track encoding/resolution, storage contracts and public TypeScript declarations for CommonJS and ESM consumers.
 
 ### Playback and reliability
+
+- Prevented a late `setVolumeAsync` acknowledgment or failure from committing state after player destruction or backend/session replacement; cancelled operations report a typed cancellation.
 
 - Hardened play/stop/seek/skip, position acknowledgements, queue and autoplay transitions against stale events and concurrent user commands.
 - Made `back()` transactional: previous history and the outgoing queue slot are committed only after backend acknowledgement; failed/aborted back attempts restore the original history and queue state.

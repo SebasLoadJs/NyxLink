@@ -52,6 +52,8 @@ Track optional projected properties depend on `trackPartial`; use `track.getInfo
 
 Only Lavalink v4 and NodeLink are supported backend families. `manager.nodes.findNode(options)` selects according to readiness and explicit constraints; `getBackendInventory()` returns detached evidence, not credentials. A capability can be advertised, observed, unknown or unavailable. Inspect actual availability rather than assuming all NodeLink features or Lavalink plugins exist.
 
+Optional `scoreWeights` combine measured costs, and `preferredNode`/`minimumScoreImprovement` provide caller-scoped hysteresis after eligibility and preferences. See [node selection](node-selection.md) and the compiled `examples/node-selection.ts` recipe.
+
 `node.refreshBackend()` coalesces refreshes and returns success/failure. `node.probe()` observes backend health; `node.ping()` requires a transport. `NodeHealthMonitor`, `NodeSelector`, `NodeCircuitBreaker` and NodeFailover are available for advanced consumers. `drain(identifier)` stops new placement and attempts migration; `eject(identifier)` additionally removes the node according to its result. Failed/partial migrations and orphaned players must be handled explicitly.
 
 Playback intent, player registration identity and node/session/transport ownership fence delayed recovery work. `VoiceRecovery` is internal and shared by worker failures and special voice close codes. It does not let a late `restart()` destroy a newer user intent, and it resets the reconnect budget only on acknowledged recovery. This client correctness does not certify audible continuity.

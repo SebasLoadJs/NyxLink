@@ -292,6 +292,8 @@ Los requisitos se copian y se conservan durante failover y `transferNode()`. Un 
 
 `manager.nodes.findNode()` acepta las mismas restricciones, además de `exclude` y `allowUnhealthyFallback`; devuelve `undefined` si no hay candidato. Al crear un reproductor, ese caso lanza `NoEligibleNodeError` con código `NO_ELIGIBLE_NODE` y `rejections` por identificador, motivo y capacidades faltantes. También puedes consultar `NodeSelector.rejections(nodes, options, selection)` para obtener el diagnóstico.
 
+La [selección ponderada e histéresis](docs/node-selection.md) es opt-in por llamada, usa métricas observadas y conserva las restricciones de elegibilidad. El [cierre técnico](docs/implementation-closure.md) separa implementación de los [pendientes de aceptación real](docs/pending-real-world-acceptance.md), que ejecutará el operador.
+
 Para apartar temporalmente un nodo con fallos repetidos, configura `options.node.circuitBreaker`:
 
 ```js
