@@ -196,7 +196,7 @@ export class AuroraEvents {
             }
         } catch { /* tracing is optional */ }
         try { this.options.target?.[definition.level](event, definition.message); this.counters.accepted++; }
-        catch { this.counters.targetErrors++; if (definition.level === 'error' || definition.level === 'fatal') this.counters.criticalTargetErrors++; }
+        catch { this.counters.targetErrors++; if (ranks[definition.level] >= ranks.error) this.counters.criticalTargetErrors++; }
     }
 
     /** Exactly one terminal event per operation. Never forward request payloads or thrown errors. */

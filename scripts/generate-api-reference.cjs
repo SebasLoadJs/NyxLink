@@ -42,8 +42,9 @@ function generate() {
 if (require.main === module) {
   try {
     const args = process.argv.slice(2);
-    if (args.length > 1 || args.length === 1 && args[0] !== '--check') throw new Error('Usage: generate-api-reference.cjs [--check]');
-    const result = generate(), target = path.join(root, 'docs/api-generated.md');
+    const output = args.length === 2 && args[0] === '--output' ? path.resolve(args[1]) : undefined;
+    if (!output && (args.length > 1 || args.length === 1 && args[0] !== '--check')) throw new Error('Usage: generate-api-reference.cjs [--check | --output PATH]');
+    const result = generate(), target = output ?? path.join(root, 'docs/api-generated.md');
     if (args.includes('--check')) {
       const actual = fs.readFileSync(target, 'utf8').replace(/\r\n/g, '\n');
       if (actual !== result.content) throw new Error('Public API reference is stale; run pnpm run docs:api');
