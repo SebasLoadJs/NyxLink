@@ -48,6 +48,8 @@ Queue methods include `add`, `insert`, `get`, `remove`, `shift`, `unshift`, `pop
 
 Track optional projected properties depend on `trackPartial`; use `track.getInfo()` for complete retained wire metadata. TrackCodec serializes snapshots, TrackResolver resolves on the destination backend and Track.clone isolates mutable metadata. An encoded track's existence is not proof that its source works on every node.
 
+Destination metadata fallback is **opt-in** via `options.search.trackResolution` and accepts allowed search sources, a minimum similarity score, duration tolerance, a per-response candidate limit and an optional `timeoutMs` (1–60,000; 10,000 by default). The total timeout is **shared across all source/ISRC/title queries**, not reset per source. `TrackResolver.resolve(track, target, source?, signal?)` accepts an optional cancellation signal. Normal playback, queue-preload and migration now propagate their current intent signal, so an obsolete HTTP lookup can be cancelled on a newer play/stop/transfer request. Cancellation still needs a responsive transport; do not assume arbitrary injected providers obey abort signals. A metadata match is not proof of audible playback.
+
 ## Nodes, compatibility and recovery
 
 Only Lavalink v4 and NodeLink are supported backend families. `manager.nodes.findNode(options)` selects according to readiness and explicit constraints; `getBackendInventory()` returns detached evidence, not credentials. A capability can be advertised, observed, unknown or unavailable. Inspect actual availability rather than assuming all NodeLink features or Lavalink plugins exist.
