@@ -96,3 +96,15 @@ test('a real child process timeout is classified without echoing its arguments',
     return true;
   });
 });
+
+test('an output-buffer failure is not reported or retried as a deadline expiry', async () => {
+  const command = createContainerCommand('docker', [], async () => {
+    throw Object.assign(new Error('buffer overflow'), { killed: true, signal: 'SIGTERM', code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' });
+  });
+  await assert.rejects(command(['pull', image]), error => {
+    assert.equal(error.timedOut, false);
+    assert.match(error.message, /ERR_CHILD_PROCESS_STDIO_MAXBUFFER/);
+    assert.doesNotMatch(error.message, /timed out/);
+    return true;
+  });
+});

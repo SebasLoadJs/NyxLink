@@ -8,6 +8,7 @@ import { consolaLevels, type NyxLogLevel } from './LogLevels';
 import { JsonLogTransport, writeLogLine } from './JsonLogTransport';
 import { diagnoseError, type ErrorDiagnostic } from './ErrorDiagnostics';
 import { formatDashboardObservation, formatErrorDiagnostic } from './TerminalFormatter';
+import { formatPlayerTrace, type PlayerTraceOptions } from './PlayerTrace';
 import { LogPipeline, safeLogValue, type LogContext, type LogTransport, type StructuredLogRecord } from './StructuredLog';
 import type { Manager } from '../core/Manager';
 import { NodeState } from '../typings/types';
@@ -88,11 +89,14 @@ export class Logger {
     if (!parent && (options.console ?? transports.length === 0)) {
       if (options.mode === 'json') transports.push(new JsonLogTransport());
       else transports.push({ write: record => {
+        const standardFields = ['nodeId', 'guildId', 'backend', 'traceId', 'status', 'code', 'durationMs', 'positionMs'];
+        const visibleContext = options.layout === 'detailed' || options.layout === 'diagnostic' ? record.context :
+          Object.fromEntries(standardFields.filter(key => record.context[key] !== undefined).map(key => [key, record.context[key]]));
         const panel = record.event === 'dashboard.snapshot' ? formatDashboardObservation(record.context, this.options) :
           record.event === 'error.diagnostic' ? formatErrorDiagnostic(record.context, this.options) : undefined;
-        const formatted = panel ?? (record.event === 'panel' ? record.message : formatEntry({
+        const formatted = panel ?? (record.event === 'panel' || record.event === 'player.trace' || record.event.startsWith('failover.') ? record.message : formatEntry({
           type: ['trace', 'debug', 'info', 'success', 'warn', 'error'].includes(record.event) ? record.event : record.level, tag: record.component, date: new Date(record.timestamp),
-          args: [record.message, ...(options.layout === 'compact' || !Object.keys(record.context).length ? [] : [record.context]),
+          args: [record.message, ...(options.layout === 'compact' || !Object.keys(visibleContext).length ? [] : [visibleContext]),
             ...(options.layout === 'diagnostic' ? [{ sequence: record.sequence, event: record.event }] : [])],
         }, this.options));
         const output = options.unicode === false ? ascii(formatted) : formatted;
@@ -117,6 +121,7 @@ export class Logger {
   private publish(entry: LogObject): void {
     const level = entry.type === 'trace' ? 'trace' : entry.type === 'debug' ? 'debug' :
       entry.level <= 0 ? 'error' : entry.level === 1 ? 'warn' : 'info';
+    if (!this.isEnabled(level)) return;
     const args = safeLogValue(entry.args) as unknown[];
     if (entry.type === 'box') {
       const fields = args[1] && typeof args[1] === 'object' && !Array.isArray(args[1]) ? args[1] as Record<string, unknown> : {};
@@ -145,6 +150,17 @@ export class Logger {
 
   getStats() { return this.pipeline.stats(); }
   timeline(filter?: { traceId?: string; guildId?: string; limit?: number }): StructuredLogRecord[] { return this.pipeline.timeline(filter); }
+
+  playerTrace(guildId: string, options: PlayerTraceOptions = {}): StructuredLogRecord[] {
+    if (typeof guildId !== 'string' || !/^\d{17,20}$/.test(guildId)) throw new TypeError('Invalid trace guild ID');
+    const limit = options.limit ?? 20;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 20) throw new TypeError('Player trace view limit must be 1..20');
+    const records = this.timeline({ guildId, traceId: options.traceId, limit });
+    if (this.canShowInfo()) this.event('info', 'Trace', 'player.trace', { guildId, traceId: options.traceId, entries: records.map(record => ({
+      sequence: record.sequence, timestamp: record.timestamp, component: record.component, event: record.event,
+    })) }, this.configuration.mode === 'json' ? 'Player trace snapshot' : formatPlayerTrace(guildId, records, this.options));
+    return records;
+  }
   flush(): Promise<void> { return this.pipeline.flush(); }
 
   reportError(error: unknown, context: LogContext = {}): ErrorDiagnostic {
@@ -233,7 +249,7 @@ export class Logger {
   failover(event: FailoverReport): void {
     if (!this.canShowInfo()) return;
     if (this.configuration.mode === 'json') { this.event('info', 'Failover', 'failover.' + event.status, event); return; }
-    this.event('info', 'Failover', 'panel', {}, formatFailover(event, { ...this.options, color: false }));
+    this.event('info', 'Failover', 'failover.' + event.status, event, formatFailover(event, { ...this.options, color: false }));
   }
 
   /**
@@ -299,6 +315,16 @@ export class Logger {
       manager.on('sourceHealthChange', (node, event) => this.event('debug', 'Sources', 'source.health.changed', { nodeId: node.identifier, source: event.source, status: event.status })),
       manager.on('queueAdd', player => this.event('debug', 'Queue', 'queue.added', { guildId: player.guildId, size: player.queue.size })),
       manager.on('playerDestroy', player => this.event('info', 'Player', 'player.destroyed', { guildId: player.guildId, nodeId: player.node.identifier })),
+      manager.on('playerConnecting', player => this.event('debug', 'Voice', 'voice.connecting', { guildId: player.guildId, nodeId: player.node.identifier })),
+      manager.on('playerConnected', player => this.event('info', 'Voice', 'voice.connected', { guildId: player.guildId, nodeId: player.node.identifier })),
+      manager.on('playerDisconnected', player => this.event('info', 'Voice', 'voice.disconnected', { guildId: player.guildId, nodeId: player.node.identifier })),
+      manager.on('playerResuming', player => this.event('debug', 'Recovery', 'player.resuming', { guildId: player.guildId, nodeId: player.node.identifier })),
+      manager.on('playerResumed', player => this.event('info', 'Recovery', 'player.resumed', { guildId: player.guildId, nodeId: player.node.identifier })),
+      manager.on('playerSeek', (player, position) => this.event('debug', 'Player', 'player.seek', { guildId: player.guildId, positionMs: position })),
+      manager.on('playerPause', (player, paused) => this.event('debug', 'Player', 'player.pause', { guildId: player.guildId, paused })),
+      manager.on('playerStop', player => this.event('info', 'Player', 'player.stopped', { guildId: player.guildId })),
+      manager.on('queueEnd', player => this.event('info', 'Queue', 'queue.ended', { guildId: player.guildId })),
+      manager.on('filtersUpdate', player => this.event('debug', 'Filters', 'filters.updated', { guildId: player.guildId, nodeId: player.node.identifier })),
     ];
     let detached = false;
     const dispose = () => {

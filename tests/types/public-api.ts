@@ -289,3 +289,6 @@ const optionalExtension: import('../../dist').NyxExtension = { name: 'typed-obse
 } };
 const extensionDisposer: Promise<() => Promise<void>> = manager.useExtension(optionalExtension);
 void extensionDisposer;
+const playerTraceRecords: import('../../dist').StructuredLogRecord[] = diagnosticLogger.playerTrace('123456789012345678', { limit: 10 });
+const migrationStage: import('../../dist').MigrationStage = 'persist-snapshot';
+void [playerTraceRecords, migrationStage];

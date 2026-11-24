@@ -31,7 +31,7 @@ export interface LogPipelineStats {
     closed: boolean;
 }
 
-const sensitive = /^(?:authorization|proxyauthorization|auth|credentials|password|passwd|passphrase|token|accesstoken|refreshtoken|bottoken|discordtoken|voicetoken|bearertoken|apikey|clientsecret|privatekey|secretkey|secret|sessionid|session|cookie|setcookie|userdata|voicepayload)$/i;
+const sensitive = /^(?:authorization|proxyauthorization|auth|credentials|password|passwd|passphrase|token|accesstoken|refreshtoken|bottoken|discordtoken|voicetoken|bearertoken|apikey|clientsecret|privatekey|secretkey|secret|sessionid|session|cookie|setcookie|userdata|body|requestbody|responsebody|rawpayload|gatewaypayload|voicepayload)$/i;
 const strip = (text: string) => text.replace(/\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))/g, '').replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '');
 
 /** Bounded, getter-free serialization. Never changes or retains caller objects. */
@@ -185,7 +185,7 @@ export class LogPipeline {
         record = freeze({ ...record, sequence: ++this.sequence });
         const { level } = record;
         this.counters.accepted++;
-        if (this.timelineLimit > 0) {
+        if (this.timelineLimit > 0 && record.event !== 'player.trace') {
             this.history.push(record);
             if (this.history.length > this.timelineLimit) this.history.shift();
         }

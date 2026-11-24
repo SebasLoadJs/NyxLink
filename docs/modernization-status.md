@@ -1,8 +1,10 @@
 # Modernización — implementación y evidencia local
 
-Fecha local: 23 de noviembre de 2026 (Paraguay). Base: `03546fd49faffdaaf9e0ad45e1e9c7439ec749a6`; rama de trabajo `codex/resume-stabilization`. Este documento registra los 24 capítulos complementarios y **no sustituye ni duplica** los IDs del backlog original de 38 tareas. La implementación local no se ha publicado ni validado en CI remoto.
+Actualización: 24 de noviembre de 2026 (Paraguay). Base: `03546fd49faffdaaf9e0ad45e1e9c7439ec749a6`; rama de trabajo `codex/resume-stabilization`. Este documento registra los 24 capítulos complementarios y **no sustituye ni duplica** los IDs del backlog original de 38 tareas. La evidencia remota se identifica por SHA; no hay una nueva release publicada.
 
-Tras autorización explícita del responsable se creó el commit de implementación `eeb72264` y el [PR de desarrollo #32](https://github.com/SebasLoadJs/NyxLink/pull/32). Se amplía el gate de endurance de 600 s a PRs hacia `dev` que cambien fuente, pruebas o su infraestructura; antes solo se disparaba por rutas documentales/push y no cubría automáticamente este candidato. Los resultados remotos todavía están en curso; no se fusionó el PR ni se publicó una versión.
+Tras autorización explícita del responsable se creó el commit de implementación `eeb72264` y el [PR de desarrollo #32](https://github.com/SebasLoadJs/NyxLink/pull/32). El commit `2981fd84` amplió el gate de endurance de 600 s a PRs hacia `dev`. Sus nueve workflows terminaron con éxito: [validación Node 22/24](https://github.com/SebasLoadJs/NyxLink/actions/runs/45304877007), [protocolos y plugins](https://github.com/SebasLoadJs/NyxLink/actions/runs/45304877005), [Redis](https://github.com/SebasLoadJs/NyxLink/actions/runs/45304877291), [CodeQL](https://github.com/SebasLoadJs/NyxLink/actions/runs/45304877206), [endurance 600 s](https://github.com/SebasLoadJs/NyxLink/actions/runs/45304877235), smoke, Qodana, tipos y seek parcheado. Esta evidencia no certifica automáticamente los commits posteriores de trazas/handoff; consultar los checks del HEAD del PR. No se fusionó el PR ni se publicó una versión.
+
+El responsable confirmó que hará las pruebas de voz más adelante. Quedaron preparados el [handoff en español](run-live-tests-es.md), cinco escenarios armados explícitamente y un runner separado de soak 24–72 h. No se usaron credenciales reales ni se conectó el bot.
 
 ## Cambios de este bloque
 
@@ -15,7 +17,7 @@ Tras autorización explícita del responsable se creó el commit de implementaci
 | Observabilidad | Paneles manuales y métricas de nodos/players | Snapshots de cluster/fuentes/proceso, paneles de diagnóstico, contadores privados de logging | Datos ausentes/desconectados, límites, rutas autenticadas, formato estrecho | Automatizado local; aceptación operativa pendiente |
 | Extensiones | Connectors y adaptadores por subsistema | Lifecycle opcional setup/dispose, hooks tipados aislados, AbortSignal, plazos y shutdown | Ocho pruebas de fallo/timeout/registro/remoción/recursión/cierre | Automatizado local |
 | Tooling Windows | npm.cmd/pnpm.cmd ejecutados directamente | Invocación sin shell de CLI instalado o exe nativo; soporte de shims con ruta estática al CLI | Pack y consumidor aislado en Windows | Validación detallada abajo |
-| Documentación | Guías fragmentadas y API parcial | Guía API, logging, mixer, extensiones, ejemplo compilable y migración | Consumidor TypeScript y chequeo del tarball | Local, sin aceptación contractual final |
+| Documentación | Guías fragmentadas y API parcial | Guías API/logging/mixer/extensiones, referencia generada de 208 exports y ejemplo compilable | Consumidor TypeScript, comparación de declaraciones y tarball | Implementado; aceptación contractual final aparte |
 
 ## Matriz de los capítulos originales 0–23
 
@@ -24,36 +26,38 @@ Tras autorización explícita del responsable se creó el commit de implementaci
 | 0 — Misión principal | En desarrollo | Cliente Lavalink v4/NodeLink conservado; publicación y aceptación final pendientes |
 | 1 — Auditoría técnica completa | Parcial | Auditorías previas más correcciones de recuperación/mixer/logging; no auditoría exhaustiva ni eliminación certificada de todos los bugs |
 | 2 — Modernización del núcleo | Parcial | Módulos existentes preservados; nueva extracción VoiceRecovery; Node y Player siguen requiriendo revisión incremental |
-| 3 — Multi-backend engine 2.0 | Implementado con deuda de integración | Adapters, capacidades y protocolos existentes; repetir baseline/modern/plugins en Linux con Docker |
+| 3 — Multi-backend engine 2.0 | Verificado en CI en 2981fd84; revalidar HEAD | Adapters/capacidades y laboratorios baseline/modern/plugins aprobados; la voz real permanece separada |
 | 4 — Smart node orchestration | Parcial | Selector, salud, circuitos y failover existentes; carga/regiones y continuidad real pendientes |
 | 5 — Player engine/audio | Parcial | Cola/replay/preload/crossfade existentes y mixer tipado/concurrente; AutoMix/audio real y cleanup remoto por backend pendientes |
 | 6 — NodeLink intelligence | Parcial | Salud/fuentes/stream/grupos/lyrics existentes; contrato mixer revisado en revisión fijada; falta aceptación de todas las funciones/versiones upstream |
-| 7 — Observability engine | Implementado localmente, parcial | Pipeline, JSON/destinos, privacidad, counters y trazas; instrumentación aún no cubre todas las rutas REST/WS/stream |
-| 8 — Terminal design system | Parcial | Layouts, ASCII/NO_COLOR, ancho y paneles observados; refinamiento visual y diferenciación standard/detailed pendientes |
+| 7 — Observability engine | Implementado localmente; aceptación operativa pendiente | Pipeline, JSON/destinos, privacidad, counters, HTTP/open-stream spans y eventos de lifecycle; sin inferir internos del servidor |
+| 8 — Terminal design system | Implementado localmente; refinamiento visual abierto | Layouts diferenciados compact/standard/detailed/diagnostic, ASCII/NO_COLOR, ancho y paneles observados |
 | 9 — Structured event timeline | Implementado localmente | Retención opt-in acotada, filtros por trace/guild, records inmutables; no almacenamiento durable |
-| 10 — Player trace view | Parcial | Contexto/trace y timeline por guild; falta visor terminal dedicado con secuencia completa de reproducción |
-| 11 — Failover visual reporter | Parcial | Paneles existentes conservados con estados confirmados; falta detalle por etapas observadas y aceptación live |
-| 12 — Advanced error diagnostics | Implementado localmente, parcial | Códigos/status existentes, causas redactadas y recomendaciones fundamentadas; no diagnóstico universal automático |
+| 10 — Player trace view | Implementado localmente | Vista terminal/JSON por guild/trace, límites explícitos, sin estado inferido; profundidad depende de los eventos observados |
+| 11 — Failover visual reporter | Implementado localmente; aceptación live pendiente | Etapas observadas de resolución/restauración/persistencia/cleanup/rollback con IDs/duración; fallos parciales conservados; sin redibujar panel por etapa |
+| 12 — Advanced error diagnostics | Implementado localmente | Códigos/status existentes, causas redactadas y recomendaciones fundamentadas; los errores desconocidos quedan sin causa inventada |
 | 13 — Live terminal dashboard | Implementado como snapshots opt-in | TTY periódico/no-TTY estático, nodos/fuentes/proceso reales; no interfaz fullscreen ni métricas no instrumentadas |
 | 14 — Logging profiles | Implementado localmente | Perfiles de detalle independientes de JSON/pretty y destino; explícito nivel tiene prioridad |
 | 15 — Logging API/DX | Implementado localmente | API anterior conservada, child/context/spans, destinations, flush/close y tipos compilables |
 | 16 — Rendimiento/fiabilidad logger | Parcial | Cola/backpressure acotados, quarantine, sampling/grouping y benchmark; falta soak representativo |
 | 17 — Dependencias | Baseline auditado, sin upgrades gratuitos | Consola 3.4.2 es la única dependencia runtime, licencia MIT; lockfile intacto; no añadir paquetes sin necesidad |
 | 18 — Plugin/extension system | Implementado localmente | Setup/dispose, hooks tipados aislados, AbortSignal y cleanup; servicios/adaptadores especializados siguen siendo de la aplicación |
-| 19 — Sharding/distribuido | Parcial | Redis CAS/leases/IPC v2 existentes; falta integración Redis actual y voice handoff audible |
-| 20 — QA | Automatizado local; gates externos abiertos | Node 22/24, tipos/consumidor; Docker/CodeQL/Redis remoto, endurance y Discord no ejecutados en este bloque |
-| 21 — Documentación | Ampliada, parcial | API/logging/mixer/extensiones y ejemplos; todavía falta referencia exhaustiva de cada contrato legado y aceptación editorial |
+| 19 — Sharding/distribuido | Redis verificado en CI en 2981fd84; aceptación audible pendiente | CAS/leases/IPC v2; integración Redis Node 22/24 aprobada; voice handoff aún no escuchado |
+| 20 — QA | Automatizado local y CI por SHA; gates humanos abiertos | Node 22/24, tipos/consumidor, backend/plugins/Redis/CodeQL/endurance verificados; repetir en HEAD y completar aceptación del operador |
+| 21 — Documentación | Implementada y verificable | Guías, referencia generada de todos los exports públicos/protegidos, ejemplos compilados y handoff de pruebas |
 | 22 — Metodología | Aplicada en este bloque | Inspección, cambios incrementales, regresiones, tipos, ejemplos y evidencia; no reescritura del SDK |
 | 23 — Criterios de aceptación | No cerrados | No se declara modernización completa ni release estable con gates externos y deuda técnica abiertos |
 
 ## Validación ejecutada
 
-- Node.js **24.11.1**: **930/930 pruebas aprobadas**, con cobertura. Log privado local: `.runtime/modernization/node24-coverage.log`.
-- Node.js **22.23.5**: **930/930 pruebas aprobadas**. Log privado local: `.runtime/modernization/node22-tests.log`.
+- Primer candidato: 930 pruebas aprobadas en Node.js 24.11.1 y 22.23.5, además de CI. El incremento de trazas/HTTP y handoff eleva el inventario; los resultados locales finales están en `.runtime/modernization/final-node24-coverage.log` y `final-node22-tests.log`.
+- Incremento final: **951/951 pruebas aprobadas en cada versión de Node.js**, sin fallos ni cancelaciones; cobertura recogida en Node 24. Concurrencia local limitada a cuatro procesos por suite. Incluye nueve pruebas del runner de voz, dos de configuración de soak, trazas HTTP/stream y etapas de migración.
 - TypeScript estricto y contratos públicos: aprobados. Los nuevos exports, mixer, logger y hooks de extensiones están tipados.
-- Consumidor aislado del tarball en Node 22 y 24: siete comprobaciones aprobadas en cada versión, incluyendo nuevos exports CJS/ESM, lifecycle de extensión, trace y ejemplo de observabilidad/mixer compilado. `pack:check`: 266 archivos aprobados, sin secretos/runtime. Reportes: `.runtime/modernization/package-node22.json` y `package-node24.json`.
+- Consumidor aislado del tarball en Node 22 y 24: siete comprobaciones aprobadas en cada versión, incluyendo nuevos exports CJS/ESM, lifecycle de extensión, visor de trazas y ejemplo compilado. `pack:check`: 269 archivos aprobados, sin secretos/runtime. Reportes: `.runtime/modernization/final-package-node22.json` y `final-package-node24.json`.
+- La referencia generada contiene 208 exports; su chequeo pasó en Node 22 y 24. CI verifica que los tipos públicos y el Markdown generado coincidan.
 - Auditoría de dependencias de producción repetida: sin vulnerabilidades conocidas. Inventario de licencias runtime: únicamente Consola 3.4.2, MIT; sin cambios de dependencias ni lockfile.
 - Pruebas fallidas iniciales: dos fixtures mixer antiguos se actualizaron al envelope/escala verificados conservando las aserciones de carrera/ruta. La prueba de HTTP 429 usa un presupuesto independiente; el servidor colgado sigue limitado a 250 ms con aserción de terminación en menos de 2 segundos. No se cambió el timeout de producción.
+- En una ejecución local simultánea con concurrencia automática, Node 22 canceló por timeout la prueba de respuesta comprimida. La prueba aislada pasó sin cambios; las suites se repitieron con concurrencia 4 para no saturar el host. No se relajó el límite de bytes ni sus aserciones y no se atribuye una causa raíz no demostrada.
 - Las suites usan una compilación nueva de `src`, no el `dist` antiguo versionado. Los artefactos de compilación no forman parte de este cambio de fuente.
 - Preflight público npm, modo informativo: `0.1.0-dev.3` ya existe; `dev` apunta a esa versión, `latest` a `0.1.0-dev.1` y no hay tag `next` en la consulta. Esto **no** verifica titularidad ni permiso de publicar. No se alteraron versiones/tags ni se publicó.
 
@@ -73,11 +77,10 @@ El benchmark existente de persistencia de cola también pasó: cinco muestras de
 
 ## Puertas que impiden declarar el plan terminado
 
-1. Commit candidato inmutable y CI sobre ese mismo SHA, con baseline/modern, plugins, Redis y CodeQL. Ningún check histórico cubre este diff local.
-2. Linux con Docker/Podman para laboratorios y endurance >=600 s; este equipo no tiene un motor de contenedores disponible.
-3. Infraestructura Discord/nodos/fuentes autorizada, cinco reportes ligados al candidato y observación humana de audio/crossfade/reconexión. No se usaron tokens ni se conectó ningún bot.
-4. Soak de 24–72 horas, métricas de heap/handles y carga representativa; un benchmark de segundos no lo sustituye.
-5. Deuda explícita de las filas parciales: instrumentación completa/visor de trazas/etapas de failover, revisión adicional de Node/Player y capacidades nuevas con evidencia upstream/backend.
-6. Revisión de atribución OSL-3.0 y derechos de assets, verificación de titularidad npm, decisión de versión nueva y autorizaciones separadas para RC y estable.
+1. Mantener CI sobre el mismo SHA final, con baseline/modern, plugins, Redis, CodeQL y endurance >=600 s; los resultados de 2981fd84 son históricos para cambios posteriores.
+2. Cinco reportes Discord ligados al candidato y observación humana de audio/crossfade/reconexión. El responsable aplazó estas ejecuciones; el runner y las configuraciones vacías están listos.
+3. Soak de 24–72 horas y carga representativa. El runner aislado está preparado para un host Linux con contenedores; un benchmark de segundos no sustituye esa evidencia ni la carga de voz real.
+4. Deuda explícita de las filas parciales: revisión adicional de Node/Player y aceptación de capacidades/versiones con evidencia upstream/backend, sin reescrituras ni promesas de audio no escuchado.
+5. Revisión de atribución OSL-3.0 y derechos de assets, verificación de titularidad npm, decisión de versión nueva y autorizaciones separadas para RC y estable.
 
 No se marca ninguna tarea contractual como Done ni se crea una RC para eludir estos requisitos.

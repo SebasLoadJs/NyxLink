@@ -58,6 +58,8 @@ These APIs only describe **client and tested protocol behavior**; they do not gu
 - Added a bounded opt-in structured logging pipeline with injectable destinations, newline-delimited JSON, child context, async correlation/spans, timeline filters, profiles/layouts, sampling/group summaries and explicit flush/close.
 - Added bounded getter-free credential redaction, transport backpressure/timeout isolation, drop/error counters, grounded diagnostics and optional observed cluster/source/runtime snapshots. NO_COLOR, ASCII and narrow-terminal rendering are supported.
 - Exposed aggregate logger diagnostics only through the existing authenticated private metrics service; no message history or guild labels are exported.
+- Added bounded Player trace rendering and observed migration-stage records, including partial rollback/source-cleanup failures; pretty layouts now distinguish selected versus full context without repeating whole failover panels per stage.
+- Added sanitized spans for all buffered Rest requests and stream openings while preserving transport overloads/results and redacting raw error bodies.
 - Added opt-in Consola-based logging with system-status and failover reporting. Logging remains silent by default.
 - Added basic redaction of known secret fields and authorization tokens; reinforced transport/authentication handling, failure boundaries and test-laboratory security.
 - Enabled strict compilation on Node.js 22/24, regression/contract tests, backend integration, CodeQL and endurance validation in GitHub Actions.
@@ -73,6 +75,8 @@ These APIs only describe **client and tested protocol behavior**; they do not gu
 
 ### Live voice acceptance harness
 
+- Added a safe five-scenario operator runner with literal private env files, no-network configuration validation, explicit arming, clean-SHA evidence and fail-fast execution. Added original WAV fixture generation and a Spanish operator handoff; real voice tests remain for the responsible operator.
+- Added an explicitly armed 24–72-hour isolated protocol-soak runner with a single continuous worker, bounded watchdog, unique private reports and clean-source evidence. The normal endurance command retains its two-hour limit; the long soak has not been executed during implementation.
 - Added separately armed live Discord command smoke for NodeLink and Lavalink v4: play, backend-confirmed track A, pause/resume, volume, seek, skip and backend-confirmed track B.
 - Added a controlled Discord voice disconnect/reconnect acceptance mode on both backends. It verifies a new gateway voice handshake, confirms the active track in REST and explicitly exercises player recovery; it does not simulate a network partition.
 - Kept the NodeLink-specific crossfade acceptance mode separate. Unrecognized backends are rejected, and Lavalink is not advertised as implementing NodeLink crossfade.

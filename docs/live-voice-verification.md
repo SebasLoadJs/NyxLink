@@ -1,5 +1,7 @@
 # Real Discord voice and Crossfade acceptance gate
 
+Spanish operator handoff and safe five-scenario runner: [run-live-tests-es.md](run-live-tests-es.md). `--check` validates explicit private env files without connecting; only `--armed` starts the real suite.
+
 This is a **manual, opt-in, potentially audible** integration check. It will connect a test bot to a real Discord voice channel, request music playback from an already running NodeLink server, and write a local event report. The script cannot determine by itself whether a listener actually heard the music, volume was correct, or two tracks audibly overlapped. It never runs in normal CI and does not grant NyxLink core any Discord voice transport dependency.
 
 ## Prerequisites

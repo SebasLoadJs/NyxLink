@@ -2,6 +2,8 @@
 
 This guide describes the development API implemented in the source tree. The generated `dist/index.d.ts` and its re-exported declarations are the exact signature reference after `pnpm run build`. Examples are compiled from the installed tarball by `pnpm run test:package`; a historical green CI run does not certify this working tree.
 
+The [generated public API reference](api-generated.md) lists every root export and its public/protected declaration signatures. `pnpm run docs:api` regenerates it; CI checks that it matches the built declarations.
+
 ## Manager and Discord integration
 
 `new Manager({ nodes, send?, options? })` creates a client without logging output, HTTP metrics listeners or Discord login. Configure a connector through `manager.use(...)` or an application-owned gateway sender. `init(clientId)` is asynchronous, requires a Discord snowflake string and initializes storage/nodes; `packetUpdate(packet)` accepts the supported Discord gateway voice packets. The SDK does not contain a bot command router, music website or Discord voice encoder.
@@ -79,7 +81,7 @@ Memory and Local implement the storage boundary; RedisStorage accepts an injecte
 
 ## Logging, telemetry and extensions
 
-Logger, JsonLogTransport, typed LogTransport/StructuredLogRecord, diagnostics, async trace scopes and TerminalDashboard are opt-in. See [logging guide](logging-guide.md), [private metrics](private-metrics.md) and [extension lifecycle](extensions.md). The SDK installs no Pino, Redis or OpenTelemetry service. The extension contract is trusted application code and cannot be used as an untrusted-code sandbox.
+Logger, JsonLogTransport, typed LogTransport/StructuredLogRecord, diagnostics, async trace scopes and TerminalDashboard are opt-in. `logger.playerTrace(guildId, options?)` provides a bounded retained-event view; migration stages expose actual acknowledgements and partial cleanup/rollback results. Rest HTTP/open-stream observations preserve request overloads and omit raw request/response secrets. See [logging guide](logging-guide.md), [private metrics](private-metrics.md) and [extension lifecycle](extensions.md). The SDK installs no Pino, Redis or OpenTelemetry service. The extension contract is trusted application code and cannot be used as an untrusted-code sandbox.
 
 ## Error handling
 

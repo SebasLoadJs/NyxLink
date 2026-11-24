@@ -30,6 +30,10 @@
     "test:extensions": "pnpm run build && node scripts/test-extensions.cjs",
     "test:coverage": "pnpm run build && node --test --experimental-test-coverage --test-coverage-exclude='tests/**' tests/*.test.cjs",
     "test:lavalink-plugins": "pnpm run build && node scripts/test-lavalink-plugins.cjs",
+    "test:live": "node scripts/test-live-suite.cjs",
+    "test:soak": "node scripts/test-soak.cjs",
+    "fixtures:live": "node scripts/create-live-fixtures.cjs",
+    "docs:api": "pnpm run build && node scripts/generate-api-reference.cjs",
     "release:check-tag": "node scripts/check-release-tag.cjs",
     "release:check-voice-evidence": "node scripts/check-live-voice-evidence.cjs",
     "release:check-registry": "node scripts/check-npm-registry.cjs"

@@ -37,9 +37,13 @@ export class Rest {
     private readonly jsonHeaders: Record<string, string>;
     private readonly userAgentHeaders: Record<string, string>;
     private readonly sessionRecoveries = new WeakSet<Player>();
+    private readonly request: typeof makeRequest;
+    private readonly streamRequest: typeof makeStreamRequest;
 
     constructor(node: Node) {
         this.node = node;
+        this.request = this.observeTransport(makeRequest, 'REST.http');
+        this.streamRequest = this.observeTransport(makeStreamRequest, 'REST.stream.open');
         this.authHeaders = {
             "Authorization": this.node.password,
             "User-Agent": this.node.manager.options?.userAgent ?? "NyxLink"
@@ -55,6 +59,26 @@ export class Rest {
 
     public get url(): string {
         return `http${this.node.secure ? "s" : ""}://${this.node.host}:${this.node.port}`;
+    }
+
+    /** Preserve the transport's overloads/arguments while observing only safe metadata. */
+    private observeTransport<F extends Function>(transport: F, operation: string): F {
+        return new Proxy(transport, { apply: (target, receiver, args) => {
+            const run = () => Reflect.apply(target, receiver, args);
+            const logger = this.node.manager.logger;
+            if (!logger?.isEnabled('error')) return run();
+            let route = 'invalid-url';
+            try {
+                // Credentials, hostname, query strings, session and guild path
+                // components never enter the request trace context.
+                if (typeof args[0] !== 'string') throw new TypeError('Invalid transport URL');
+                route = new URL(args[0]).pathname.replace(/\/sessions\/[^/]+/g, '/sessions/:session')
+                    .replace(/\/players\/[^/]+/g, '/players/:guild').replace(/\/mix\/[^/]+/g, '/mix/:layer');
+            } catch { /* The actual transport retains URL validation/error policy. */ }
+            return logger.traceOperation(operation, run, {
+                nodeId: this.node.identifier, route, method: typeof args[1]?.method === 'string' ? args[1].method : 'GET',
+            });
+        } });
     }
 
     private async triggerPlayerRecovery(player: Player): Promise<void> {
@@ -114,7 +138,7 @@ export class Rest {
         const current = () => !this.node.destroyed && this.node.backend === backend &&
             this.node.socket === socket && this.node.sessionId === session;
         const result = await this.node.circuit.run(async () => {
-            try { return await makeRequest<T>(this.url + route.path, { ...options, method: route.method, throwOnError: true }, 10000, 0); }
+            try { return await this.request<T>(this.url + route.path, { ...options, method: route.method, throwOnError: true }, 10000, 0); }
             catch (error) { this.featureError(feature, error, backend, current); }
         });
         if (result === undefined) throw new Error('Backend did not acknowledge feature request');
@@ -179,7 +203,7 @@ export class Rest {
             this.node.socket === socket && this.node.sessionId === session;
         const result = await this.node.circuit.run(async () => {
             try {
-                return await makeRequest<unknown>(this.url + path, {
+                return await this.request<unknown>(this.url + path, {
                     method, headers: method === 'PUT' ? this.jsonHeaders : this.authHeaders,
                     ...(method === 'PUT' ? { body } : {}), throwOnError: true
                 }, 10000, 0);
@@ -221,7 +245,7 @@ export class Rest {
     }
 
     public async getPlayers(): Promise<IRESTGetPlayers[] | null> {
-        const res = await makeRequest<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}/players`, {
+        const res = await this.request<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}/players`, {
             method: "GET",
             headers: this.authHeaders
         });
@@ -236,7 +260,7 @@ export class Rest {
     }
 
     public async getPlayer(guildId: string): Promise<IRESTGetPlayers | null> {
-        const res = await makeRequest<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}`, {
+        const res = await this.request<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}`, {
             method: "GET",
             headers: this.authHeaders
         });
@@ -264,7 +288,7 @@ export class Rest {
         const session = this.node.sessionId;
 
         try {
-            const res = await this.node.circuit.run(() => makeRequest<unknown>(`${this.url}/v4/sessions/${session}/players/${guildId}?${params.toString()}`, {
+            const res = await this.node.circuit.run(() => this.request<unknown>(`${this.url}/v4/sessions/${session}/players/${guildId}?${params.toString()}`, {
                 method: "PATCH",
                 headers: this.jsonHeaders,
                 body: payload,
@@ -292,7 +316,7 @@ export class Rest {
         const timeout = options?.timeoutMs ?? 10000;
         if (options && (!Number.isFinite(timeout) || timeout <= 0 || timeout > 60000)) throw new TypeError('Cleanup timeout must be within 1..60000 ms');
         try {
-            await makeRequest(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}`, {
+            await this.request(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}`, {
                 method: "DELETE",
                 headers: this.authHeaders,
                 signal: options?.signal,
@@ -312,7 +336,7 @@ export class Rest {
 
         const protectedRequest = this.node.circuit.enabled;
         return this.node.circuit.run(async () => {
-            const res = await makeRequest<unknown>(`${this.url}/v4/loadtracks?${params}`, {
+            const res = await this.request<unknown>(`${this.url}/v4/loadtracks?${params}`, {
                 method: "GET",
                 headers: this.authHeaders,
                 throwOnError: protectedRequest || options !== undefined,
@@ -328,7 +352,7 @@ export class Rest {
         const params = new URLSearchParams();
         params.append("encodedTrack", encodedTrack);
 
-        const res = await makeRequest<unknown>(`${this.url}/v4/decodetrack?${params}`, {
+        const res = await this.request<unknown>(`${this.url}/v4/decodetrack?${params}`, {
             method: "GET",
             headers: this.authHeaders
         });
@@ -338,7 +362,7 @@ export class Rest {
     }
 
     public async decodeTracks(encodedTracks: string[]): Promise<ITrack[] | null> {
-        const res = await makeRequest<unknown>(`${this.url}/v4/decodetracks`, {
+        const res = await this.request<unknown>(`${this.url}/v4/decodetracks`, {
             method: "POST",
             headers: this.jsonHeaders,
             body: encodedTracks
@@ -350,7 +374,7 @@ export class Rest {
     }
 
     public async getInfo(): Promise<any | null> {
-        const res = await makeRequest<any>(`${this.url}/v4/info`, {
+        const res = await this.request<any>(`${this.url}/v4/info`, {
             method: "GET",
             headers: this.authHeaders
         });
@@ -358,7 +382,7 @@ export class Rest {
     }
 
     public async getInfoWithHeaders(): Promise<ResponseWithHeaders<any> | null> {
-        const res = await makeRequest<any>(`${this.url}/v4/info`, {
+        const res = await this.request<any>(`${this.url}/v4/info`, {
             method: "GET",
             headers: this.authHeaders,
             returnHeaders: true,
@@ -368,7 +392,7 @@ export class Rest {
     }
 
     public async getVersion(timeout?: number, retries?: number): Promise<string | null> {
-        const res = await makeRequest<string>(`${this.url}/version`, {
+        const res = await this.request<string>(`${this.url}/version`, {
             method: "GET",
             headers: this.authHeaders
         }, timeout, retries);
@@ -378,7 +402,7 @@ export class Rest {
     public async getStats(): Promise<INodeStats | null> {
         const protectedRequest = this.node.circuit.enabled;
         const res = await this.node.circuit.run(async () => {
-            const stats = await makeRequest<INodeStats>(`${this.url}/v4/stats`, {
+            const stats = await this.request<INodeStats>(`${this.url}/v4/stats`, {
                 method: "GET", headers: this.authHeaders, throwOnError: protectedRequest
             }, protectedRequest ? 10000 : undefined, protectedRequest ? 0 : undefined);
             if (protectedRequest) {
@@ -393,7 +417,7 @@ export class Rest {
     }
 
     public async getRoutePlannerStatus(): Promise<IRoutePlannerStatus | null> {
-        const res = await makeRequest<IRoutePlannerStatus>(`${this.url}/v4/routeplanner/status`, {
+        const res = await this.request<IRoutePlannerStatus>(`${this.url}/v4/routeplanner/status`, {
             method: "GET",
             headers: this.authHeaders
         });
@@ -401,7 +425,7 @@ export class Rest {
     }
 
     public async freeFailedAddress(address: string): Promise<void> {
-        await makeRequest(`${this.url}/v4/routeplanner/free/address`, {
+        await this.request(`${this.url}/v4/routeplanner/free/address`, {
             method: "POST",
             headers: this.jsonHeaders,
             body: { address }
@@ -409,14 +433,14 @@ export class Rest {
     }
 
     public async freeAllFailedAddresses(): Promise<void> {
-        await makeRequest(`${this.url}/v4/routeplanner/free/all`, {
+        await this.request(`${this.url}/v4/routeplanner/free/all`, {
             method: "POST",
             headers: this.authHeaders
         });
     }
 
     public async updateSession(resuming: boolean, timeout: number): Promise<SessionUpdateResponse | null> {
-        const res = await makeRequest<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}`, {
+        const res = await this.request<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}`, {
             method: "PATCH",
             headers: this.jsonHeaders,
             body: {
@@ -497,7 +521,7 @@ export class Rest {
             this.node.socket === socket && this.node.sessionId === session;
         const result = await this.node.circuit.run(async () => {
             try {
-                return await makeRequest<unknown>(this.url + '/v4/lyrics?' + params.toString(), {
+                return await this.request<unknown>(this.url + '/v4/lyrics?' + params.toString(), {
                     method: 'GET', headers: this.authHeaders, throwOnError: true,
                     noContentAsNull: true
                 }, 10000, 0);
@@ -706,7 +730,7 @@ export class Rest {
         const current = () => !this.node.destroyed && this.node.backend === backend &&
             this.node.socket === socket && this.node.sessionId === session;
         try {
-            const response = await makeRequest<unknown>(this.url + route.path, {
+            const response = await this.request<unknown>(this.url + route.path, {
                 method: route.method, headers: this.jsonHeaders,
                 body: { encodedTrack, format: 'formats', ...(options.itag !== undefined ? { itag: options.itag } : {}) },
                 signal: options.signal, throwOnError: true,
@@ -766,7 +790,7 @@ export class Rest {
         const current = () => !this.node.destroyed && this.node.backend === backend &&
             this.node.socket === socket && this.node.sessionId === session;
         try {
-            const res = await makeStreamRequest(this.url + route.path, {
+            const res = await this.streamRequest(this.url + route.path, {
                 method: route.method,
                 headers: options.range ? { ...this.jsonHeaders, Range: options.range } : this.jsonHeaders,
                 body: requestPayload, signal: options.signal,

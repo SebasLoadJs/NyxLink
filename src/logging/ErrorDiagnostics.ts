@@ -20,6 +20,9 @@ const actions: Record<string, string> = {
     SNAPSHOT_CONFLICT: 'Reload the current snapshot revision before retrying the storage operation.',
     PLAYER_OPERATION_CANCELLED: 'Read the current player and backend session before issuing a new command.',
     INVALID_PROTOCOL_RESPONSE: 'Compare the backend version and response schema with the tested compatibility matrix.',
+    ETIMEDOUT: 'Check the operation deadline and backend connectivity before applying a bounded retry policy.',
+    ECONNRESET: 'Inspect the connection closure and backend health before retrying an idempotent operation.',
+    ENOTFOUND: 'Verify the configured backend hostname and DNS resolution.',
 };
 
 /** Advice is based on an actual typed code/status; unknown failures get no invented cause. */

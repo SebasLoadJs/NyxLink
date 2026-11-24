@@ -17,6 +17,7 @@ export function attachObservability(manager: Manager, transport?: LogTransport) 
     const stop = dashboard.start();
     return {
         logger,
+        showPlayerTrace(guildId: string) { return logger.playerTrace(guildId, { limit: 20 }); },
         async close() { stop(); detach(); await logger.close(); },
     };
 }

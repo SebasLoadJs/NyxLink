@@ -279,3 +279,36 @@ test('manager shutdown flushes its owned logger and closes destinations once', a
   assert.ok(calls.includes('queued before shutdown'));
   assert.equal(calls.filter(call => call === 'closed').length, 1);
 });
+
+test('player trace views are filtered, bounded and do not consume their own retained timeline', async () => {
+  const { logger, records } = capture({ timelineLimit: 30 });
+  const guildId = '123456789012345678';
+  logger.child({ guildId, traceId: 'wanted' }).event('info', 'Voice', 'voice.connected');
+  logger.child({ guildId, traceId: 'other' }).event('info', 'Player', 'track.started');
+  const observed = logger.playerTrace(guildId, { traceId: 'wanted', limit: 10 });
+  assert.equal(observed.length, 1);
+  assert.equal(observed[0].event, 'voice.connected');
+  assert.equal(logger.timeline({ guildId }).length, 2);
+  logger.playerTrace(guildId);
+  assert.equal(logger.timeline({ guildId }).length, 2);
+  await logger.close();
+  const view = records.find(record => record.event === 'player.trace');
+  assert.match(view.message, /PLAYER TRACE/);
+  assert.match(view.message, /voice.connected/);
+  assert.doesNotMatch(view.message, /track.started/);
+  assert.throws(() => logger.playerTrace('../guild'), TypeError);
+  assert.throws(() => logger.playerTrace(guildId, { limit: 21 }), TypeError);
+});
+
+test('pretty layouts distinguish compact, standard, detailed and diagnostic context', () => {
+  const source = `const {Logger}=require('./dist'); const log=new Logger({level:'info',layout:process.argv[1],color:false,timestamps:false,context:{traceId:'trace-visible',extended:'extended-context'}});log.info('Node','ready');log.close();`;
+  const outputs = {};
+  for (const layout of ['compact', 'standard', 'detailed', 'diagnostic']) {
+    const result = spawnSync(process.execPath, ['-e', source, layout], { encoding: 'utf8', timeout: 5000 });
+    assert.equal(result.status, 0, result.stderr); outputs[layout] = result.stdout;
+  }
+  assert.doesNotMatch(outputs.compact, /trace-visible|extended-context/);
+  assert.match(outputs.standard, /trace-visible/); assert.doesNotMatch(outputs.standard, /extended-context/);
+  assert.match(outputs.detailed, /extended-context/); assert.doesNotMatch(outputs.detailed, /sequence:/);
+  assert.match(outputs.diagnostic, /sequence: 1/);
+});

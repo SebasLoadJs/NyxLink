@@ -13,7 +13,7 @@ function createContainerCommand(engine, secrets = [], runner = execute) {
     } catch (error) {
       // execFile's message includes the entire command, including environment
       // credentials. Report only the operation and bounded, redacted output.
-      const timedOut = Boolean(error.killed && error.signal === 'SIGTERM');
+      const timedOut = Boolean(error.killed && error.signal === 'SIGTERM' && error.code === null);
       const reason = timedOut ? `timed out after ${timeout}ms` : `failed (code ${error.code ?? 'unknown'}, signal ${error.signal ?? 'none'})`;
       const failure = new Error(`${engine} ${args[0]} ${reason}\n${redact(error.stderr).slice(-8192)}\n${redact(error.stdout).slice(-8192)}`);
       failure.code = error.code;

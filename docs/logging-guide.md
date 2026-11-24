@@ -25,7 +25,7 @@ Detail, rendering and destination are independent:
 | `profile` | `silent`, `minimal` (warn), `standard` (info), `verbose`/`debug` (debug), `trace`/`diagnostic` (trace) |
 | `level` | Explicit `silent`, `error`, `warn`, `info`, `debug`, `trace`; overrides profile |
 | `mode` | `pretty` or newline-delimited `json`; default pretty |
-| `layout` | `compact` omits timestamps/context; standard/detailed retain context; diagnostic adds sequence/event metadata |
+| `layout` | `compact` omits timestamps/context; `standard` shows selected operational fields; `detailed` shows full redacted context; `diagnostic` adds sequence/event metadata |
 | `color` | Defaults to TTY-only; any defined `NO_COLOR`, including an empty value, disables colors |
 | `unicode` | `false` uses ASCII borders and a plain-text banner |
 | `width` | 20..500 columns; default derives from terminal width with a bounded fallback |
@@ -37,7 +37,7 @@ Detail, rendering and destination are independent:
 | `sampleRate` | 0..1; applies only to debug/trace; default 1 |
 | `deduplicateMs` | 0..60000; default 0 disables grouping; warn/error are never grouped |
 
-Standard and detailed currently share the same context rendering. They are not separate claims of an implemented visual redesign. This increment adds functional transport and lifecycle behavior; further terminal theme refinement remains open.
+Standard keeps node/guild/backend/trace/status/code/duration/position fields concise. Detailed expands the full redacted context; diagnostic adds record identity. JSON destinations receive the complete bounded record regardless of pretty layout.
 
 ## Records, correlation and tracing
 
@@ -53,12 +53,17 @@ await guildLog.traceOperation('play-command', async log => {
   // Await application work here; return values/errors keep their original identity.
 });
 const records = logger.timeline({ guildId: '123456789012345678', limit: 20 });
+logger.playerTrace('123456789012345678', { limit: 20 });
 await logger.close();
 ```
 
 AsyncLocalStorage keeps parallel traces separate and propagates a trace ID to root/child logs within the operation. Nested operations receive distinct operation IDs and a parent operation ID. `traceOperation` emits observed duration on completion/failure; a completion describes that operation, not audible playback.
 
-The manager attachment records selected player, queue, node, source-health, recovery and failover events. Reattaching the same Logger to the same manager is idempotent. The existing legacy debug adapter still preserves raw debug events for application listeners; only the logger's copies pass through its redaction pipeline. Search, player PATCH and NodeLink extension operations get spans when the manager logger is enabled. This does **not** yet instrument every REST/stream/gateway operation.
+The manager attachment records selected player, queue, node, source-health, recovery, voice, filters and failover events. Reattaching the same Logger to the same manager is idempotent. The existing legacy debug adapter still preserves raw debug events for application listeners; only the logger's copies pass through its redaction pipeline. Search, player PATCH and NodeLink extension APIs have higher-level spans. All audio Rest buffered HTTP requests and stream openings also have transport spans when the manager logger is enabled, preserving request overloads/results. They record a sanitized route/method/node, never session paths, hostnames, queries, headers, bodies or return payloads. A stream-opening completion means headers arrived, not that audio finished. Gateway/worker internals still rely on their observed lifecycle events; there is no claim of tracing every server-internal stage.
+
+`playerTrace(guildId, { traceId?, limit? })` returns matching retained records and, at info level or above, renders a bounded view (1..20 events) in pretty mode or structured event identities in JSON. An empty/disabled timeline says no retained events; it does not infer a player state. Trace views do not retain themselves in the timeline.
+
+At debug level, migration observations identify actual selection, resolution, player restoration, storage acknowledgement, source cleanup and rollback stages with a common `migrationId` and measured elapsed time. Source-cleanup failure remains a failure even after the destination is committed; failed rollback persistence/cleanup is labeled partial. Storage acknowledgement means the storage API resolved, not a new guarantee of disk durability. Stage records are single events; the final failover panel is not redrawn for every internal stage.
 
 ## Destinations and backpressure
 

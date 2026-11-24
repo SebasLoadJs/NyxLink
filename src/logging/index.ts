@@ -4,6 +4,8 @@ export type { LogProfile } from './Logger';
 export { JsonLogTransport } from './JsonLogTransport';
 export { diagnoseError } from './ErrorDiagnostics';
 export type { ErrorDiagnostic } from './ErrorDiagnostics';
+export { formatPlayerTrace } from './PlayerTrace';
+export type { PlayerTraceOptions } from './PlayerTrace';
 export type { LogContext, LogTransport, StructuredLogRecord, LogPipelineStats } from './StructuredLog';
 export { ConsoleReporter } from './ConsoleReporter';
 export { createBanner } from './Banner';

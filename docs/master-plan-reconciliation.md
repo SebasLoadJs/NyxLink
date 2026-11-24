@@ -14,7 +14,7 @@ Reanudación local del 23 de noviembre: base `03546fd`, rama `codex/resume-stabi
 
 ## Matriz de los 38 trabajos
 
-La implementación local posterior agrega pipeline/JSON/correlación/diagnósticos y dashboard de snapshots (P1-018/P3-037), mixer tipado y serializado (P2-022), hooks de extensiones opcionales, nueva guía API/migración/ejemplos (P2-028) y extracción de recuperación compartida (P3-038). Hay **930 pruebas locales aprobadas en Node.js 22 y 24**, sin equivaler a CI ni voz real. El detalle de los 24 capítulos, benchmarks y deuda restante está en [modernization-status.md](modernization-status.md). Los IDs originales se mantienen sin duplicación.
+La implementación posterior agrega pipeline/JSON/correlación/diagnósticos y dashboard (P1-018/P3-037), mixer tipado/serializado (P2-022), extensiones opcionales, API generada de 208 exports y ejemplos (P2-028), recuperación compartida y etapas de migración (P3-038). El primer candidato pasó 930 pruebas en Node.js 22/24 y CI completo con endurance 600 s en `2981fd84`; el incremento posterior se revalida por separado. El operador ejecutará después los cinco escenarios de voz y el soak preparado. Ver [modernization-status.md](modernization-status.md) y [handoff](run-live-tests-es.md). Los IDs originales se mantienen sin duplicación.
 
 | ID | Fase | Trabajo original | Estado de evidencia | Implementación / tests relevantes | Falta para cerrar |
 | --- | --- | --- | --- | --- | --- |

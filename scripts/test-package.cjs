@@ -73,7 +73,7 @@ async function main() {
     assert.equal(commonjs.stdout, ''); assert.equal(commonjs.stderr, '');
     checks.push('CommonJS public exports, metadata and silent lifecycle');
     await fs.writeFile(path.join(consumer, 'esm.mjs'), `import assert from 'node:assert/strict';
-      import { Manager, Track, TrackCodec, TrackResolver, Memory, PlayerSnapshotCodec, SnapshotConflictError, RedisStorage, RedisGuildLeaseCoordinator, RedisGuildIpcRouter, PrivateMetricsServer, Logger, JsonLogTransport, TerminalDashboard, diagnoseError, ExtensionLifecycleError, PlayerOperationCancelledError, version } from ${specifier};
+      import { Manager, Track, TrackCodec, TrackResolver, Memory, PlayerSnapshotCodec, SnapshotConflictError, RedisStorage, RedisGuildLeaseCoordinator, RedisGuildIpcRouter, PrivateMetricsServer, Logger, JsonLogTransport, TerminalDashboard, diagnoseError, formatPlayerTrace, ExtensionLifecycleError, PlayerOperationCancelledError, version } from ${specifier};
       assert.equal(version, ${JSON.stringify(manifest.version)});
       assert.equal(typeof Track, 'function'); assert.equal(typeof TrackCodec.serialize, 'function'); assert.equal(typeof TrackResolver.resolve, 'function');
       for (const component of [RedisStorage, RedisGuildLeaseCoordinator, RedisGuildIpcRouter, PrivateMetricsServer]) assert.equal(typeof component, 'function');
@@ -81,9 +81,9 @@ async function main() {
       assert.equal(await adapter.compareAndSet('record', null, { revision: 'installed-revision' }), true);
       assert.equal(PlayerSnapshotCodec.fromRecord({guildId:'123456789012345678',voiceChannelId:'223456789012345678'}).schemaVersion, 1);
       assert.equal(new SnapshotConflictError().code, 'SNAPSHOT_CONFLICT');
-      for (const component of [JsonLogTransport, TerminalDashboard, diagnoseError, ExtensionLifecycleError, PlayerOperationCancelledError]) assert.equal(typeof component, 'function');
+      for (const component of [JsonLogTransport, TerminalDashboard, diagnoseError, formatPlayerTrace, ExtensionLifecycleError, PlayerOperationCancelledError]) assert.equal(typeof component, 'function');
       const logger = new Logger({profile:'debug',transports:[{write(record){assert.equal(record.schemaVersion,1);}}]});
-      assert.equal(await logger.traceOperation('installed-check',async()=>21),21); await logger.close();
+      assert.equal(await logger.traceOperation('installed-check',async()=>21),21); assert.deepEqual(logger.playerTrace('123456789012345678'),[]); await logger.close();
       const manager = new Manager({nodes:[{host:'127.0.0.1',port:2333,password:'local-fixture'}],options:{database:{type:'memory'}}});
       const remove = await manager.useExtension({name:'installed-test',setup(){}}); await remove(); await manager.shutdown();`);
     const esm = run(process.execPath, ['esm.mjs'], consumer);
