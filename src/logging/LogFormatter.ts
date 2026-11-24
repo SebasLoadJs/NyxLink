@@ -60,9 +60,9 @@ function splitToWidth(text: string, width: number): string[] {
 
 export function formatBox(title: string, details: Record<string, unknown> = {}, width = 70): string {
   const innerWidth = Math.max(30, Math.min(108, Math.floor(width) - 4));
-  const lines = [title.toUpperCase(), ''];
+  const lines = [redactSecrets(title).toUpperCase(), ''];
   for (const [key, value] of Object.entries(details)) {
-    const label = key.padEnd(13, ' ');
+    const label = redactSecrets(key).padEnd(13, ' ');
     lines.push(`${label}: ${formatValue(value)}`);
   }
   const inner = lines.flatMap((line) => splitToWidth(line, innerWidth));
@@ -74,9 +74,9 @@ export function formatBox(title: string, details: Record<string, unknown> = {}, 
 
 export function formatEntry(entry: LogEntry, options: FormatterOptions = {}): string {
   const color = options.color ?? false;
-  const type = (entry.type || 'log').toUpperCase();
+  const type = redactSecrets(entry.type || 'log').toUpperCase();
   const time = options.timestamps === false ? '' : `[${(entry.date ?? new Date()).toLocaleTimeString('en-GB', { hour12: false })}] `;
-  const tag = entry.tag ? `[${entry.tag}] ` : '';
+  const tag = entry.tag ? `[${redactSecrets(entry.tag)}] ` : '';
   const label = type.padEnd(7, ' ');
   const prefix = `${ansi(time, 90, color)}${ansi(label, logColors[type] ?? 37, color)} ${ansi(tag, 36, color)}`;
   const msg = formatArgs(entry.args);
@@ -132,10 +132,10 @@ export function formatSystemStatus(nodes: AudioNodeStatus[], options: FormatterO
   ];
   if (!nodes.length) lines.push('No audio nodes configured');
   for (const node of nodes) {
-    lines.push(`${node.backend.toUpperCase()} · ${node.name}`);
+    lines.push(`${redactSecrets(node.backend).toUpperCase()} · ${redactSecrets(node.name)}`);
     const latency = node.latencyMs == null ? 'latency --' : `${node.latencyMs}ms`;
     const players = node.players == null ? 'players --' : `${node.players} players`;
-    lines.push(`  ${node.state.toUpperCase()}   ${latency} · ${players}`);
+    lines.push(`  ${redactSecrets(node.state).toUpperCase()}   ${latency} · ${players}`);
     lines.push('');
   }
   if (lines[lines.length - 1] === '') lines.pop();
@@ -154,11 +154,11 @@ export function formatFailover(event: FailoverReport, options: FormatterOptions 
     recovered:'Recovered', failed:'Failed', 'in-progress':'In progress', cancelled:'Cancelled'
   };
   const lines=[
-    `Source       ${event.source}`,
-    `Target       ${event.target}`,
+    `Source       ${redactSecrets(event.source)}`,
+    `Target       ${redactSecrets(event.target)}`,
     ...event.positionMs===undefined ? [] : [`Position     ${formatDuration(event.positionMs)}`],
-    ...event.guildId ? [`Guild        ${event.guildId}`] : [],
-    ...event.reason ? [`Reason       ${event.reason}`] : [],
+    ...event.guildId ? [`Guild        ${redactSecrets(event.guildId)}`] : [],
+    ...event.reason ? [`Reason       ${redactSecrets(event.reason)}`] : [],
     `Status       ${states[event.status]}`,
   ];
   let output=panel('NYXLINK • NODE FAILOVER',lines, options.width ?? 72);

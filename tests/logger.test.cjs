@@ -89,3 +89,51 @@ test('opt-in logger preserves ordinary text while redacting JSON keys', () => {
   assert.match(output.stdout, /denied/);
   assert.doesNotMatch(output.stdout, /json-secret-987/);
 });
+
+test('structured logger uses sanitized records, respects levels and can disable console output', () => {
+  const output = run(`
+    const assert = require('node:assert/strict');
+    const {Logger,createPinoSink}=require('./dist');
+    const calls=[];
+    const target=Object.fromEntries(['error','warn','info','debug','trace'].map(level=>[level,(record,message)=>calls.push({level,record,message})]));
+    const log=new Logger({level:'info',console:false,sink:createPinoSink(target)});
+    log.debug('Node','hidden');
+    log.info('Node password=tag-secret-987','connected',{token:'payload-secret-987'});
+    log.warn('Node','warning');
+    log.failover({source:'password=source-secret-987',target:'new',status:'failed',reason:'token=reason-secret-987'});
+    assert.deepEqual(calls.map(c=>c.level),['info','warn','info']);
+    assert.match(calls[0].record.module,/REDACTED/);
+    assert.match(calls[0].message,/connected/);
+    assert.match(calls[2].message,/Failed/);
+    assert.doesNotMatch(JSON.stringify(calls),/tag-secret-987|payload-secret-987|source-secret-987|reason-secret-987|hidden/);
+    assert.ok(calls.every(c=>Number.isFinite(Date.parse(c.record.timestamp))));
+  `);
+  assert.equal(output.stdout,'');
+  assert.equal(output.stderr,'');
+});
+
+test('structured logger remains silent by default and isolates throwing sinks', () => {
+  const output=run(`
+    const assert=require('node:assert/strict');
+    const {Logger}=require('./dist');
+    let count=0;
+    const log=new Logger({console:false,sink:()=>{count++;throw Error('sink failed')}});
+    log.error('Node','hidden');log.banner();
+    assert.equal(count,0);
+    log.setLevel('info');log.info('Node','observed');log.banner();
+    assert.equal(count,2);
+  `);
+  assert.equal(output.stdout,'');
+  assert.equal(output.stderr,'');
+});
+
+test('console status and failover panels redact credentials before wrapping', () => {
+  const output=run(`
+    const {Logger}=require('./dist');
+    const log=new Logger({level:'info',color:false,width:44});
+    log.systemStatus([{name:'password=very-long-node-password-canary-987654321',backend:'NodeLink',state:'ready'}]);
+    log.failover({source:'old',target:'new',status:'failed',reason:'token=very-long-failover-token-canary-987654321'});
+  `);
+  assert.doesNotMatch(output.stdout,/canary|987654321|very-long/);
+  assert.match(output.stdout,/REDACTED/);
+});

@@ -382,7 +382,27 @@ originales. Los spans no establecen un contexto activo para solicitudes internas
 no equivalen a tracing distribuido de extremo a extremo. Los listeners se
 retiran durante `manager.shutdown()`; el SDK pertenece al bot.
 
-El logger está desactivado por defecto. `logging` activa la salida de Consola y `banner: true` muestra el banner de terminal. Los eventos `debug` contienen información técnica y pueden incluir credenciales: revisa su contenido antes de compartirlos.
+El logger está desactivado por defecto. `logging` activa la salida de Consola y `banner: true` muestra el banner de terminal. Los eventos `debug` originales pueden contener credenciales y deben mantenerse privados. La salida del logger aplica redacción de patrones conocidos, no una garantía de anonimización.
+
+Para usar Pino con tu propia configuración, instala `pino` en el bot y proporciona su instancia mediante el adaptador opcional:
+
+```js
+const pino = require('pino');
+const { Manager, createPinoSink } = require('nyxlink');
+
+const manager = new Manager({
+  nodes,
+  options: {
+    logging: {
+      level: 'info',
+      console: false,
+      sink: createPinoSink(pino()),
+    },
+  },
+});
+```
+
+El bot puede configurar `pino-pretty` en su propio transporte para desarrollo, o reenviar los registros a su infraestructura de observabilidad. NyxLink no instala ni inicia un transporte externo. El sink recibe nivel, tipo, módulo, timestamp y mensaje redactado, incluidos los paneles de estado. Su contrato es síncrono; las excepciones del sink se aíslan y no deben detener la reproducción. Para evitar duplicar la salida, utiliza `console: false`. No envíes datos privados ni secretos arbitrarios como etiquetas o mensajes.
 
 </details>
 
