@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const { sourceRevision } = require('./check-endurance-evidence.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
@@ -10,6 +11,9 @@ const { event } = require('../tests/helpers/v4-server.cjs');
 const lab = JSON.parse(process.env.NYXLINK_BACKENDS_JSON || 'null');
 if (!lab) throw new Error('Run test:endurance to create the isolated server lab');
 const durationSeconds = Number(process.argv[2]);
+// A dirty local checkout may still run diagnostic tests, but cannot certify a release.
+let revision = null;
+try { revision = sourceRevision(); } catch { /* unverified source */ }
 if (!Number.isInteger(durationSeconds) || durationSeconds < 10 || durationSeconds > 7200) throw new Error('Invalid endurance duration');
 const contexts = [];
 const samples = [];
@@ -134,8 +138,10 @@ async function main() {
       assert.deepEqual(failures, []);
       assert.equal(process.getActiveResourcesInfo().filter(name => name === 'Timeout').length, 0);
     } catch (error) { passed = false; errorMessage ??= error.message; }
+    // The exact source must remain unchanged throughout the run.
+    try { if (sourceRevision() !== revision) revision = null; } catch { revision = null; }
     const report = {
-      timestamp: new Date().toISOString(), scope: 'local backend endurance; no Discord voice or audible playback', durationSeconds,
+      sourceRevision: revision, timestamp: new Date().toISOString(), scope: 'local backend endurance; no Discord voice or audible playback', durationSeconds,
       elapsedSeconds: start ? (performance.now() - start) / 1000 : 0, passed,
       environment: { node: process.version, platform: process.platform, arch: process.arch, cpu: os.cpus()[0]?.model },
       backends: contexts.map(({ backend, cycles, resumes, pings }) => ({ backend: backend.kind, version: backend.version, image: backend.image, cycles, resumes, pings })),

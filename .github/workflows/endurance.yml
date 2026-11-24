@@ -45,6 +45,9 @@ jobs:
         env:
           NYXLINK_CONTAINER_ENGINE: docker
           ENDURANCE_SECONDS: ${{ inputs.seconds || '60' }}
+      - name: Verify SHA-bound extended endurance evidence
+        if: ${{ inputs.seconds == '600' }}
+        run: pnpm run release:check-endurance-evidence
       - uses: actions/upload-artifact@v4
         if: always()
         with:
