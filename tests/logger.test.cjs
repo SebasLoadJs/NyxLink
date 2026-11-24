@@ -137,3 +137,15 @@ test('console status and failover panels redact credentials before wrapping', ()
   assert.doesNotMatch(output.stdout,/canary|987654321|very-long/);
   assert.match(output.stdout,/REDACTED/);
 });
+
+test('legacy boxes and quoted multiword credentials are redacted before wrapping', () => {
+  const { formatBox, redactSecrets, formatValue } = require('../dist/src/logging/LogFormatter');
+  const text = 'password="multi word secret" token=\x60another private value\x60 status=ok';
+  const cleaned = redactSecrets(text);
+  assert.doesNotMatch(cleaned, /multi word secret|another private value/);
+  assert.equal(redactSecrets(cleaned), cleaned);
+  assert.match(cleaned, /status=ok/);
+  assert.doesNotMatch(formatBox('diagnostics', { password: 'box-secret-123', token: 'box-token-456', status: 'ok' }), /box-secret|box-token/);
+  const value = { [Symbol.for('nodejs.util.inspect.custom')]() { throw Error('custom inspector executed'); }, token: 'nested secret value' };
+  assert.doesNotMatch(formatValue(value), /nested secret value/);
+});

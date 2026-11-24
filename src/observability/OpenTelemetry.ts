@@ -2,7 +2,7 @@ import { performance } from 'node:perf_hooks';
 import type { Manager } from '../core/Manager';
 import type { SearchResult } from '../structures/SearchResult';
 
-const operationNames = ['nyxlink.rest', 'nyxlink.player.play', 'nyxlink.player.seek', 'nyxlink.player.stop', 'nyxlink.failover', 'nyxlink.connect', 'nyxlink.resolve', 'nyxlink.node.select', 'nyxlink.session.restore', 'nyxlink.autoplay', 'nyxlink.crossfade'] as const;
+const operationNames = ['nyxlink.rest', 'nyxlink.player.play', 'nyxlink.player.seek', 'nyxlink.player.stop', 'nyxlink.failover', 'nyxlink.connect', 'nyxlink.resolve', 'nyxlink.node.select', 'nyxlink.session.restore', 'nyxlink.autoplay', 'nyxlink.crossfade', 'nyxlink.capabilities'] as const;
 export type TelemetryOperation = typeof operationNames[number];
 const validOperations = new Set<string>(operationNames);
 const validOutcomes = new Set<string>(['success', 'empty', 'error', 'cancelled', 'resolved']);
@@ -19,7 +19,13 @@ export function observeSyncOperation<T>(manager: Manager, name: TelemetryOperati
 }
 
 type Attributes = Record<string, string>;
+export interface TelemetryObservation { observe(value: number, attributes?: Attributes): void; }
+export interface TelemetryGauge {
+    addCallback(callback: (result: TelemetryObservation) => void): void;
+    removeCallback(callback: (result: TelemetryObservation) => void): void;
+}
 export interface TelemetryMeter {
+    createObservableGauge?(name: string, options?: { unit?: string }): TelemetryGauge;
     createCounter(name: string): { add(value: number, attributes?: Attributes): void };
     createHistogram(name: string, options?: { unit?: string }): { record(value: number, attributes?: Attributes): void };
 }
@@ -51,6 +57,8 @@ export class OpenTelemetry {
         this.counter = this.safe(() => options.meter?.createCounter('nyxlink.events'));
         this.duration = this.safe(() => options.meter?.createHistogram('nyxlink.search.duration', { unit: 'ms' }));
         this.operationsDuration = this.safe(() => options.meter?.createHistogram('nyxlink.operation.duration', { unit: 'ms' }));
+        this.gauge('nyxlink.nodes.connected', () => [...manager.nodes.nodes.values()].filter(node => node.connected && !node.destroyed).length);
+        this.gauge('nyxlink.players.active', () => manager.players.all.filter(player => !player.destroyed && player.playing && !player.paused).length);
         installed.set(manager, this);
         this.disposers.push(() => { if (installed.get(manager) === this) installed.delete(manager); });
         // Fixed vocabulary only. Never export node identifiers, guild IDs, tracks,
@@ -79,6 +87,16 @@ export class OpenTelemetry {
 
     private safe<T>(action: () => T): T | undefined {
         try { return action(); } catch { return undefined; }
+    }
+
+    private gauge(name: string, value: () => number): void {
+        const gauge = this.safe(() => this.options.meter?.createObservableGauge?.(name, { unit: '1' }));
+        if (!gauge) return;
+        const callback = (result: TelemetryObservation) => {
+            if (!this.closed) this.safe(() => result.observe(value()));
+        };
+        this.safe(() => gauge.addCallback(callback));
+        this.disposers.push(() => gauge.removeCallback(callback));
     }
 
     private backend(value: unknown): string {

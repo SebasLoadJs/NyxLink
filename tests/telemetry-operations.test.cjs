@@ -32,3 +32,16 @@ test('node selection stays synchronous and arbitrary labels are excluded',async(
    assert.deepEqual(outcomes,['empty','resolved']);
  }finally{t.close();await m.shutdown();}
 });
+
+test('observable gauges report real counts and detach on close',async()=>{
+ const m=make(),callbacks=new Map(),values=[];
+ const meter={createCounter(){return{add(){}};},createHistogram(){return{record(){}};},
+ createObservableGauge(name){return{addCallback(cb){callbacks.set(name,cb);},removeCallback(cb){if(callbacks.get(name)===cb)callbacks.delete(name);}};}};
+ const t=new OpenTelemetry(m,{meter});
+ try{
+  m.nodes.nodes.set('fixture',{connected:true,destroyed:false});
+  for(const [name,cb] of callbacks)cb({observe(value){values.push([name,value]);}});
+  assert.deepEqual(values,[['nyxlink.nodes.connected',1],['nyxlink.players.active',0]]);
+  t.close();assert.equal(callbacks.size,0);
+ }finally{m.nodes.nodes.clear();t.close();await m.shutdown();}
+});

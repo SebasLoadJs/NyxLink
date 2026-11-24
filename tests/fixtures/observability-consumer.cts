@@ -61,6 +61,8 @@ async function main(): Promise<void> {
         const metrics = JSON.stringify(metricExporter.getMetrics());
         assert.match(metrics, /nyxlink.events/);
         assert.match(metrics, /nyxlink.search.duration/);
+        assert.match(metrics, /nyxlink.nodes.connected/);
+        assert.match(metrics, /nyxlink.players.active/);
         assert.match(metrics, /search.empty/);
         assert.doesNotMatch(metrics + JSON.stringify(spans[0].attributes), /private-query-canary/);
     } finally {

@@ -189,3 +189,15 @@ CI artifact IDs 14952985134 (Node 22) and 14952795737 (Node 24) expire on
 The Inspector demo now routes events to a custom read-only store without
 another stdout renderer. The expanded PTY fixture exercises all five tabs;
 those additional checks remain pending for the new commit.
+
+## Acceptance hardening
+
+The merged #45 baseline passed all seven workflows. The next increment
+addresses credential leakage in legacy boxes and quoted values, disables
+custom inspection hooks in legacy formatting, and adds optional SDK
+observable gauges (connected nodes and locally playing, unpaused players).
+Gauges are collected by the host, not timers in the library; callbacks are
+removed on close. A new capability negotiation span wraps the existing
+coalesced metadata request. Counts are not audio audibility measurements.
+Legacy text redaction remains best effort: arbitrary prose without known
+credential keys cannot be guaranteed safe. Prefer Aurora's fixed schema.
