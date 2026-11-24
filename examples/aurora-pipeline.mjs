@@ -1,10 +1,8 @@
 import pino from 'pino';
 import { prettyFactory } from 'pino-pretty';
 import { createConsola } from 'consola';
-import boxen from 'boxen';
-import prettyMs from 'pretty-ms';
 import { TerminalCoordinator, AuroraIncidentEngine, auroraCatalog } from 'nyxlink';
-import { createPresentation } from './aurora-visual.mjs';
+import { createPresentation, renderIncident } from './aurora-visual.mjs';
 import { startCoordinatedMusicView } from './aurora-diagnostics.mjs';
 
 const levels = ['trace','debug','info','warn','error','fatal'];
@@ -41,7 +39,24 @@ export function createAuroraPipeline(options={}){
     if(format==='silent'||level==='silent')return {target:noOutput,level:'silent',banner:()=>{},close:async()=>true};
     if(format==='custom'){
         if(!options.target||levels.some(l=>typeof options.target[l]!=='function'))throw new TypeError('Custom requires a target');
-        return {target:options.target,level,banner:()=>{},close:async()=>true};
+        // Custom consumes the same sanitized Pino records, not a second engine.
+        let closed=false;
+        const logger=pino({level,base:null,redact:['password','token','authorization','sanitizedContext.password','sanitizedContext.token']},{
+            write(line){
+                if(closed)return;
+                try{
+                    const record=canonical(JSON.parse(line));
+                    if(!record)return;
+                    options.target[record.severity](record,auroraCatalog[record.eventCode].message);
+                }catch{try{options.onRenderError?.();}catch{}}
+            }
+        });
+        const target=Object.fromEntries(levels.map(name=>[name,record=>{
+            if(closed)return;
+            const safe=canonical(record);
+            if(safe&&safe.severity===name)logger[name](safe,auroraCatalog[safe.eventCode].message);
+        }]));
+        return {target,level,banner:()=>{},close:async()=>{closed=true;return true;}};
     }
     const stream=options.stream??process.stdout;
     const width=()=>Math.max(40,Math.min(120,stream.columns??80));
@@ -58,7 +73,7 @@ export function createAuroraPipeline(options={}){
         return cachedPresentation;
     };
     let musicStop,closing=false;
-    const pretty=prettyFactory({colorize:false,translateTime:'SYS:HH:MM:ss',ignore:'pid,hostname,timestamp,sanitizedContext,operationId,traceId,spanId,eventCode,outcome,severity',singleLine:true});
+    const pretty=prettyFactory({colorize:false,translateTime:'SYS:HH:MM:ss',ignore:'pid,hostname,category,timestamp,sanitizedContext,operationId,traceId,spanId,eventCode,outcome,severity',singleLine:true,messageFormat:'{category} | {msg}'});
     const incidents=new AuroraIncidentEngine(options.incidentCapacity??100);
     let bannerWritten=false;
     const write=(line,record)=>terminal.write(line,isCritical(record)?'critical':'normal');
@@ -66,11 +81,7 @@ export function createAuroraPipeline(options={}){
         const incident=incidents.accept(record);
         if(!incident&&record.operationId&&record.eventCode.startsWith('FAILOVER_')&&incidents.snapshot().some(x=>x.operationId===record.operationId))return;
         if(incident&&incident.state!=='recovering'){
-            const content=['FAILOVER '+incident.state.toUpperCase(),incident.sourceBackend?incident.sourceBackend.toUpperCase()+' -> '+incident.backend.toUpperCase():incident.backend.toUpperCase(),
-                incident.durationMs===undefined?'Duration: N/A':'Duration: '+prettyMs(incident.durationMs),
-                ...(incident.reasonCode?['Evidence: '+incident.reasonCode]:[])].join('\n');
-            if(width()>=40&&options.unicode!==false)write(boxen(content,{padding:1,borderStyle:'round'}),record);
-            else write(content,record);
+            write(renderIncident(incident,{columns:width(),color,unicode:options.unicode!==false}),record);
             return;
         }
         if(isCritical(record)||options.detail===true){
@@ -89,7 +100,10 @@ export function createAuroraPipeline(options={}){
                 try{options.onEvent?.({...record,sanitizedContext:{...record.sanitizedContext}});}catch{}
                 if(format==='json')write(JSON.stringify({...record,level:raw.level,msg:auroraCatalog[record.eventCode].message}),record);
                 else if(format==='pretty')write(String(pretty(JSON.stringify({...record,level:raw.level,msg:auroraCatalog[record.eventCode].message,time:raw.time}))).trimEnd(),record);
-                else reporter.info(record);
+                else {
+                    const semantic=record.severity==='fatal'||record.severity==='error'?'error':record.severity==='warn'?'warn':record.outcome==='confirmed'?'success':record.outcome==='started'?'start':record.severity==='debug'||record.severity==='trace'?'debug':'info';
+                    reporter[semantic](record);
+                }
             }catch{try{options.onRenderError?.();}catch{}}
         }
     });

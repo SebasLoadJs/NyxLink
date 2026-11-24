@@ -39,3 +39,13 @@ const musicPipeline=createAuroraPipeline({format:'aurora',stream:new Writable({w
 const endMusic=musicPipeline.startMusic({snapshot:()=>({state:'playing',positionMs:500,durationMs:1000})});
 endMusic();await musicPipeline.close();
 assert.match(staticChunks.join(''),/MUSIC PLAYING/);
+
+const privateRecords=[];
+const filtered=createAuroraPipeline({format:'custom',level:'warn',target:Object.fromEntries(['trace','debug','info','warn','error','fatal'].map(l=>[l,e=>privateRecords.push(e)]))});
+const safe={eventCode:'NODE_ERROR',severity:'error',timestamp:new Date().toISOString(),sanitizedContext:{backend:'nodelink',token:'private-token'},password:'private-password'};
+filtered.target.info({...safe,eventCode:'NODE_READY',severity:'info'});
+filtered.target.error(safe);
+await filtered.close();
+filtered.target.error(safe);
+assert.equal(privateRecords.length,1);
+assert.doesNotMatch(JSON.stringify(privateRecords),/private-/);

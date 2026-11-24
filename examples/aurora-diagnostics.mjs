@@ -19,7 +19,7 @@ export function capabilityTable(nodes) {
 export function musicLine(snapshot) {
     const position = snapshot.positionMs === undefined ? 'N/A' : prettyMs(snapshot.positionMs);
     const duration = snapshot.durationMs === undefined ? 'N/A' : prettyMs(snapshot.durationMs);
-    const ratio = snapshot.durationMs > 0 && snapshot.positionMs !== undefined
+    const ratio = !snapshot.stream && snapshot.durationMs > 0 && snapshot.positionMs !== undefined
         ? Math.min(1, Math.max(0, snapshot.positionMs / snapshot.durationMs)) : undefined;
     const progress = ratio === undefined ? '' : ' [' + '='.repeat(Math.floor(ratio * 10)) + '-'.repeat(10 - Math.floor(ratio * 10)) + ']';
     return 'MUSIC ' + snapshot.state.toUpperCase() + ' ' + position +

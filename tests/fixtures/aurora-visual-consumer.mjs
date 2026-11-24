@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import stringWidth from 'string-width';
 import stripAnsi from 'strip-ansi';
 import { Manager, version } from 'nyxlink';
-import { createPresentation } from './aurora-visual.mjs';
+import { createPresentation, renderIncident } from './aurora-visual.mjs';
 
 const manager = new Manager({
     nodes: [{ host: '127.0.0.1', port: 2333, password: 'private-fixture', secure: false }],
@@ -27,3 +27,18 @@ try {
     assert.match(line, /182ms/);
     assert.doesNotMatch(line, /private-fixture/);
 } finally { await manager.shutdown(); }
+
+for(const columns of [40,80,120]){
+    for(const state of ['recovered','degraded','failed','cancelled']){
+        const output=renderIncident({state,sourceBackend:'lavalink',backend:'nodelink',durationMs:182,reasonCode:state==='degraded'?'source-cleanup-failed':undefined},{columns,color:false});
+        assert.match(output,new RegExp('FAILOVER '+state.toUpperCase()));
+        assert.match(output,/LAVALINK.*NODELINK/);
+        assert.match(output,/182ms/);
+        assert.equal(stripAnsi(output),output);
+        assert.ok(output.split('\n').every(line=>stringWidth(line)<=columns));
+        if(state==='degraded')assert.match(output,/Source cleanup failed/);
+    }
+}
+const unknown=renderIncident({state:'failed',backend:'private-node',reasonCode:'private-secret'},{columns:40,unicode:false});
+assert.match(unknown,/Duration: N\/A/);
+assert.doesNotMatch(unknown,/private-/);

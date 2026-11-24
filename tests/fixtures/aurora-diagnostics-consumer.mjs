@@ -24,3 +24,5 @@ assert.equal(errors,1);assert.equal(released,2);
 const staticLines=[];
 startCoordinatedMusicView({snapshot:()=>({state:'idle'})},{acquire:()=>undefined,write:line=>staticLines.push(line)},{staticFallback:true});
 assert.deepEqual(staticLines,['MUSIC IDLE N/A / N/A']);
+
+assert.doesNotMatch(musicLine({state:'playing',positionMs:5000,durationMs:10000,stream:true}), /\[/);
