@@ -6,7 +6,7 @@ function fixture(options = {}) {
     const target = Object.fromEntries(['trace','debug','info','warn','error','fatal'].map(level => [level, (event, message) => events.push({ level, event, message })]));
     const manager = new Manager({
         nodes: [{ identifier: 'private-node', host: '127.0.0.1', port: 2333, password: 'private-password', secure: false }],
-        options: { aurora: { level: 'debug', target, ...options } },
+        options: { logging: { level: 'debug', target, ...options } },
     });
     return { manager, events };
 }
@@ -45,7 +45,7 @@ test('Aurora is silent by default, rejects dual routing and isolates sink failur
     assert.equal(events.length, 0);
     await manager.shutdown();
     const nodes = [{ host: '127.0.0.1', port: 2333, password: 'fixture', secure: false }];
-    assert.throws(() => new Manager({ nodes, options: { logging: {}, aurora: {} } }), /not both/);
+    assert.throws(() => new Manager({ nodes, options: { logging: {}, aurora: {} } }), /Use options.logging/);
     const fail = () => { throw Error('sink failure'); };
     const second = fixture({ target: Object.fromEntries(['trace','debug','info','warn','error','fatal'].map(level => [level, fail])), traceContext: fail });
     assert.doesNotThrow(() => second.manager.emit('nodeReady', {}));
@@ -91,7 +91,7 @@ test('canonical search, REST and player observations emit once and retain no pri
  }finally{await manager.shutdown();}
 });
 
-test('preferred logging option and deprecated aurora alias share one route; manual duplicate attachment is rejected',async()=>{
+test('canonical logging rejects duplicate attachment and removes its listeners',async()=>{
  const { Logger, AuroraEvents }=require('../dist');
  const records=[];
  const target=Object.fromEntries(['trace','debug','info','warn','error','fatal'].map(level=>[level,event=>records.push(event)]));
@@ -111,19 +111,17 @@ test('preferred logging option and deprecated aurora alias share one route; manu
  }finally{duplicate.close();await legacy.close();await manager.shutdown();}
 });
 
-test('deprecated Manager logger consumes the canonical route without raw debug or duplicate search events',async()=>{
- const records=[];
- const manager=new Manager({nodes:[{host:'localhost',port:2333,password:'fixture',secure:false}],options:{logging:{level:'debug',transports:[{write(record){records.push(record);}}]}}});
- try{
-  manager.emit('debug','private-raw-debug');
-  manager.emit('nodeReady',{backend:{kind:'nodelink'},identifier:'private-node'},{token:'private-token'});
-  manager.searches.search=async()=>({isError:false,tracks:[{title:'private-title'}]});
-  await manager.search({query:'private-query'});
-  await manager.logger.flush();
-  assert.deepEqual(records.map(r=>r.event),['NODE_READY','SEARCH_COMPLETED']);
-  assert.doesNotMatch(JSON.stringify(records),/private-/);
-  manager.detachLogger();
-  manager.emit('nodeReady',{backend:{kind:'lavalink'}},{});
-  await manager.logger.flush();assert.equal(records.length,2);
+test('removed legacy options cannot instantiate an alternative logger',()=>{
+ const nodes=[{host:'localhost',port:2333,password:'fixture',secure:false}];
+ assert.throws(()=>new Manager({nodes,options:{logging:{level:'debug',mode:'json'}}}),/Unsupported logging option/);
+ assert.throws(()=>new Manager({nodes,options:{aurora:{level:'silent'}}}),/Use options.logging/);
+});
+test('nested operations retain parent correlation and never expose payloads',async()=>{
+ const {manager,events}=fixture();
+ try {
+  await manager.aurora.observe('search',()=>manager.aurora.observe('rest',async()=>({private:'never'})));
+  assert.equal(events.length,2);
+  assert.equal(events[0].event.parentOperationId,events[1].event.operationId);
+  assert.doesNotMatch(JSON.stringify(events),/never/);
  }finally{await manager.shutdown();}
 });

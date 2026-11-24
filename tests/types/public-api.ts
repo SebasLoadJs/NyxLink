@@ -11,7 +11,7 @@ const volume: Player = player.setVolume(75);
 const asyncVolume: Promise<Player> = player.setVolumeAsync(75);
 const logger = new Logger({ level: "debug", color: false });
 const detach: () => void = logger.attachManager(manager);
-manager.logger?.managerStatus(manager);
+manager.aurora?.recordInitialized();
 manager.detachLogger();
 const autoplay: Player = player.setAutoPlay(false);
 const transfer: Promise<boolean> = player.transferNode(node);

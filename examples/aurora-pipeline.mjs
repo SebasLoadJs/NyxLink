@@ -1,6 +1,6 @@
 import { prettyFactory } from 'pino-pretty';
 import { createConsola } from 'consola';
-import { TerminalCoordinator, AuroraIncidentEngine, auroraCatalog, createAuroraPinoEngine } from 'nyxlink';
+import { TerminalCoordinator, AuroraIncidentEngine, auroraCatalog, createAuroraPinoEngine, normalizeAuroraEvent } from 'nyxlink';
 import { createPresentation, renderIncident } from './aurora-visual.mjs';
 import { startCoordinatedMusicView } from './aurora-diagnostics.mjs';
 import { wrapRecord } from './aurora-terminal-tools.mjs';
@@ -9,28 +9,7 @@ const levels = ['trace','debug','info','warn','error','fatal'];
 const rank = Object.fromEntries(levels.map((x,i)=>[x,i]));
 const noOutput = Object.fromEntries(levels.map(x=>[x,()=>{}]));
 const isCritical = record => record.severity === 'error' || record.severity === 'fatal';
-function canonical(record) {
-    if (!record || typeof record.eventCode !== 'string' || !Object.hasOwn(auroraCatalog,record.eventCode)) return undefined;
-    const definition = auroraCatalog[record.eventCode];
-    const safe = {
-        eventCode:record.eventCode,category:definition.category,severity:definition.level,outcome:definition.outcome,
-        timestamp:typeof record.timestamp==='string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(record.timestamp)?record.timestamp:new Date().toISOString(),
-        sanitizedContext:{backend:['lavalink','nodelink'].includes(record.sanitizedContext?.backend)?record.sanitizedContext.backend:'unknown'},
-    };
-    for(const key of ['attempt','trackCount']){
-        const value=record.sanitizedContext?.[key];
-        if(Number.isSafeInteger(value)&&value>=0)safe.sanitizedContext[key]=value;
-    }
-    const reason=record.sanitizedContext?.reasonCode;
-    if(['source-cleanup-failed','intent-cancelled','restart-rejected','migration-error'].includes(reason))safe.sanitizedContext.reasonCode=reason;
-    if(typeof record.durationMs==='number'&&Number.isFinite(record.durationMs)&&record.durationMs>=0)safe.durationMs=record.durationMs;
-    if(typeof record.operationId==='string'&&/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(record.operationId))safe.operationId=record.operationId;
-    const traceId=record.traceId??record.trace_id, spanId=record.spanId??record.span_id;
-    if(typeof traceId==='string'&&/^[a-f0-9]{32}$/.test(traceId)&&!/^0+$/.test(traceId)&&typeof spanId==='string'&&/^[a-f0-9]{16}$/.test(spanId)&&!/^0+$/.test(spanId)){
-        safe.traceId=traceId;safe.spanId=spanId;
-    }
-    return safe;
-}
+const canonical = normalizeAuroraEvent;
 // One engine construction and canonical serialization path for every active format.
 function createCanonicalEngine(level,consume,onRenderError){
     const engine=createAuroraPinoEngine(level,(record,raw)=>{

@@ -132,7 +132,7 @@ export { AuroraPresentation } from './src/logging/AuroraPresentation';
 export type { AuroraVisualToolkit, AuroraVisualOptions } from './src/logging/AuroraPresentation';
 export { TerminalCoordinator } from './src/logging/TerminalCoordinator';
 export type { TerminalOptions, TerminalLease, TerminalStats, TerminalPriority, TerminalRejectReason } from './src/logging/TerminalCoordinator';
-export { AuroraEvents, auroraCatalog, createAuroraPinoEngine } from './src/logging/AuroraEvents';
+export { AuroraEvents, auroraCatalog, createAuroraPinoEngine, normalizeAuroraEvent } from './src/logging/AuroraEvents';
 export type { AuroraEvent, AuroraEventCode, AuroraCategory, AuroraLevel, AuroraOutcome, AuroraContext, AuroraPinoTarget, AuroraEventOptions } from './src/logging/AuroraEvents';
 export { OpenTelemetry } from './src/observability/OpenTelemetry';
 export type { OpenTelemetryOptions, TelemetryMeter, TelemetryTracer, TelemetrySpan, TelemetryOperation, TelemetryOutcome, TelemetryObservation, TelemetryGauge } from './src/observability/OpenTelemetry';

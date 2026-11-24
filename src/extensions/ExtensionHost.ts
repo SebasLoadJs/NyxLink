@@ -1,3 +1,4 @@
+import { getManagerLogRoute } from '../logging/ManagerLogRoute';
 import type { Manager } from '../core/Manager';
 import type { IManagerEvents } from '../typings/Interfaces';
 
@@ -30,7 +31,7 @@ export class ExtensionHost {
     constructor(private readonly manager: Manager) {}
 
     private report(error: ExtensionLifecycleError, notify = true): void {
-        try { this.manager.logger?.reportError(error, { extension: error.extension }); } catch { /* diagnostics are isolated */ }
+        try { getManagerLogRoute(this.manager)?.recordExtensionFailure(); } catch { /* diagnostics are isolated */ }
         if (notify) { try { this.manager.emit('extensionError', error.extension, error); } catch { /* observer failure */ } }
     }
 
