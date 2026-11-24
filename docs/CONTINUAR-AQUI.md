@@ -1,0 +1,47 @@
+# Continuidad de NyxLink — leer antes de continuar
+
+El usuario pidió implementar **todo** el documento `C:\Users\kangu\Downloads\NYXLINK_TODO_EN_UNO_PARA_IA.md`. Después pidió guardar y subir el trabajo actual para continuar en otro chat. **Este commit es un checkpoint de trabajo, no el cierre del plan.**
+
+Repositorio: `C:\Users\kangu\Desktop\Proyectos\NyxLink`. Rama: `codex/resume-stabilization`. [PR #32 hacia dev](https://github.com/SebasLoadJs/NyxLink/pull/32). No modificar `v5.2`. Commit/push/PR ya están autorizados; merge/tag/publicación no. El usuario hará después las pruebas reales: no volver a pedir credenciales ni ejecutar Discord. Registro: [pending-real-world-acceptance.md](pending-real-world-acceptance.md).
+
+## Última base aceptada y alcance del checkpoint
+
+`e4d67d336bbbae4c8b403688b24e11b185804ae3` tuvo 963 pruebas Node 22/24, siete checks de consumidor por versión y nueve workflows aprobados, incluida endurance 600,7 s. Esa evidencia **no certifica** el código nuevo del presente checkpoint. Las afirmaciones previas de que todo el plan estaba implementado fueron demasiado amplias; no repetirlas.
+
+En esta continuación se detectaron e implementaron requisitos que faltaban:
+
+- `PinoLogTransport` y `OpenTelemetryLogTransport`: instancias de aplicación inyectadas, sin dependencias runtime adicionales; Pino recibe records redactados y conserva su stream; OTel convierte operaciones terminadas con duración observada, sin inventar W3C parent IDs. El counter usa únicamente severidad como etiqueta.
+- `PerformanceMonitor`: opt-in, independiente del nivel del logger, muestras circulares por métrica, p50/p95 de REST/apertura de stream/READY/TrackStart/recuperación, event-loop delay/ELU, memoria y recursos; cleanup de listeners/histograma en shutdown. `/performance` privado y métricas agregadas en dashboard/Prometheus.
+- Recuento de comandos pendientes en PlayerCommandQueue/Player y `listenerCount()` total opcional en EventEmitter.
+- `options.recommendations.score`: preferencia síncrona de aplicación por metadata inmutable; fallos/valores inválidos vuelven a selección existente; cola manual mantiene prioridad.
+- Startup observado con cuatro layouts, sin readiness inventada; `FORCE_COLOR`, `NO_COLOR` y conversión a paleta truecolor, activación de startup explícita.
+- `options.search.deduplicate`: coalescing backend opt-in, máximo 128 operaciones compartidas y cancelación por suscriptor; custom/native resolvers no compartidos.
+- `options.search.trackResolution`: fallback explícito en destino por ISRC/título/artista/duración; fuentes limitadas, score mínimo, sin recurrencia al resolver nativo ni copiar código NodeLink. Es código nuevo que todavía necesita regresiones específicas.
+
+## Verificación y archivos de evidencia
+
+- Build estricto pasó; referencia API regenerada con **223 exports**.
+- Suite completa del checkpoint: **979/979 pruebas aprobadas en Node 24**, sin fallos ni cancelaciones; contratos públicos TypeScript y verificación de la referencia API aprobados.
+- Primera suite dirigida: 123 pruebas aprobadas antes de los últimos incrementos de búsqueda/metadata/startup.
+- La siguiente suite dirigida detectó un fixture inválido (`nodes: []`) en la prueba nueva de startup; se corrigió a una configuración local válida sin conectar.
+- `scripts/test-optional-logging.cjs` pasó con **Pino 10.4.0 y @opentelemetry/api 1.10.0 reales**, incluyendo TypeScript estructural, redacción/flush y stream sin cerrar, en **Node 24 y Node 22**. Las dependencias se instalaron únicamente en `.runtime/optional-adapters`, ignorado.
+- Snapshot público de las 14 bibliotecas evaluadas: [logging-dependency-review.json](logging-dependency-review.json), consultado del registro npm; falta redactar decisiones, costes transitivos e interoperabilidad en la guía/ADR. Observación a revisar: `prom-client` 15.1.3 está marcado deprecated en ese snapshot; no se instaló.
+- Logs privados: `.runtime/modernization/full-plan-focused.log`, `handoff-focused.log`, `checkpoint-node24-tests.log` y `.runtime/optional-adapters/report.json`. Consultar los resultados finales de este checkpoint en el PR; no asumir verde.
+
+## Trabajo obligatorio al reanudar
+
+1. Completar la auditoría requisito por requisito: catálogo **F01–F27**, backlog **38 IDs**, ampliaciones **A–J** y capítulos **0–23**. Crear una matriz granular que enlace cada requisito con código, tests, tipos, ejemplo, documentación y estado. Las matrices existentes no bastan para afirmar cobertura completa.
+2. Añadir regresiones específicas de deduplicación: dos consumidores con requester aislado, cancelación de uno sin cancelar otro, cancelación de todos, error, shutdown, sesión/nodo reemplazado, capacidad y mapa acotado. Verificar identidad de backend/connection en la clave y cambios de sesión mientras una búsqueda está pendiente.
+3. Añadir regresiones de metadata: ISRC, acentos/tokens, versiones/duración diferentes, ausencia de URI, fuentes fallback, payload inválido, errors HTTP/auth/429 sin bypass, stop/destroy/migración durante resolución, no mutar la pista/cola al fallar. Revisar si el contrato necesita un deadline/AbortSignal global para varios intentos.
+4. Revisar métricas: correlación de READY/TrackStart/recuperación ante eventos tardíos, histogram shutdown, recursos y comandos rechazados; iniciar antes de init para observar CONNECTING. No afirmar audio audible con TrackStart ni latencia de descarga completa con headers de stream.
+5. Actualizar guías de API/logging/selección/autoplay/búsqueda/métricas, ejemplos compilados, changelog y decisiones de dependencias; agregar los nuevos exports/métodos a pruebas de tipos y consumidor tarball. La API generada está actualizada, pero eso no sustituye recetas y pruebas.
+6. Inspeccionar el resto del documento y **implementar todo requisito de código restante**, no solo cambiar estados de Markdown. Los componentes internos de NodeLink (AutoMix/DSP/workers/HLS/HTTP2) se delimitan como servidor; no inventar endpoints.
+7. Completar suite Node 22, pack y consumidor del checkpoint (Node 24 completo/tipos y smoke real Pino/OTel 22/24 ya pasaron). Después repetir las comprobaciones afectadas por los cambios nuevos y revisar los nueve workflows del SHA definitivo, incluida endurance >=600 s, y actualizar el PR. No reutilizar CI de `e4d67d33` para este checkpoint.
+
+## Comandos y precauciones prácticas
+
+Usar `npx --yes pnpm@10.34.5 ...` (el pnpm global es distinto). Node 22: `npx --yes --package=node@22 node ...`. Suite local con `--test-concurrency=4` para no saturar este host. Windows sin Docker; laboratorios de backends/plugins/Redis se verifican en CI.
+
+Build modifica el `dist` viejo versionado. No subir artefactos generados: antes del commit restaurar exclusivamente `dist` y retirar solo archivos nuevos de compilación dentro de esa ruta tras verificar límites. No borrar `.runtime` (contiene evidencia privada) ni archivos/configuraciones del usuario. No mostrar secretos ni dumps de logs de backend.
+
+Las revisiones de derechos/assets, titularidad npm y autorización de release permanecen separadas en el documento de aceptación. El pedido de completar código no elimina la decisión anterior de hacer las pruebas reales después.

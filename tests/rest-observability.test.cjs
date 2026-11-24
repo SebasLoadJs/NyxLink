@@ -23,6 +23,18 @@ async function fixture(t) {
   return { ...context, logger, records, server };
 }
 
+test('REST and stream-opening metrics work with a silent logger without retaining payloads', async t => {
+  const { manager, node, logger } = await fixture(t);
+  logger.setLevel('silent');
+  const monitor = manager.startPerformanceMonitor(); t.after(() => monitor.close());
+  assert.deepEqual(await node.rest.getInfo(), { returned: 'PRIVATE_RESPONSE' });
+  const response = await node.rest.loadStream({ encodedTrack: 'PRIVATE_STREAM_TRACK', format: 'raw' });
+  for await (const _chunk of response.stream) { /* caller owns audio */ }
+  const snapshot = monitor.snapshot();
+  assert.equal(snapshot.durations.rest.count, 1); assert.equal(snapshot.durations.streamOpen.count, 1);
+  assert.doesNotMatch(JSON.stringify(snapshot), /PRIVATE_|test-node/);
+});
+
 test('HTTP spans preserve header overloads/results while scrubbing session paths, queries and bodies', async t => {
   const { node, player, logger, records } = await fixture(t);
   await logger.traceOperation('command', async () => {

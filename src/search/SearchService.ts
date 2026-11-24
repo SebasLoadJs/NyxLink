@@ -4,6 +4,7 @@ import type { Node } from '../entities/Node';
 import type { SearchResult } from '../structures/SearchResult';
 import type { IRESTLoadTracks, ISearchQuery } from '../typings/Interfaces';
 import { Structure, sources, nodeLinkSources } from '../Util';
+import { SharedSearchRequests } from './SharedSearchRequests';
 
 /** Coordinates backend search policy; cache is opt-in, bounded and local to this manager. */
 export class SearchService {
@@ -13,10 +14,12 @@ export class SearchService {
     private readonly cacheNodeIds = new WeakMap<Node, number>();
     private nextCacheNodeId = 0;
     private readonly pending = new Set<AbortController>();
+    private readonly shared = new SharedSearchRequests<IRESTLoadTracks>();
     constructor(private readonly manager: Manager, private readonly native: (query: ISearchQuery) => Promise<IRESTLoadTracks | null>) {}
 
     public close(): void {
         this.cache.clear();
+        this.shared.close();
         for (const operation of this.pending) operation.abort(new Error('Manager is shut down'));
         this.pending.clear();
     }
@@ -67,6 +70,7 @@ export class SearchService {
                 return result;
             }
             const options = this.manager.options.search ?? {};
+            if (options.deduplicate !== undefined && typeof options.deduplicate !== 'boolean') throw new TypeError('Search deduplicate must be boolean');
             const sourceHealth = options.sourceHealth;
             if (sourceHealth !== undefined && (typeof sourceHealth !== 'boolean')) throw new TypeError('Invalid search sourceHealth option');
             const source = query.source ?? options.defaultPlatform ?? 'youtube';
@@ -99,18 +103,22 @@ export class SearchService {
                 return this.present(structuredClone(cached.value), query, node);
             }
             this.cache.delete(key);
-            let response: IRESTLoadTracks = { loadType: 'empty', data: {} };
             const custom = options.resolver ? await this.wait(Promise.resolve().then(() => options.resolver!({ ...query, signal }, node)), signal) : null;
-            if (custom) response = custom;
-            else for (const platform of platforms) {
-                signal.throwIfAborted();
-                if (nodeLinkSources.has(platform)) node.assertFeature(`search:${platform}`);
-                const prefix = Object.hasOwn(sources, platform) ? sources[platform as keyof typeof sources] : platform;
-                const identifier = isUrl ? query.query : `${prefix}:${query.query}`;
-                response = await this.wait(node.rest.loadTracks(identifier, { timeoutMs, signal }), signal);
-                validateLoadResponse(response);
-                if (!['empty', 'error'].includes(response.loadType) && !(response.loadType === 'search' && response.data.length === 0)) break;
-            }
+            const load = async (activeSignal: AbortSignal): Promise<IRESTLoadTracks> => {
+                let response: IRESTLoadTracks = { loadType: 'empty', data: {} };
+                for (const platform of platforms) {
+                    activeSignal.throwIfAborted();
+                    if (nodeLinkSources.has(platform)) node.assertFeature(`search:${platform}`);
+                    const prefix = Object.hasOwn(sources, platform) ? sources[platform as keyof typeof sources] : platform;
+                    const identifier = isUrl ? query.query : `${prefix}:${query.query}`;
+                    response = await this.wait(node.rest.loadTracks(identifier, { timeoutMs, signal: activeSignal }), activeSignal);
+                    validateLoadResponse(response);
+                    if (!['empty', 'error'].includes(response.loadType) && !(response.loadType === 'search' && response.data.length === 0)) break;
+                }
+                return response;
+            };
+            const response = custom ?? (options.deduplicate && !options.resolver
+                ? structuredClone(await this.shared.run(key, signal, load)) : await load(signal));
             signal.throwIfAborted();
             validateLoadResponse(response);
             if (ttl && !options.resolver && !['empty', 'error'].includes(response.loadType)) {

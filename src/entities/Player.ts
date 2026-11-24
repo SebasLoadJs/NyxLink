@@ -54,6 +54,7 @@ export class Player {
 
     public lastActivityTime: number = Date.now();
     private readonly commands = new PlayerCommandQueue();
+    public get pendingCommands(): number { return this.commands.pending; }
     private destructionPromise?: Promise<void>;
     /** Explicit play queued but not yet settled; seeks after it target that new play. */
     private pendingPlayTicket?: number;

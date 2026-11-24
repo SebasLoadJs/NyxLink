@@ -2,6 +2,7 @@ import { performance } from 'node:perf_hooks';
 import type { Manager } from '../core/Manager';
 import type { Logger } from '../logging/Logger';
 import { NodeState } from '../typings/types';
+import type { PerformanceSnapshot } from './PerformanceMonitor';
 
 export interface TerminalDashboardOptions {
     intervalMs?: number;
@@ -12,6 +13,7 @@ export interface TerminalDashboardOptions {
 }
 
 export interface TerminalDashboardSnapshot {
+    performance?: PerformanceSnapshot;
     timestamp: string;
     nodes: Array<{ id: string; backend: string; state: string; players: number; latencyMs?: number; cpuLoad?: number; memoryUsedBytes?: number; statsAgeMs?: number }>;
     audio: { players: number; playing: number; paused: number; queuedTracks: number };
@@ -77,6 +79,7 @@ export class TerminalDashboard {
         const utilization = performance.eventLoopUtilization(current, this.previousUtilization).utilization;
         this.previousUtilization = current;
         return { timestamp: new Date(now).toISOString(), nodes, sources,
+            ...(this.manager.performanceMonitor ? { performance: this.manager.performanceMonitor.snapshot() } : {}),
             audio: { players: players.length, playing: players.filter(player => player.playing && !player.paused).length,
                 paused: players.filter(player => player.paused).length, queuedTracks: players.reduce((total, player) => total + player.queue.size, 0) },
             runtime: { uptimeSeconds: process.uptime(), rssBytes: memory.rss, heapUsedBytes: memory.heapUsed, eventLoopUtilization: Number.isFinite(utilization) ? utilization : 0 },

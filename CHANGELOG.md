@@ -12,6 +12,8 @@ This changelog describes the unreleased NyxLink 5.3 development line and its ver
 
 ### Architecture and public API
 
+- Checkpoint in progress: optional Pino/OpenTelemetry transports, bounded performance observations, caller preference scoring for autoplay, observed startup layouts and truecolor controls. Added opt-in backend search coalescing and metadata fallback; final acceptance and full requirement reconciliation remain in `docs/CONTINUAR-AQUI.md`.
+
 - Added opt-in weighted node costs from observed latency, fresh CPU/memory/player statistics and configured priority, with caller-scoped hysteresis that cannot bypass eligibility or source/region preferences. Existing strategies retain their defaults.
 - Extracted queue-preload eligibility and coalescing/backoff from Player; player commands retain ownership of reservations, serialized updates and backend acknowledgments.
 

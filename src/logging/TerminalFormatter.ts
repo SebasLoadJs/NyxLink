@@ -5,6 +5,21 @@ const object = (value: unknown): value is Record<string, unknown> => value !== n
 const text = (value: unknown): string => typeof value === 'string' ? value : '--';
 const number = (value: unknown, unit = ''): string => typeof value === 'number' && Number.isFinite(value) ? `${value}${unit}` : '--';
 
+export function formatStartupObservation(context: LogContext, options: FormatterOptions, layout: string): string {
+    const summary = `${number(context.readyNodes)}/${number(context.configuredNodes)} nodes ready`;
+    if (layout === 'compact') return `NYXLINK ${text(context.packageVersion)} / ${text(context.runtime)} / ${summary}`;
+    const fields: Record<string, unknown> = { Runtime: text(context.runtime), Package: text(context.packageVersion),
+        Core: context.initialized === true ? 'Initialized; node readiness reported separately' : 'Not initialized', Topology: summary };
+    if (Array.isArray(context.nodes)) for (const [index, entry] of context.nodes.entries()) {
+        if (!object(entry)) continue;
+        fields[`Node ${index + 1}`] = `${text(entry.id)} / ${text(entry.backend)} / ${text(entry.state)}` +
+            (layout === 'detailed' || layout === 'diagnostic' ? ` / ${number(entry.latencyMs, 'ms')} / ${number(entry.players)} players` : '');
+    }
+    if (typeof context.omittedNodes === 'number' && context.omittedNodes > 0) fields.Omitted = context.omittedNodes;
+    if (layout === 'diagnostic') { fields.Platform = `${text(context.platform)} / ${text(context.architecture)}`; fields.Logging = context.logging; }
+    return formatBox('NYXLINK / STARTUP', fields, options.width);
+}
+
 /** Render only observed fields; malformed/truncated event context falls back to its message. */
 export function formatDashboardObservation(context: LogContext, options: FormatterOptions): string | undefined {
     if (!Array.isArray(context.nodes) || !Array.isArray(context.sources) || !object(context.audio) || !object(context.runtime)) return;
@@ -27,6 +42,12 @@ export function formatDashboardObservation(context: LogContext, options: Formatt
     if (!context.sources.length) rows.Sources = 'No current source-health observations';
     rows.Runtime = `heap ${number(context.runtime.heapUsedBytes, ' B')} / RSS ${number(context.runtime.rssBytes, ' B')}`;
     rows.EventLoop = `${number(context.runtime.eventLoopUtilization)} utilization / uptime ${number(context.runtime.uptimeSeconds, 's')}`;
+    if (object(context.performance)) {
+        const observed = context.performance;
+        if (object(observed.runtime)) rows.Delay = `event loop p95 ${number(observed.runtime.eventLoopP95Ms, 'ms')}`;
+        if (object(observed.resources)) rows.Resources = `${number(observed.resources.pendingRequests)} pending HTTP / ${number(observed.resources.pendingPlayerCommands)} player commands / ${number(observed.resources.managerListeners)} listeners`;
+        if (object(observed.durations) && object(observed.durations.rest)) rows.REST = `p50 ${number(observed.durations.rest.p50Ms, 'ms')} / p95 ${number(observed.durations.rest.p95Ms, 'ms')}`;
+    }
     return formatBox('NYXLINK / OBSERVED CLUSTER', rows, options.width);
 }
 

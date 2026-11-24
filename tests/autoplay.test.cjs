@@ -2,6 +2,40 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createPlayer, createTrack, deferred } = require('./helpers/player.cjs');
 
+test('optional application preferences rank metadata without changing candidate tracks', async t => {
+  const { manager, node, player, requests } = createPlayer(t);
+  const { AutoPlayManager } = require('../dist/src/autoplay/AutoPlayManager');
+  const a = createTrack('a'), b = createTrack('b'), seed = createTrack('seed');
+  b.author = 'Preferred artist'; player.recommendations = [a, b];
+  manager.options.recommendations = { score(candidate, context) {
+    assert.ok(Object.isFrozen(candidate)); assert.ok(Object.isFrozen(context.seed));
+    assert.equal(context.guildId, player.guildId);
+    return candidate.author === 'Preferred artist' ? 10 : 0;
+  } };
+  assert.equal(await AutoPlayManager.play(node, player, seed), true);
+  assert.equal(requests.find(r => r.payload.track?.encoded).payload.track.encoded, b.encoded);
+  assert.equal(a.author, 'Test artist');
+});
+
+test('preference callbacks cannot override a newly queued manual song', async t => {
+  const { manager, node, player, requests } = createPlayer(t);
+  const { AutoPlayManager } = require('../dist/src/autoplay/AutoPlayManager');
+  player.recommendations = [createTrack('candidate')];
+  const manual = createTrack('manual');
+  manager.options.recommendations = { score() { player.queue.add(manual); return 100; } };
+  assert.equal(await AutoPlayManager.play(node, player, createTrack('seed')), false);
+  assert.deepEqual(player.queue.tracks, [manual]); assert.equal(requests.length, 0);
+});
+
+test('throwing, nonfinite and accidentally async preference callbacks fall back safely', async t => {
+  const { AutoPlayManager } = require('../dist/src/autoplay/AutoPlayManager');
+  for (const score of [() => { throw new Error('application failure'); }, () => NaN, () => Promise.reject(new Error('async unsupported'))]) {
+    const { manager, node, player } = createPlayer(t);
+    manager.options.recommendations = { score }; player.recommendations = [createTrack('candidate')];
+    assert.equal(await AutoPlayManager.play(node, player, createTrack('seed')), true);
+  }
+});
+
 function delayRecommendations(manager, candidate) {
   const started = deferred();
   const response = deferred();

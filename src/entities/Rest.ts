@@ -64,7 +64,8 @@ export class Rest {
     /** Preserve the transport's overloads/arguments while observing only safe metadata. */
     private observeTransport<F extends Function>(transport: F, operation: string): F {
         return new Proxy(transport, { apply: (target, receiver, args) => {
-            const run = () => Reflect.apply(target, receiver, args);
+            const monitor = this.node.manager.performanceMonitor;
+            const run = () => monitor ? monitor.measure(operation === 'REST.http' ? 'rest' : 'streamOpen', () => Reflect.apply(target, receiver, args)) : Reflect.apply(target, receiver, args);
             const logger = this.node.manager.logger;
             if (!logger?.isEnabled('error')) return run();
             let route = 'invalid-url';

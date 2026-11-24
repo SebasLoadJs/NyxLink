@@ -22,6 +22,7 @@ import { DeezerSource } from "../sources/deezer";
 import { Logger } from "../logging/Logger";
 import { ExtensionHost, type NyxExtension, type ExtensionOptions } from '../extensions/ExtensionHost';
 import { PrivateMetricsServer, type PrivateMetricsOptions } from '../observability/PrivateMetricsServer';
+import { PerformanceMonitor, type PerformanceMonitorOptions } from '../observability/PerformanceMonitor';
 import { GuildOwnership, type GuildOwnershipOptions } from '../cluster/GuildOwnership';
 
 export class Manager extends EventEmitter<IManagerEvents> {
@@ -41,6 +42,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
     }
     public set database(database: DatabaseManager) { this.databaseInstance = database; }
     public readonly logger?: Logger;
+    public performanceMonitor?: PerformanceMonitor;
     private extensionHost?: ExtensionHost;
     private detachLogging?: () => void;
     private idleCheckInterval?: NodeJS.Timeout;
@@ -198,6 +200,14 @@ export class Manager extends EventEmitter<IManagerEvents> {
         this.detachLogging = undefined;
     }
 
+    /** Starts bounded, optional observations independently of logging level. */
+    public startPerformanceMonitor(options?: PerformanceMonitorOptions): PerformanceMonitor {
+        if (this.destroyed) throw new Error('Manager is shut down');
+        if (this.performanceMonitor?.running) return this.performanceMonitor;
+        this.performanceMonitor = new PerformanceMonitor(this, options).start();
+        return this.performanceMonitor;
+    }
+
     /** Register a trusted optional extension; returns an idempotent async disposer. */
     public useExtension(extension: NyxExtension, options?: ExtensionOptions): Promise<() => Promise<void>> {
         if (this.destroyed) return Promise.reject(new Error('Manager is shut down'));
@@ -233,6 +243,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
             if (this.destroyed) return this;
             if (this.options.playerDestruction?.autoDestroyOnIdle) this.startIdleMonitoring();
             this.initialized = true;
+            if (this.options.logging?.startup) this.logger?.startup(this);
             this.emit('debug', `Moonlink.js > Manager >> Initialized. ClientId: ${this.clientId}`);
             return this;
             } catch (error) {
@@ -267,6 +278,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
             };
             await Promise.all([...this.privateMetricsServers].map(endpoint => attempt(() => endpoint.close())));
             await attempt(() => this.extensionHost?.close());
+            await attempt(() => this.performanceMonitor?.close());
             this.privateMetricsServers.clear();
             if (this.initializationPromise) await attempt(() => this.initializationPromise);
             await Promise.all(this.players.all.map(player => attempt(() => player.destroy('Manager shutdown'))));
@@ -360,6 +372,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
     }
 
     public async search(options: ISearchQuery): Promise<SearchResult> {
+        this.performanceMonitor?.recordSearch();
         return this.searches.search(options);
     }
 

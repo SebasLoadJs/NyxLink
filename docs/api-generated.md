@@ -256,6 +256,20 @@ export declare class DeezerSource {
 export declare function diagnoseError(error: unknown, context?: LogContext): ErrorDiagnostic;
 ```
 
+## DurationSummary
+
+[Source declaration](../src/observability/PerformanceMonitor.ts)
+
+```ts
+export interface DurationSummary {
+    count: number;
+    retained: number;
+    p50Ms?: number;
+    p95Ms?: number;
+    maxMs?: number;
+}
+```
+
 ## ErrorDiagnostic
 
 [Source declaration](../src/logging/ErrorDiagnostics.ts)
@@ -1068,6 +1082,7 @@ export interface IManagerNodeConfig {
 
 ```ts
 export interface IManagerOptionsConfig {
+    recommendations?: import('../autoplay/RecommendationPreference').RecommendationPreferences;
     logging?: LoggerOptions & {
         banner?: boolean;
     };
@@ -1457,6 +1472,8 @@ export interface IRoutePlannerStatus {
 
 ```ts
 export interface ISearchOptions {
+    deduplicate?: boolean;
+    trackResolution?: import('../tracks/MetadataTrackResolver').MetadataResolutionOptions;
     sourceHealth?: boolean;
     timeoutMs?: number;
     fallbackPlatforms?: string[];
@@ -1783,6 +1800,7 @@ export declare class Logger {
     systemStatus(nodes: AudioNodeStatus[]): void;
     failover(event: FailoverReport): void;
     attachLegacyDebug(source: DebugSource): () => void;
+    startup(manager: Manager): void;
     managerStatus(manager: Manager): void;
     attachManager(manager: Manager): () => void;
 }
@@ -1794,6 +1812,8 @@ export declare class Logger {
 
 ```ts
 export type LoggerOptions = {
+    colorDepth?: 4 | 24;
+    startup?: boolean;
     level?: NyxLogLevel;
     color?: boolean;
     timestamps?: boolean;
@@ -1880,6 +1900,7 @@ export declare class Manager extends EventEmitter<IManagerEvents> {
     get database(): DatabaseManager;
     set database(database: DatabaseManager);
     readonly logger?: Logger;
+    performanceMonitor?: PerformanceMonitor;
     get destroyed(): boolean;
     get readyNodes(): import("../..").Node[];
     get hasReadyNodes(): boolean;
@@ -1887,6 +1908,7 @@ export declare class Manager extends EventEmitter<IManagerEvents> {
     useGuildLeases(options: GuildOwnershipOptions): this;
     startPrivateMetricsServer(options: PrivateMetricsOptions): Promise<PrivateMetricsServer>;
     detachLogger(): void;
+    startPerformanceMonitor(options?: PerformanceMonitorOptions): PerformanceMonitor;
     useExtension(extension: NyxExtension, options?: ExtensionOptions): Promise<() => Promise<void>>;
     removeExtension(name: string): Promise<boolean>;
     use(connector: Connector, client: any): this;
@@ -1919,6 +1941,19 @@ export declare class Memory implements StorageAdapter {
     keys(pattern?: string): Promise<string[]>;
     clear(): Promise<void>;
     shutdown(): Promise<void>;
+}
+```
+
+## MetadataResolutionOptions
+
+[Source declaration](../src/tracks/MetadataTrackResolver.ts)
+
+```ts
+export interface MetadataResolutionOptions {
+    sources: readonly ('youtube' | 'youtubemusic' | 'soundcloud')[];
+    minimumScore?: number;
+    durationToleranceMs?: number;
+    maxCandidates?: number;
 }
 ```
 
@@ -2326,6 +2361,115 @@ export interface NyxExtension {
 export type NyxLogLevel = 'silent' | 'error' | 'warn' | 'info' | 'debug' | 'trace';
 ```
 
+## OpenTelemetryLogTransport
+
+[Source declaration](../src/logging/ExternalTransports.ts)
+
+```ts
+export declare class OpenTelemetryLogTransport implements LogTransport {
+    constructor(tracer: TelemetryTracerLike, counter?: TelemetryCounterLike | undefined);
+    write(record: StructuredLogRecord): void;
+}
+```
+
+## PerformanceMetric
+
+[Source declaration](../src/observability/PerformanceMonitor.ts)
+
+```ts
+export type PerformanceMetric = typeof metrics[number];
+```
+
+## PerformanceMonitor
+
+[Source declaration](../src/observability/PerformanceMonitor.ts)
+
+```ts
+export declare class PerformanceMonitor {
+    get running(): boolean;
+    constructor(manager: Manager, options?: PerformanceMonitorOptions);
+    start(): this;
+    observe(metric: PerformanceMetric, durationMs: number): void;
+    recordSearch(): void;
+    measure<T>(metric: 'rest' | 'streamOpen', operation: () => Promise<T>): Promise<T>;
+    snapshot(): PerformanceSnapshot;
+    close(): void;
+}
+```
+
+## PerformanceMonitorOptions
+
+[Source declaration](../src/observability/PerformanceMonitor.ts)
+
+```ts
+export interface PerformanceMonitorOptions {
+    sampleLimit?: number;
+    eventLoopResolutionMs?: number;
+    maxPendingMs?: number;
+}
+```
+
+## PerformanceSnapshot
+
+[Source declaration](../src/observability/PerformanceMonitor.ts)
+
+```ts
+export interface PerformanceSnapshot {
+    active: boolean;
+    durations: Record<PerformanceMetric, DurationSummary>;
+    counters: {
+        restErrors: number;
+        streamOpenErrors: number;
+        reconnects: number;
+        recoveries: number;
+        recoveryFailures: number;
+        searches: number;
+    };
+    runtime: {
+        uptimeSeconds: number;
+        rssBytes: number;
+        heapUsedBytes: number;
+        eventLoopUtilization: number;
+        eventLoopP50Ms?: number;
+        eventLoopP95Ms?: number;
+    };
+    resources: {
+        connectedNodes: number;
+        pendingRequests: number;
+        pendingPlayerCommands: number;
+        managerListeners: number;
+        activeTypes: Record<string, number>;
+    };
+}
+```
+
+## PinoLoggerLike
+
+[Source declaration](../src/logging/ExternalTransports.ts)
+
+```ts
+export interface PinoLoggerLike {
+    trace(fields: object, message: string): unknown;
+    debug(fields: object, message: string): unknown;
+    info(fields: object, message: string): unknown;
+    warn(fields: object, message: string): unknown;
+    error(fields: object, message: string): unknown;
+    flush?(callback: (error?: Error) => void): void;
+}
+```
+
+## PinoLogTransport
+
+[Source declaration](../src/logging/ExternalTransports.ts)
+
+```ts
+export declare class PinoLogTransport implements LogTransport {
+    constructor(logger: PinoLoggerLike);
+    write(record: StructuredLogRecord): void;
+    flush(): Promise<void>;
+}
+```
+
 ## Player
 
 [Source declaration](../src/entities/Player.ts)
@@ -2358,6 +2502,7 @@ export declare class Player {
     recommendations: Track[];
     historySize: number;
     lastActivityTime: number;
+    get pendingCommands(): number;
     lastPosition: number;
     lastPositionTime: number;
     stuckDetectionCount: number;
@@ -2747,6 +2892,33 @@ export declare class Queue {
 export interface QueuePreloadOptions {
     enabled: boolean;
     leadMs?: number;
+}
+```
+
+## RecommendationCandidate
+
+[Source declaration](../src/autoplay/RecommendationPreference.ts)
+
+```ts
+export interface RecommendationCandidate {
+    readonly title: string;
+    readonly author: string;
+    readonly durationMs: number;
+    readonly source: string;
+    readonly isrc?: string;
+}
+```
+
+## RecommendationPreferences
+
+[Source declaration](../src/autoplay/RecommendationPreference.ts)
+
+```ts
+export interface RecommendationPreferences {
+    score(candidate: RecommendationCandidate, context: {
+        readonly guildId: string;
+        readonly seed: RecommendationCandidate;
+    }): number;
 }
 ```
 
@@ -3236,6 +3408,43 @@ export interface StructuredLogRecord {
 }
 ```
 
+## TelemetryCounterLike
+
+[Source declaration](../src/logging/ExternalTransports.ts)
+
+```ts
+export interface TelemetryCounterLike {
+    add(value: number, attributes?: Record<string, string | number | boolean>): void;
+}
+```
+
+## TelemetrySpanLike
+
+[Source declaration](../src/logging/ExternalTransports.ts)
+
+```ts
+export interface TelemetrySpanLike {
+    setStatus(status: {
+        code: number;
+        message?: string;
+    }): unknown;
+    end(endTime?: number): void;
+}
+```
+
+## TelemetryTracerLike
+
+[Source declaration](../src/logging/ExternalTransports.ts)
+
+```ts
+export interface TelemetryTracerLike {
+    startSpan(name: string, options?: {
+        startTime?: number;
+        attributes?: Record<string, string | number | boolean>;
+    }): TelemetrySpanLike;
+}
+```
+
 ## TerminalDashboard
 
 [Source declaration](../src/observability/TerminalDashboard.ts)
@@ -3269,6 +3478,7 @@ export interface TerminalDashboardOptions {
 
 ```ts
 export interface TerminalDashboardSnapshot {
+    performance?: PerformanceSnapshot;
     timestamp: string;
     nodes: Array<{
         id: string;

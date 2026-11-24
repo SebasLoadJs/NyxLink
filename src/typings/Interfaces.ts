@@ -136,6 +136,7 @@ export interface IManagerNodeConfig {
 }
 
 export interface IManagerOptionsConfig {
+    recommendations?: import('../autoplay/RecommendationPreference').RecommendationPreferences;
     logging?: LoggerOptions & { banner?: boolean };
     clientName?: string;
     userAgent?: string;
@@ -197,6 +198,10 @@ export interface INodeOptions {
 }
 
 export interface ISearchOptions {
+    /** Share simultaneous backend requests; cancellation remains per caller. Default false. */
+    deduplicate?: boolean;
+    /** Explicit opt-in metadata fallback after direct destination resolution fails. */
+    trackResolution?: import('../tracks/MetadataTrackResolver').MetadataResolutionOptions;
     /** Prefer nodes with fresh, healthy telemetry for recognized text-search sources. */
     sourceHealth?: boolean;
     timeoutMs?: number;

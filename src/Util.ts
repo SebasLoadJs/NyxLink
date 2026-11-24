@@ -764,8 +764,9 @@ export class EventEmitter<E extends { [K in keyof E]: (...args: any[]) => void }
         });
     }
 
-    public listenerCount<K extends keyof E>(event: K): number {
-        return this.listenerMap[event]?.size ?? 0;
+    public listenerCount<K extends keyof E>(event?: K): number {
+        if (event !== undefined) return this.listenerMap[event]?.size ?? 0;
+        return Object.values(this.listenerMap).reduce((total: number, bucket) => total + (bucket as Set<unknown>).size, 0);
     }
 
     public createChild(): EventEmitter<E> {

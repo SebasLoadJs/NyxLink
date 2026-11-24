@@ -12,8 +12,14 @@ import { formatPlayerTrace, type PlayerTraceOptions } from './PlayerTrace';
 import { LogPipeline, safeLogValue, type LogContext, type LogTransport, type StructuredLogRecord } from './StructuredLog';
 import type { Manager } from '../core/Manager';
 import { NodeState } from '../typings/types';
+import { terminalColor, terminalDepth, trueColor } from './TerminalCapabilities';
+import { formatStartupObservation } from './TerminalFormatter';
+import { version } from '../..';
 
 export type LoggerOptions = {
+  colorDepth?: 4 | 24;
+  /** Emit an observed startup snapshot after Manager.init (does not wait for node readiness). */
+  startup?: boolean;
   level?: NyxLogLevel;
   color?: boolean;
   timestamps?: boolean;
@@ -76,9 +82,11 @@ export class Logger {
     if (options.mode !== undefined && options.mode !== 'pretty' && options.mode !== 'json') throw new TypeError('Invalid logging mode');
     if (options.width !== undefined && (!Number.isFinite(options.width) || options.width < 20 || options.width > 500)) throw new TypeError('Invalid logger width');
     if (options.layout !== undefined && !['compact', 'standard', 'detailed', 'diagnostic'].includes(options.layout)) throw new TypeError('Invalid logger layout');
+    if (options.colorDepth !== undefined && options.colorDepth !== 4 && options.colorDepth !== 24) throw new TypeError('Invalid color depth');
+    if (options.startup !== undefined && typeof options.startup !== 'boolean') throw new TypeError('Invalid startup option');
     this.configuration = { ...options, transports: options.transports ? [...options.transports] : undefined, context: safeLogValue(options.context ?? {}) as LogContext };
     this.options = {
-      color: process.env.NO_COLOR !== undefined ? false : options.color ?? Boolean(process.stdout.isTTY && !process.env.CI),
+      color: terminalColor(options.color),
       timestamps: options.layout === 'compact' ? false : options.timestamps ?? true,
       width: options.width ?? Math.max(20, Math.min(106, process.stdout.columns || 72)),
       level,
@@ -92,14 +100,16 @@ export class Logger {
         const standardFields = ['nodeId', 'guildId', 'backend', 'traceId', 'status', 'code', 'durationMs', 'positionMs'];
         const visibleContext = options.layout === 'detailed' || options.layout === 'diagnostic' ? record.context :
           Object.fromEntries(standardFields.filter(key => record.context[key] !== undefined).map(key => [key, record.context[key]]));
-        const panel = record.event === 'dashboard.snapshot' ? formatDashboardObservation(record.context, this.options) :
+        const panel = record.event === 'startup.snapshot' ? formatStartupObservation(record.context, this.options, options.layout ?? 'standard') :
+          record.event === 'dashboard.snapshot' ? formatDashboardObservation(record.context, this.options) :
           record.event === 'error.diagnostic' ? formatErrorDiagnostic(record.context, this.options) : undefined;
         const formatted = panel ?? (record.event === 'panel' || record.event === 'player.trace' || record.event.startsWith('failover.') ? record.message : formatEntry({
           type: ['trace', 'debug', 'info', 'success', 'warn', 'error'].includes(record.event) ? record.event : record.level, tag: record.component, date: new Date(record.timestamp),
           args: [record.message, ...(options.layout === 'compact' || !Object.keys(visibleContext).length ? [] : [visibleContext]),
             ...(options.layout === 'diagnostic' ? [{ sequence: record.sequence, event: record.event }] : [])],
         }, this.options));
-        const output = options.unicode === false ? ascii(formatted) : formatted;
+        const colored = this.options.color && terminalDepth(options.colorDepth) === 24 ? trueColor(formatted) : formatted;
+        const output = options.unicode === false ? ascii(colored) : colored;
         return writeLogLine(record.level === 'error' || record.level === 'warn' ? process.stderr : process.stdout, output + '\n');
       } });
     }
@@ -274,6 +284,24 @@ export class Logger {
     };
     this.disposers.add(dispose);
     return dispose;
+  }
+
+  /** Show observed state only; a node without backend info is labelled Unknown. */
+  startup(manager: Manager): void {
+    if (!this.canShowInfo()) return;
+    const allNodes = [...manager.nodes.nodes.values()];
+    const nodes = allNodes.slice(0, 16).map(node => ({
+      id: node.identifier, backend: node.connected ? node.backend?.kind ?? 'unknown' : 'unknown',
+      state: NodeState[node.state]?.toLowerCase() ?? 'unknown',
+      ...(node.connected && node.latency >= 0 ? { latencyMs: node.latency } : {}),
+      players: manager.players.all.filter(player => player.node === node && !player.destroyed).length,
+    }));
+    this.event('info', 'Core', 'startup.snapshot', { runtime: process.version, packageVersion: version,
+      initialized: manager.initialized, configuredNodes: allNodes.length,
+      readyNodes: allNodes.filter(node => node.connected && !node.destroyed && node.state === NodeState.READY).length,
+      nodes, omittedNodes: allNodes.length - nodes.length,
+      ...(this.configuration.layout === 'diagnostic' ? { platform: process.platform, architecture: process.arch, logging: this.getStats() } : {}),
+    }, 'NyxLink startup observed');
   }
 
   /** Show observed state only; a node without backend info is labelled Unknown. */
