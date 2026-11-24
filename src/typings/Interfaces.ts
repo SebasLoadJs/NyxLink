@@ -5,6 +5,7 @@ import { Track } from "../entities/Track";
 import { Filters } from "../entities/Filters";
 import { NodeState, PlayerLoop, TrackEndReason, NodeSortStrategy, TPartialTrackProperties } from "./types";
 import type { LoggerOptions } from '../logging/Logger';
+import type { AuroraEventOptions } from '../logging/AuroraEvents';
 import type { OpenTelemetryOptions } from '../observability/OpenTelemetry';
 import type { FailoverOptions } from '../nodes/NodeFailover';
 import type { StorageAdapter } from '../database/StorageAdapter';
@@ -137,6 +138,7 @@ export interface IManagerNodeConfig {
 
 export interface IManagerOptionsConfig {
     logging?: LoggerOptions & { banner?: boolean };
+    aurora?: AuroraEventOptions;
     telemetry?: OpenTelemetryOptions;
     clientName?: string;
     userAgent?: string;

@@ -502,3 +502,25 @@ Las integraciones locales con servidores se ejecutan mediante `pnpm run test:bac
 Mantenido por [SebasLoadJs](https://github.com/SebasLoadJs). Distribuido bajo [OSL-3.0](LICENSE).
 
 Derivado de [Moonlink.js](https://github.com/Ecliptia/moonlink.js), de 1Lucas1apk y sus colaboradores. La procedencia y las modificaciones se describen en [NOTICE.md](NOTICE.md), que también se incluye en el paquete npm. La revisión de atribuciones y requisitos de publicación sigue documentada en [license-attribution-review.md](docs/license-attribution-review.md); estas medidas no constituyen una certificación jurídica.
+
+### Aurora V4 — experimental event route
+
+The first Aurora increment provides an allowlisted event catalog and an
+exclusive Pino route. It is not yet the premium terminal renderer.
+
+```js
+const pino = require('pino');
+const { Manager } = require('nyxlink');
+const manager = new Manager({
+  nodes,
+  options: {
+    aurora: { level: 'info', target: pino() },
+  },
+});
+```
+
+Use either `options.aurora` or legacy `options.logging`, not both.
+Aurora defaults to silent and never reads raw backend payloads. The host
+owns Pino and any transport. A failover duration is measured only if its
+start event was observed; a recovery is not a certification of audible audio.
+See [Aurora implementation status](docs/aurora-v4-status.md).

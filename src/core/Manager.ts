@@ -20,6 +20,7 @@ import { version } from "../..";
 import { SpotifySource } from "../sources/spotify";
 import { DeezerSource } from "../sources/deezer";
 import { Logger } from "../logging/Logger";
+import { AuroraEvents } from '../logging/AuroraEvents';
 import { PrivateMetricsServer, type PrivateMetricsOptions } from '../observability/PrivateMetricsServer';
 import { OpenTelemetry } from '../observability/OpenTelemetry';
 import { GuildOwnership, type GuildOwnershipOptions } from '../cluster/GuildOwnership';
@@ -41,6 +42,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
     }
     public set database(database: DatabaseManager) { this.databaseInstance = database; }
     public readonly logger?: Logger;
+    public readonly aurora?: AuroraEvents;
     private detachLogging?: () => void;
     private readonly telemetry?: OpenTelemetry;
     private idleCheckInterval?: NodeJS.Timeout;
@@ -159,12 +161,17 @@ export class Manager extends EventEmitter<IManagerEvents> {
             }
         };
 
+        if (this.options.aurora && this.options.logging) throw new TypeError('Select Aurora or legacy logging, not both');
         this.searches = new SearchService(this, query => this.resolveNativeSource(query));
         Structure.setManager(this);
 
         this.nodes = new (Structure.get("NodeManager"))(this, config.nodes);
         this.players = new (Structure.get("PlayerManager"))(this);
         if (this.options.telemetry) this.telemetry = new OpenTelemetry(this, this.options.telemetry);
+        if (this.options.aurora) {
+            this.aurora = new AuroraEvents(this.options.aurora);
+            this.aurora.attach(this);
+        }
         if (this.options.logging) {
             this.logger = new Logger(this.options.logging);
             this.detachLogging = this.logger.attachManager(this);
@@ -267,6 +274,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
             for (const connector of this.connectors) await attempt(() => connector.dispose?.());
             this.connectors.clear();
             await attempt(() => this.detachLogger());
+            await attempt(() => this.aurora?.close());
             if (this.databaseInstance) await attempt(() => this.databaseInstance?.shutdown());
             if (Structure.getManager() === this) Structure.setManager(undefined);
             if (errors.length) throw new AggregateError(errors, 'Manager shutdown encountered cleanup failures');
