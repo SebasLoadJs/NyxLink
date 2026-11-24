@@ -11,13 +11,34 @@ This changelog describes the unreleased NyxLink 5.3 development line and its ver
 - Added optional host OpenTelemetry spans, Pino correlation and explicit OTLP HTTP trace/metric exporters. No SDK or visual dependency is required by the audio core.
 - Added executable simulated scenarios, real Linux PTY transcript tests and a comparative logging benchmark, with initial evidence on Node 22 and 24. Live audio and remaining release gates are separate.
 
+### Test infrastructure
+
+- Separated digest-pinned backend image downloads from container startup. Cached images need no download; transient pull failures get at most one retry with a dedicated 180-second deadline per attempt. Container starts and protocol assertions are never retried by this helper; missing locally patched images fail without registry fallback.
+- Added bounded container failure diagnostics with timeout classification and redaction of generated lab passwords, instead of printing credential-bearing command arguments.
+- Fixed Windows package checks to execute installed npm/pnpm JavaScript CLIs through Node without a shell, avoiding `spawnSync npm.cmd EINVAL` while preserving argument boundaries.
+
 ### Architecture and public API
 
+- Checkpoint in progress: optional Pino/OpenTelemetry transports, bounded performance observations, caller preference scoring for autoplay, observed startup layouts and truecolor controls. Added opt-in backend search coalescing and metadata fallback; final acceptance and full requirement reconciliation remain in `docs/CONTINUAR-AQUI.md`.
+
+- Added opt-in weighted node costs from observed latency, fresh CPU/memory/player statistics and configured priority, with caller-scoped hysteresis that cannot bypass eligibility or source/region preferences. Existing strategies retain their defaults.
+- Extracted queue-preload eligibility and coalescing/backoff from Player; player commands retain ownership of reservations, serialized updates and backend acknowledgments.
+
+- Extracted the worker/special-voice recovery transaction into a shared internal module, preventing nested restart failures from destroying a newer user intent and preserving retry budgets on unacknowledged recovery.
+- Added optional trusted extension setup/dispose with typed isolated event hooks, AbortSignal, lifecycle deadlines and manager-owned shutdown.
 - Introduced a multi-backend client architecture with explicit Lavalink v4 and NodeLink adapters, capability discovery, connection-scoped inventories, selection constraints and backend-specific contracts.
 - Added stronger REST/WebSocket response validation and extension routing that rejects unsupported operations rather than silently sending incompatible payloads.
 - Extended playback snapshots, track encoding/resolution, storage contracts and public TypeScript declarations for CommonJS and ESM consumers.
 
 ### Playback and reliability
+
+- Hardened telemetry correlation: stale READY/TrackStart events cannot consume newer latency samples, and orphan/duplicate recovery events do not inflate success counters.
+- Enforced provider policy across cross-backend track resolution: blocked sources are not queried or accepted, explicit provider errors (including rate-limit/auth failures) are never bypassed through metadata fallback, and malformed direct responses fail explicitly.
+- Bounded cross-backend metadata fallback to a single elapsed-time deadline shared by all eligible search sources, instead of allowing one timeout per source.
+- Forwarded playback-intent cancellation to destination URI and metadata lookups on new play/stop/migration; regression tests cover pending HTTP requests, queued music and migration ownership.
+- Rejected stale shared-search responses after node/session replacement and checked independent subscriber cancellation.
+
+- Prevented a late `setVolumeAsync` acknowledgment or failure from committing state after player destruction or backend/session replacement; cancelled operations report a typed cancellation.
 
 - Hardened play/stop/seek/skip, position acknowledgements, queue and autoplay transitions against stale events and concurrent user commands.
 - Made `back()` transactional: previous history and the outgoing queue slot are committed only after backend acknowledgement; failed/aborted back attempts restore the original history and queue state.
@@ -39,6 +60,7 @@ This changelog describes the unreleased NyxLink 5.3 development line and its ver
 
 ### NodeLink integration
 
+- Added typed mix create/list contracts, runtime response/input validation, 0..1 mix-volume enforcement and serialized Player mix commands with explicit stale-lifecycle cancellation.
 - Added validated source-health REST responses and real-time events; optional source-aware node selection.
 - Added per-player crossfade settings, queue-preload scheduling and recognized nonterminal gapless/crossfade transitions.
 - Added supported low-level NodeLink extension routes: stream and format handling, lyrics/captions, groups, SponsorBlock and remote mix operations.
@@ -53,6 +75,11 @@ These APIs only describe **client and tested protocol behavior**; they do not gu
 
 ### Logging and security
 
+- Added a bounded opt-in structured logging pipeline with injectable destinations, newline-delimited JSON, child context, async correlation/spans, timeline filters, profiles/layouts, sampling/group summaries and explicit flush/close.
+- Added bounded getter-free credential redaction, transport backpressure/timeout isolation, drop/error counters, grounded diagnostics and optional observed cluster/source/runtime snapshots. NO_COLOR, ASCII and narrow-terminal rendering are supported.
+- Exposed aggregate logger diagnostics only through the existing authenticated private metrics service; no message history or guild labels are exported.
+- Added bounded Player trace rendering and observed migration-stage records, including partial rollback/source-cleanup failures; pretty layouts now distinguish selected versus full context without repeating whole failover panels per stage.
+- Added sanitized spans for all buffered Rest requests and stream openings while preserving transport overloads/results and redacting raw error bodies.
 - Added opt-in Consola-based logging with system-status and failover reporting. Logging remains silent by default.
 - Added basic redaction of known secret fields and authorization tokens; reinforced transport/authentication handling, failure boundaries and test-laboratory security.
 - Enabled strict compilation on Node.js 22/24, regression/contract tests, backend integration, CodeQL and endurance validation in GitHub Actions.
@@ -68,6 +95,8 @@ These APIs only describe **client and tested protocol behavior**; they do not gu
 
 ### Live voice acceptance harness
 
+- Added a safe five-scenario operator runner with literal private env files, no-network configuration validation, explicit arming, clean-SHA evidence and fail-fast execution. Added original WAV fixture generation and a Spanish operator handoff; real voice tests remain for the responsible operator.
+- Added an explicitly armed 24–72-hour isolated protocol-soak runner with a single continuous worker, bounded watchdog, unique private reports and clean-source evidence. The normal endurance command retains its two-hour limit; the long soak has not been executed during implementation.
 - Added separately armed live Discord command smoke for NodeLink and Lavalink v4: play, backend-confirmed track A, pause/resume, volume, seek, skip and backend-confirmed track B.
 - Added a controlled Discord voice disconnect/reconnect acceptance mode on both backends. It verifies a new gateway voice handshake, confirms the active track in REST and explicitly exercises player recovery; it does not simulate a network partition.
 - Kept the NodeLink-specific crossfade acceptance mode separate. Unrecognized backends are rejected, and Lavalink is not advertised as implementing NodeLink crossfade.
