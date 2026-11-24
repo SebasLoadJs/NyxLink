@@ -2,12 +2,15 @@ import type { Node } from '../entities/Node';
 import type { Track } from '../entities/Track';
 import type { ITrack } from '../typings/Interfaces';
 import { validateLoadResponse } from '../backends/ProtocolValidation';
+import { performance } from 'node:perf_hooks';
 
 export interface MetadataResolutionOptions {
     sources: readonly ('youtube' | 'youtubemusic' | 'soundcloud')[];
     minimumScore?: number;
     durationToleranceMs?: number;
     maxCandidates?: number;
+    /** Maximum elapsed time shared by all source/ISRC/title attempts; default 10 s. */
+    timeoutMs?: number;
 }
 const prefixes = { youtube: 'ytsearch', youtubemusic: 'ytmsearch', soundcloud: 'scsearch' } as const;
 const normalized = (value: string): string[] => [...new Set(value.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])];
@@ -26,32 +29,50 @@ export async function resolveMetadata(track: Track, node: Node, options: Metadat
         options.sources.some(source => !Object.hasOwn(prefixes, source)) ||
         options.minimumScore !== undefined && (!Number.isFinite(options.minimumScore) || options.minimumScore < 0 || options.minimumScore > 1) ||
         options.durationToleranceMs !== undefined && (!Number.isFinite(options.durationToleranceMs) || options.durationToleranceMs < 1 || options.durationToleranceMs > 60000) ||
-        options.maxCandidates !== undefined && (!Number.isSafeInteger(options.maxCandidates) || options.maxCandidates < 1 || options.maxCandidates > 50)) {
+        options.maxCandidates !== undefined && (!Number.isSafeInteger(options.maxCandidates) || options.maxCandidates < 1 || options.maxCandidates > 50) ||
+        options.timeoutMs !== undefined && (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1 || options.timeoutMs > 60000)) {
         throw new TypeError('Invalid metadata track resolution options');
     }
     const seed = track.getInfo();
     if (seed.isStream || !seed.title?.trim() || !seed.author?.trim()) return;
     const code = isrc(seed.isrc);
     const queries = [...new Set([...(code ? [code] : []), `${seed.title} ${seed.author}`])];
-    for (const source of new Set<keyof typeof prefixes>(options.sources)) {
-        if (node.backend?.featureStatus('source:' + source) === 'unavailable') continue;
-        for (const query of queries) {
-            const response = await node.rest.loadTracks(`${prefixes[source]}:${query}`, { timeoutMs: 10000 });
-            validateLoadResponse(response);
-            const candidates = response.loadType === 'track' ? [response.data] : response.loadType === 'search' ? response.data : [];
-            let selected: ITrack | undefined, best = options.minimumScore ?? 0.8;
-            for (const candidate of candidates.slice(0, options.maxCandidates ?? 10)) {
-                const info = candidate.info;
-                if (info.isStream || !candidate.encoded) continue;
-                const difference = Math.abs(seed.length - info.length);
-                const tolerance = options.durationToleranceMs ?? 10000;
-                if (seed.length > 0 && info.length > 0 && difference > tolerance) continue;
-                const score = code && isrc(info.isrc) === code ? 1 :
-                    similarity(seed.title, info.title) * 0.5 + similarity(seed.author, info.author) * 0.35 +
-                    (seed.length > 0 && info.length > 0 ? Math.max(0, 1 - difference / tolerance) * 0.15 : 0);
-                if (score >= best && (!selected || score > best)) { best = score; selected = candidate; }
+    const budgetMs = options.timeoutMs ?? 10000;
+    const started = performance.now();
+    const timeout = new AbortController();
+    const timer = setTimeout(() => timeout.abort(new Error('Metadata resolution timed out')), budgetMs);
+    timer.unref();
+    try {
+        for (const source of new Set<keyof typeof prefixes>(options.sources)) {
+            if (node.backend?.featureStatus('source:' + source) === 'unavailable') continue;
+            for (const query of queries) {
+                timeout.signal.throwIfAborted();
+                const remainingMs = Math.max(1, Math.ceil(budgetMs - (performance.now() - started)));
+                // The same deadline is shared across every provider and query.
+                // Signal cancellation also stops the HTTP call when supported by Rest.
+                const response = await node.rest.loadTracks(`${prefixes[source]}:${query}`, {
+                    timeoutMs: remainingMs,
+                    signal: timeout.signal,
+                });
+                timeout.signal.throwIfAborted();
+                validateLoadResponse(response);
+                const candidates = response.loadType === 'track' ? [response.data] : response.loadType === 'search' ? response.data : [];
+                let selected: ITrack | undefined, best = options.minimumScore ?? 0.8;
+                for (const candidate of candidates.slice(0, options.maxCandidates ?? 10)) {
+                    const info = candidate.info;
+                    if (info.isStream || !candidate.encoded) continue;
+                    const difference = Math.abs(seed.length - info.length);
+                    const tolerance = options.durationToleranceMs ?? 10000;
+                    if (seed.length > 0 && info.length > 0 && difference > tolerance) continue;
+                    const score = code && isrc(info.isrc) === code ? 1 :
+                        similarity(seed.title, info.title) * 0.5 + similarity(seed.author, info.author) * 0.35 +
+                        (seed.length > 0 && info.length > 0 ? Math.max(0, 1 - difference / tolerance) * 0.15 : 0);
+                    if (score >= best && (!selected || score > best)) { best = score; selected = candidate; }
+                }
+                if (selected) return selected;
             }
-            if (selected) return selected;
         }
+    } finally {
+        clearTimeout(timer);
     }
 }
