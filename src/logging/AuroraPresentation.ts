@@ -77,7 +77,7 @@ export class AuroraPresentation {
         const definition = auroraCatalog[event.eventCode];
         if (!definition) return '';
         const symbol = definition.outcome === 'confirmed' ? 'success' :
-            definition.level === 'error' || definition.level === 'fatal' ? 'error' :
+            definition.level === 'error' ? 'error' :
             definition.level === 'warn' ? 'warning' : 'info';
         const fallback = { info: '>', success: '+', warning: '!', error: 'x' };
         const marker = this.unicode ? this.tools.symbols[symbol] : fallback[symbol];
@@ -91,6 +91,17 @@ export class AuroraPresentation {
         const category = this.paint(definition.category.padEnd(10), '#818CF8');
         const prefix = [time, label, marker, category].join(' ');
         const result = prefix + ' ' + detail;
-        return this.clean(this.fits(result) ? result : prefix + '\n  ' + detail);
+        if (this.fits(result)) return this.clean(result);
+        const lines: string[] = [];
+        let line = '  ';
+        for (const word of detail.split(' ')) {
+            const next = line.trim() ? line + ' ' + word : '  ' + word;
+            if (this.tools.width(next) > this.columns && line.trim()) {
+                lines.push(line);
+                line = '  ' + word;
+            } else line = next;
+        }
+        if (line.trim()) lines.push(line);
+        return this.clean([prefix, ...lines].join('\n'));
     }
 }
