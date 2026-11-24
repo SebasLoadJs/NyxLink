@@ -104,6 +104,11 @@ async function main() {
     const tsc = path.join(consumer, 'node_modules/typescript/bin/tsc');
     run(process.execPath, [tsc, '--noEmit', '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', 'consumer.cts', 'consumer.mts'], consumer);
     checks.push('TypeScript NodeNext CJS/ESM consumers without skipLibCheck');
+    await fs.copyFile(path.join(root,'tests/fixtures/aurora-installed.mts'),path.join(consumer,'aurora-installed.mts'));
+    run(process.execPath,[tsc,'--strict','--target','ES2022','--module','NodeNext','--moduleResolution','NodeNext','aurora-installed.mts'],consumer);
+    const shipped=run(process.execPath,['aurora-installed.mjs'],consumer);
+    assert.equal(shipped.stdout,'');assert.equal(shipped.stderr,'');
+    checks.push('direct installed Aurora package subpaths, types and native Pino output');
     await fs.copyFile(path.join(root, 'tests/fixtures/observability-consumer.cts'), path.join(consumer, 'observability-consumer.cts'));
     run(process.execPath, [tsc, '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', 'observability-consumer.cts'], consumer);
     const observability = run(process.execPath, ['observability-consumer.cjs'], consumer);

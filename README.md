@@ -541,3 +541,23 @@ or a telemetry SDK. The host-side visual examples and integration tests
 live in the repository; see [Aurora status and commands](docs/aurora-v4-status.md)
 and [host deployment guidance](docs/aurora-observability.md). These are
 development-line features, not a published stable-release promise.
+
+
+### Aurora — official optional terminal runtime
+
+The next development version exposes Aurora directly through package exports, not copied examples. The old Manager logging options and the `aurora` configuration alias are intentionally removed. Only `options.logging` is accepted. Pino is loaded on demand by the shared engine; the root SDK is silent unless a target is explicitly configured.
+
+Install the optional peer packages listed in [Aurora installation](docs/aurora-installation.md) for the visual runtime. Use ESM (or dynamic import from CommonJS):
+
+```ts
+import { Manager } from 'nyxlink';
+import { createAuroraPipeline } from 'nyxlink/aurora';
+
+const aurora = createAuroraPipeline({ format: 'aurora', level: 'info' });
+const manager = new Manager({ nodes, options: { logging: { level: aurora.level, target: aurora.target } } });
+aurora.banner(manager);
+// Host configures its connector, then initializes with the Discord client ID.
+// On host shutdown: await manager.shutdown(); await aurora.close();
+```
+
+The optional demo command `nyxlink-aurora --scenario all --snapshot` uses explicitly simulated events; it is not a Discord audio verification. Inspector has a separate `nyxlink/aurora/inspector` entry and must own its terminal exclusively.
