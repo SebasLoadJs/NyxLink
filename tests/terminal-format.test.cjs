@@ -67,7 +67,7 @@ test('compact dashboard uses observed counts without drawing a full panel', () =
     truncatedNodes: 0,
   };
   const compact = formatDashboardObservation(context, { color: false }, 'compact');
-  assert.equal(compact, 'NYXLINK / CLUSTER | 1 nodes shown | 1/2 playing | queue 7');
+  assert.equal(compact, 'NYXLINK / CLUSTER | 1 node shown | 1/2 playing | queue 7');
   assert.doesNotMatch(compact, /[┌└│]/);
   const colored = formatDashboardObservation(context, { color: true }, 'compact');
   assert.match(colored, /\x1b\[95mNYXLINK\x1b\[0m/);
