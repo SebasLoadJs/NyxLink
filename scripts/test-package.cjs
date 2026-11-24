@@ -148,7 +148,7 @@ async function main() {
       await fs.copyFile(path.join(root,'tests/fixtures',fixture),path.join(consumer,fixture));
     if(process.platform==='linux'){
       const pty = run('python3',['aurora-pty.py',process.execPath,acceptance],consumer);
-      assert.match(pty.stdout,/6 sessions passed/);
+      assert.match(pty.stdout,/7 sessions passed/);
       checks.push('real Linux PTY: 40/80/120 columns, NO_COLOR, region restore and Ink navigation');
     }
     run(process.execPath,['aurora-benchmark.mjs',path.join(acceptance,'benchmark.json')],consumer);
