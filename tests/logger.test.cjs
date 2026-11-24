@@ -149,3 +149,23 @@ test('legacy boxes and quoted multiword credentials are redacted before wrapping
   const value = { [Symbol.for('nodejs.util.inspect.custom')]() { throw Error('custom inspector executed'); }, token: 'nested secret value' };
   assert.doesNotMatch(formatValue(value), /nested secret value/);
 });
+
+test('URL userinfo redaction is linear on adversarial repeated separators', () => {
+  const source = [
+    "const assert=require('node:assert/strict');",
+    "const {redactSecrets}=require('./dist/src/logging/LogFormatter.js');",
+    "assert.equal(redactSecrets('https://user:password@example.com'), 'https://[REDACTED]@example.com');",
+    "assert.equal(redactSecrets('ftp+ssh://bot:secret@example.net'), 'ftp+ssh://[REDACTED]@example.net');",
+    "assert.equal(redactSecrets('https://example.com/normal/path'), 'https://example.com/normal/path');",
+    "assert.equal(redactSecrets('https://u:p@host.test and http://x:y@server.test'), 'https://[REDACTED]@host.test and http://[REDACTED]@server.test');",
+    "const long='!:'.repeat(100000)+'https://login:PRIVATE_URL_SECRET@example.net';",
+    "const result=redactSecrets(long);",
+    "assert.equal(result.endsWith('https://[REDACTED]@example.net'), true);",
+    "assert.equal(result.includes('PRIVATE_URL_SECRET'), false);",
+    "assert.equal(result.startsWith('!:'), true);",
+  ].join('\n');
+  const result = spawnSync(process.execPath, ['-e', source], {
+    cwd: path.resolve(__dirname, '..'), encoding: 'utf8', timeout: 5000,
+  });
+  assert.equal(result.status, 0, result.stderr || String(result.error || 'timeout'));
+});

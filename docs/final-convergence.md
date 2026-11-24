@@ -20,14 +20,14 @@ This branch initially applies 83 disjoint file changes from #32 to the integrate
 - [x] `src/entities/Node.ts` — initial reconciliation; CI pending
 - [x] `src/entities/Player.ts` — initial reconciliation; CI pending
 - [x] `src/entities/Rest.ts` — initial reconciliation; CI pending
-- [ ] `src/logging/LogFormatter.ts`
-- [ ] `src/logging/Logger.ts`
+- [x] `src/logging/LogFormatter.ts` — initial reconciliation; CI pending
+- [x] `src/logging/Logger.ts` — initial reconciliation; CI pending
 - [x] `src/logging/index.ts` — initial reconciliation; compile and contract checks pending
 - [x] `src/players/PlayerMigration.ts` — initial reconciliation; CI pending
 - [x] `src/tracks/TrackResolver.ts` — initial reconciliation; CI pending
 - [x] `src/typings/Interfaces.ts` — initial reconciliation; compile and contract checks pending
 - [ ] `tests/helpers/backend-lab.cjs`
-- [ ] `tests/logger.test.cjs`
+- [x] `tests/logger.test.cjs` — initial reconciliation; CI pending
 
 ## Acceptance
 
@@ -36,3 +36,5 @@ Retain Aurora V4 and #32 playback, resolver, selection, mixer, extension, perfor
 Manager preserves Aurora/legacy mutual exclusion, OTel, performance monitoring and extension shutdown. Both structured record shapes are exported: the #32 record retains its name, while the ConsoleReporter record is provisionally LegacyStructuredLogRecord. Review backwards compatibility of this naming before acceptance.
 
 REST now uses the #32 overload-preserving proxy for monitor/legacy tracing and one optional Aurora OTel operation per underlying request. Track resolution keeps abort/metadata/session fences and a separate operation span. Migration retains actual failure codes and cancellation guard. Verify classifications and test regressions before merging.
+
+Legacy sink compatibility is retained as a sanitized synchronous adapter alongside the #32 bounded structured pipeline; custom transport and legacy sink configuration are mutually exclusive. Both branches' credential redaction and logger regressions are included. Confirm CodeQL and packed consumer compatibility.

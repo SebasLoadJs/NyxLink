@@ -18,12 +18,55 @@ export function ansi(text: string, code: number, enabled: boolean): string {
   return enabled ? `\x1b[${code}m${text}\x1b[0m` : text;
 }
 
-const secretKey = /^(?:authorization|password|passwd|passphrase|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|token)$/i;
-const assignment = /((?:^|[^a-z0-9_-])(?:["']?)(?:authorization|password|passwd|passphrase|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|token)(?:["']?)\s*[:=]\s*)(\[(?:REDACTED)\]|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|\x60(?:\\[\s\S]|[^\x60\\])*\x60|(?:Bearer\s+)?[^\s,}\]&]+)/gi;
+/** Redact URL userinfo with a linear scan rather than a backtracking regex.
+ * Scheme and credentials may originate from untrusted provider diagnostics. */
+function redactUrlCredentials(value: string): string {
+  const isLetter = (code: number): boolean =>
+    (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+  const isDigit = (code: number): boolean => code >= 48 && code <= 57;
+  const isScheme = (code: number): boolean => isLetter(code) || isDigit(code) ||
+    code === 43 || code === 45 || code === 46;
+  const isWord = (code: number): boolean => isLetter(code) || isDigit(code) || code === 95;
+
+  let from = 0;
+  let copied = 0;
+  let output = '';
+  while (true) {
+    const separator = value.indexOf('://', from);
+    if (separator < 0) break;
+    let start = separator;
+    while (start > 0 && isScheme(value.charCodeAt(start - 1))) start--;
+    if (start === separator || !isLetter(value.charCodeAt(start)) ||
+        (start > 0 && isWord(value.charCodeAt(start - 1)))) {
+      from = separator + 3;
+      continue;
+    }
+    let end = separator + 3;
+    let credentialSeparator = -1;
+    while (end < value.length) {
+      const code = value.charCodeAt(end);
+      if (code === 47 || code === 64 || code <= 32 || code === 127) break;
+      if (code === 58 && credentialSeparator < 0) credentialSeparator = end;
+      end++;
+    }
+    if (value.charCodeAt(end) === 64 && credentialSeparator > separator + 3 &&
+        credentialSeparator < end - 1) {
+      output += value.slice(copied, separator + 3) + '[REDACTED]@';
+      copied = end + 1;
+      from = end + 1;
+    } else {
+      from = separator + 3;
+    }
+  }
+  return output + value.slice(copied);
+}
+
+const secretKey = /^(?:authorization|password|passwd|passphrase|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|session[_-]?id|token)$/i;
+const assignment = /((?:^|[^a-z0-9_-])(?:["']?)(?:authorization|password|passwd|passphrase|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|session[_-]?id|token)(?:["']?)\s*[:=]\s*)(\[(?:REDACTED)\]|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|\x60(?:\\[\s\S]|[^\x60\\])*\x60|(?:Bearer\s+)?[^\s,}\]&]+)/gi;
 
 /** Best-effort defense for legacy text. Structured Aurora uses an allowlist instead. */
 export function redactSecrets(value: string): string {
-  return value.replace(assignment, (_match, prefix: string) => prefix + '[REDACTED]')
+  return redactUrlCredentials(value).replace(assignment, (_match, prefix: string) => prefix + '[REDACTED]')
     .replace(/\bBearer\s+[A-Za-z0-9._~+\/=-]+/gi, 'Bearer [REDACTED]');
 }
 
@@ -61,7 +104,7 @@ function splitToWidth(text: string, width: number): string[] {
 }
 
 export function formatBox(title: string, details: Record<string, unknown> = {}, width = 70): string {
-  const innerWidth = Math.max(30, Math.min(108, Math.floor(width) - 4));
+  const innerWidth = Math.max(16, Math.min(108, Math.floor(Number.isFinite(width) ? width : 70) - 4));
   const lines = [redactSecrets(title).toUpperCase(), ''];
   for (const [key, value] of Object.entries(details)) {
     const label = redactSecrets(key).padEnd(13, ' ');
@@ -111,9 +154,10 @@ export type FailoverReport = {
 };
 
 function panel(title: string, content: string[], width: number): string {
-  const w = Math.max(44, Math.min(106, Math.floor(width)));
+  const w = Math.max(20, Math.min(106, Math.floor(Number.isFinite(width) ? width : 72)));
   const lineWidth = w - 4;
-  const header = `┌─ ${title} ${'─'.repeat(Math.max(0, w - title.length - 5))}┐`;
+  const visibleTitle = [...title].slice(0, w - 5).join('');
+  const header = `┌─ ${visibleTitle} ${'─'.repeat(Math.max(0, w - [...visibleTitle].length - 5))}┐`;
   const rows = content.flatMap(x => splitToWidth(x, lineWidth)).map(s => `│ ${padRight(s, lineWidth)} │`);
   return [header, ...rows, `└${'─'.repeat(w-2)}┘`].join('\n');
 }
