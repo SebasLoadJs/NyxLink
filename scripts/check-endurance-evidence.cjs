@@ -4,10 +4,10 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
 function sourceRevision(root = path.resolve(__dirname, '..')) {
-  const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8', timeout: 3000, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   const revision = git(['rev-parse', 'HEAD']);
   if (!/^[0-9a-f]{40}$/.test(revision)) throw new Error('Invalid source revision');
-  if (git(['status', '--porcelain', '--untracked-files=normal'])) throw new Error('Evidence requires a clean checkout');
+  if (git(['status', '--porcelain', '--untracked-files=normal', '--', '.', ':(exclude)dist'])) throw new Error('Evidence requires a clean checkout');
   return revision;
 }
 

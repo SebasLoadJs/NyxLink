@@ -138,6 +138,8 @@ async function main() {
       assert.deepEqual(failures, []);
       assert.equal(process.getActiveResourcesInfo().filter(name => name === 'Timeout').length, 0);
     } catch (error) { passed = false; errorMessage ??= error.message; }
+    // The exact source must remain unchanged throughout the run.
+    try { if (sourceRevision() !== revision) revision = null; } catch { revision = null; }
     const report = {
       sourceRevision: revision, timestamp: new Date().toISOString(), scope: 'local backend endurance; no Discord voice or audible playback', durationSeconds,
       elapsedSeconds: start ? (performance.now() - start) / 1000 : 0, passed,
