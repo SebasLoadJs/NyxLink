@@ -23,6 +23,22 @@ const isrc = (value: unknown): string | undefined => {
     return /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/.test(normalized) ? normalized : undefined;
 };
 
+/** Enforce the caller deadline even if a custom REST implementation ignores AbortSignal.
+ * Attach both resolution handlers so late failures never become unhandled rejections. */
+function awaitWithAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+    if (signal.aborted) return Promise.reject(signal.reason ?? new Error('Metadata resolution cancelled'));
+    return new Promise<T>((resolve, reject) => {
+        const cleanup = () => signal.removeEventListener('abort', aborted);
+        const aborted = () => { cleanup(); reject(signal.reason ?? new Error('Metadata resolution cancelled')); };
+        signal.addEventListener('abort', aborted, { once: true });
+        operation.then(
+            value => { cleanup(); resolve(value); },
+            error => { cleanup(); reject(error); },
+        );
+        if (signal.aborted) aborted();
+    });
+}
+
 /** Explicit fallback policy against the destination itself, with no native-provider recursion. */
 export async function resolveMetadata(track: Track, node: Node, options: MetadataResolutionOptions, callerSignal?: AbortSignal): Promise<ITrack | undefined> {
     if (!options || !Array.isArray(options.sources) || !options.sources.length || options.sources.length > 3 ||
@@ -53,11 +69,18 @@ export async function resolveMetadata(track: Track, node: Node, options: Metadat
                     signal.throwIfAborted();
                 }
                 // The same deadline is shared across every provider and query.
-                // Signal cancellation also stops the HTTP call when supported by Rest.
-                const response = await node.rest.loadTracks(`${prefixes[source]}:${query}`, {
-                    timeoutMs: remainingMs,
+                // Abort the REST request when possible and end our wait even if an
+                // injected transport disregards the cancellation signal.
+                const response = await awaitWithAbort(
+                    Promise.resolve().then(() => {
+                        signal.throwIfAborted();
+                        return node.rest.loadTracks(`${prefixes[source]}:${query}`, {
+                            timeoutMs: remainingMs,
+                            signal,
+                        });
+                    }),
                     signal,
-                });
+                );
                 signal.throwIfAborted();
                 validateLoadResponse(response);
                 const candidates = response.loadType === 'track' ? [response.data] : response.loadType === 'search' ? response.data : [];
