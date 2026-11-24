@@ -520,7 +520,7 @@ export class Player {
         // neither failure may remove the user's pending song.
         let selectedPlaybackTrack: Track;
         try {
-            nextTrack = await TrackResolver.resolve(nextTrack, this.node);
+            nextTrack = await TrackResolver.resolve(nextTrack, this.node, undefined, guard.signal);
             selectedPlaybackTrack = nextTrack instanceof Track ? nextTrack :
                 new Track(nextTrack, undefined, undefined, this.manager.options.trackPartial ?? []);
         } catch (error) {
@@ -820,7 +820,7 @@ export class Player {
             }
             if (!candidate || this.paused || this.nextTrack) return;
             const current = this.current;
-            const resolved = await TrackResolver.resolve(candidate, node);
+            const resolved = await TrackResolver.resolve(candidate, node, undefined, playbackGuard(this).signal);
             if (this.current !== current || desired() !== candidate || this.paused || this.nextTrack) return;
             await this.sendPlayerUpdate({ nextTrack: { encoded: resolved.encoded, userData: resolved.userData } }, undefined, candidate);
         }, () => {
