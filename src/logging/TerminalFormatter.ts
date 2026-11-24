@@ -34,7 +34,8 @@ export function formatStartupObservation(context: LogContext, options: Formatter
 export function formatDashboardObservation(context: LogContext, options: FormatterOptions, layout = 'standard'): string | undefined {
     if (!Array.isArray(context.nodes) || !Array.isArray(context.sources) || !object(context.audio) || !object(context.runtime)) return;
     if (layout === 'compact') {
-        const summary = `NYXLINK / CLUSTER | ${context.nodes.length} nodes shown | ${number(context.audio.playing)}/${number(context.audio.players)} playing | queue ${number(context.audio.queuedTracks)}`;
+        const count = context.nodes.length;
+        const summary = `NYXLINK / CLUSTER | ${count} node${count === 1 ? '' : 's'} shown | ${number(context.audio.playing)}/${number(context.audio.players)} playing | queue ${number(context.audio.queuedTracks)}`;
         return options.color ? summary.replace('NYXLINK', ansi('NYXLINK', 95, true)) : summary;
     }
     const rows: Record<string, unknown> = {
