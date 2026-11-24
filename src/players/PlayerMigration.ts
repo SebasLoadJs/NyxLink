@@ -78,7 +78,7 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
         if (!active()) { report('cancelled'); return false; }
         const original = player.current;
         observe('resolve-track', 'started');
-        const resolved = original ? await TrackResolver.resolve(original, target, source) : null;
+        const resolved = original ? await TrackResolver.resolve(original, target, source, guard.signal) : null;
         if (!active() || player.current !== original) { observe('resolve-track', 'cancelled'); report('cancelled'); return false; }
         observe('resolve-track', 'acknowledged');
         const snapshot = {
