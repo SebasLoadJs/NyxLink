@@ -7,6 +7,8 @@ export type TerminalOptions = {
     maxQueued?: number;
     maxRecordBytes?: number;
     interactive?: boolean;
+    /** Preserve only SGR styling in an eligible interactive terminal. */
+    color?: boolean;
     /** Called synchronously on rejection; use an independent destination, not this coordinator. */
     onRejected?: (reason: TerminalRejectReason, priority: TerminalPriority) => void;
 };
@@ -26,10 +28,10 @@ const CLEAR = '\r\x1b[2K';
 // Deliberately restrict the first dynamic region to printable ASCII. A future
 // visual renderer can supply measured Unicode cells without risking wrapping.
 const asciiLine = (value: string) => value.replace(/[^\x20-\x7e]/g, ' ');
-const plain = (value: string) => value
-    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+const plain = (value: string, color = false) => value
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, match => color && /^\x1b\[[0-9;]{0,64}m$/.test(match) ? match : '')
     .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '')
-    .replace(/[\x00-\x09\x0b-\x1f\x7f-\x9f]/g, '');
+    .replace(/[\x00-\x09\x0b-\x1a\x1c-\x1f\x7f-\x9f]|\x1b(?!\[[0-9;]{0,64}m)/g, '');
 
 /** One explicitly owned output stream, bounded persistent queue and one temporary line.
  * No timers, signal handlers or cursor hiding are installed on import.
@@ -39,6 +41,7 @@ export class TerminalCoordinator {
     private readonly capacity: number;
     private readonly maxBytes: number;
     private readonly interactive: boolean;
+    private readonly color: boolean;
     private readonly queue: Pending[] = [];
     private readonly waiters = new Set<(ok: boolean) => void>();
     private region?: { owner: symbol; text: string };
@@ -63,6 +66,7 @@ export class TerminalCoordinator {
         }
         this.interactive = options.interactive === true && this.stream.isTTY === true &&
             !process.env.CI && !('NO_COLOR' in process.env) && process.env.TERM !== 'dumb';
+        this.color = this.interactive && options.color === true;
         this.stream.on('drain', this.onDrain);
         this.stream.on('error', this.onError);
         this.stream.on('close', this.onClose);
@@ -92,8 +96,9 @@ export class TerminalCoordinator {
             this.evicted++;
             this.reject('capacity', 'normal');
         }
-        // No caller-supplied control sequences reach the output stream.
-        this.queue.push({ text: plain(text).replace(/\n+$/, '') + '\n', priority });
+        // Only explicitly enabled SGR may pass. Reset style before the next record.
+        const safe = plain(text, this.color).replace(/\n+$/, '');
+        this.queue.push({ text: safe + (this.color && safe.includes('\x1b') ? '\x1b[0m' : '') + '\n', priority });
         this.accepted++;
         this.pump();
         return !this.failed;

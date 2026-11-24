@@ -101,3 +101,45 @@ host exporter adapter and comprehensive trace tree remain to be validated.
 
 ## Advanced tracing increment
 Active spans are used when supported by the host tracer. Search, loadtracks and player PATCH requests, queued explicit play/seek/stop, and executed failover attempts are instrumented. Resolved commands are not proof of audible playback. The host example forwards completed span metadata to the Inspector and supplies active trace IDs to Pino. Real async context manager, nested spans and Pino correlation have a packed consumer fixture. Node handshake, other REST routes, autoplay, crossfade, selection, session recovery, automatic Pino instrumentation, OTLP exporters and unified presentation remain pending. CI required.
+
+## Unified pipeline and demo increment
+
+The host-side `examples/aurora-pipeline.mjs` factory selects exactly one
+terminal destination, uses Pino for canonical records, Pino Pretty for
+pretty and detailed error output, Consola as a custom reporter in Aurora
+mode, and the coordinator for all terminal writes. Silent and Custom
+do not create a terminal owner. A second allowlist rejects arbitrary
+raw payloads before rendering. SGR styling is explicitly enabled for
+eligible TTY streams; other caller-supplied terminal controls are removed.
+
+`examples/aurora-demo.mjs` runs simulated startup, music, failover, degraded,
+recovery-failed and burst scenarios through the same event route. Install
+the packed NyxLink package and the optional consumer dependencies from
+`scripts/test-package.cjs` in a separate project, then copy the Aurora
+example modules into that project. Commands:
+
+```sh
+node aurora-demo.mjs --scenario all --snapshot
+node aurora-demo.mjs --format json --scenario startup --snapshot
+node aurora-demo.mjs --scenario failover
+node aurora-demo.mjs --inspector --format silent
+```
+
+Simulation labels are written to stderr for machine-readable JSON.
+For Inspector, the demo snapshot explicitly identifies itself as simulated.
+No credentials, Discord login, actual backend connections or playback are
+needed. The isolated package consumer checks the JSON and failover scenarios.
+Full PTY, snapshots captured from a real run, benchmark measurements, OTLP
+and automatic Pino instrumentation remain pending.
+
+## Host SDK and OTLP increment
+
+`examples/aurora-sdk.cjs` demonstrates host-owned registration of NodeSDK
+before loading Pino. Choose either explicit Aurora `traceContext` or automatic
+Pino correlation (not both). Automatic Pino log sending is disabled so the
+existing destination remains the sole log route. OTLP HTTP trace and metric
+exporters are enabled only with an explicitly supplied base endpoint. The
+host owns SDK start/shutdown. No default remote export or global registration
+occurs in the NyxLink library. The integration fixture uses a loopback HTTP
+receiver and checks actual nonempty trace/metric requests and one Pino
+record. CI must verify the pinned versions, including Pino 10 support.
