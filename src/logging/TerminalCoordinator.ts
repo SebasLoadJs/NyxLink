@@ -11,6 +11,8 @@ export type TerminalOptions = {
     color?: boolean;
     /** Called synchronously on rejection; use an independent destination, not this coordinator. */
     onRejected?: (reason: TerminalRejectReason, priority: TerminalPriority) => void;
+    /** Optional independent fallback for a sanitized critical record rejected before delivery. */
+    onCriticalRejected?: (reason: TerminalRejectReason, text: string) => void;
 };
 export type TerminalStats = {
     queued: number;
@@ -24,6 +26,7 @@ export interface TerminalLease {
     release(): void;
 }
 type Pending = { text: string; priority: TerminalPriority };
+const owners = new WeakSet<object>();
 const CLEAR = '\r\x1b[2K';
 // Deliberately restrict the first dynamic region to printable ASCII. A future
 // visual renderer can supply measured Unicode cells without risking wrapping.
@@ -50,6 +53,8 @@ export class TerminalCoordinator {
     private pumping = false;
     private closed = false;
     private closing = false;
+    private closePromise?: Promise<boolean>;
+    private notifying = false;
     private failed = false;
     private accepted = 0;
     private rejected = 0;
@@ -67,6 +72,9 @@ export class TerminalCoordinator {
         this.interactive = options.interactive === true && this.stream.isTTY === true &&
             !process.env.CI && !('NO_COLOR' in process.env) && process.env.TERM !== 'dumb';
         this.color = this.interactive && options.color === true;
+        if (owners.has(this.stream)) throw new Error('Terminal stream already owned');
+        owners.add(this.stream);
+        if (this.interactive) this.stream.on('resize', this.onResize);
         this.stream.on('drain', this.onDrain);
         this.stream.on('error', this.onError);
         this.stream.on('close', this.onClose);
@@ -77,29 +85,38 @@ export class TerminalCoordinator {
             evicted: this.evicted, streamErrors: this.streamErrors };
     }
 
-    private reject(reason: TerminalRejectReason, priority: TerminalPriority): false {
+    private reject(reason: TerminalRejectReason, priority: TerminalPriority, text?: string): false {
         this.rejected++;
-        try { this.options.onRejected?.(reason, priority); } catch { /* never break audio */ }
+        // A host fallback must not recurse indefinitely into this coordinator.
+        if (this.notifying) return false;
+        this.notifying = true;
+        try {
+            try { this.options.onRejected?.(reason, priority); } catch {}
+            if (priority === 'critical' && text !== undefined) {
+                try { this.options.onCriticalRejected?.(reason, plain(text)); } catch {}
+            }
+        } finally { this.notifying = false; }
         return false;
     }
 
     write(text: string, priority: TerminalPriority = 'normal'): boolean {
-        if (this.closed || this.closing) return this.reject('closed', priority);
-        if (this.failed) return this.reject('stream-error', priority);
         if (typeof text !== 'string' || Buffer.byteLength(text) > this.maxBytes) {
             return this.reject('invalid-record', priority);
         }
+        const safe = plain(text, this.color).replace(/\n+$/, '');
+        if (this.closed || this.closing || this.notifying) return this.reject('closed', priority, safe);
+        if (this.failed) return this.reject('stream-error', priority, safe);
+        let evicted = false;
         if (this.queue.length >= this.capacity) {
             const normal = priority === 'critical' ? this.queue.findIndex(item => item.priority === 'normal') : -1;
-            if (normal < 0) return this.reject('capacity', priority);
+            if (normal < 0) return this.reject('capacity', priority, safe);
             this.queue.splice(normal, 1);
             this.evicted++;
-            this.reject('capacity', 'normal');
+            evicted = true;
         }
-        // Only explicitly enabled SGR may pass. Reset style before the next record.
-        const safe = plain(text, this.color).replace(/\n+$/, '');
         this.queue.push({ text: safe + (this.color && safe.includes('\x1b') ? '\x1b[0m' : '') + '\n', priority });
         this.accepted++;
+        if (evicted) this.reject('capacity', 'normal');
         this.pump();
         return !this.failed;
     }
@@ -123,6 +140,8 @@ export class TerminalCoordinator {
         };
     }
 
+    private onResize = (): void => { this.pump(); };
+
     private onDrain = (): void => {
         this.blocked = false;
         this.pump();
@@ -134,7 +153,7 @@ export class TerminalCoordinator {
         if (this.failed || this.closed) return;
         this.failed = true;
         this.streamErrors++;
-        for (const item of this.queue.splice(0)) this.reject('stream-error', item.priority);
+        for (const item of this.queue.splice(0)) this.reject('stream-error', item.priority, item.text);
         this.region = undefined;
         this.drawn = '';
         for (const done of this.waiters) done(false);
@@ -155,7 +174,7 @@ export class TerminalCoordinator {
                 const prefix = this.drawn ? CLEAR : '';
                 this.drawn = '';
                 this.send(prefix + item.text);
-                if (this.failed) this.reject('stream-error', item.priority);
+                if (this.failed) this.reject('stream-error', item.priority, item.text);
             }
             if (!this.blocked && !this.failed && !this.queue.length) {
                 if (this.region && !this.closing) {
@@ -196,16 +215,25 @@ export class TerminalCoordinator {
     }
 
     /** Releases ownership; never ends or destroys the host's output stream. */
-    async close(signal?: AbortSignal): Promise<boolean> {
-        if (this.closed) return !this.failed;
+    close(signal?: AbortSignal): Promise<boolean> {
+        if (this.closePromise) return this.closePromise;
+        // Publish the shared promise before any user callbacks can reenter.
+        this.closePromise = Promise.resolve().then(() => this.finishClose(signal));
+        this.closing = true;
+        return this.closePromise;
+    }
+
+    private async finishClose(signal?: AbortSignal): Promise<boolean> {
         this.closing = true;
         this.region = undefined;
         this.pump();
         const drained = await this.flush(signal);
         if (!drained) {
-            for (const item of this.queue.splice(0)) this.reject(this.failed ? 'stream-error' : 'closed', item.priority);
+            for (const item of this.queue.splice(0)) this.reject(this.failed ? 'stream-error' : 'closed', item.priority, item.text);
         }
         this.closed = true;
+        if (this.interactive) this.stream.off('resize', this.onResize);
+        owners.delete(this.stream);
         this.stream.off('drain', this.onDrain);
         this.stream.off('error', this.onError);
         this.stream.off('close', this.onClose);

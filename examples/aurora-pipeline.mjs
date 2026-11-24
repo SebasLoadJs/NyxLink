@@ -41,11 +41,11 @@ export function createAuroraPipeline(options={}){
         return {target:options.target,level,banner:()=>{},close:async()=>true};
     }
     const stream=options.stream??process.stdout;
-    const columns=Math.max(40,Math.min(120,stream.columns??80));
+    const width=()=>Math.max(40,Math.min(120,stream.columns??80));
     const interactive=format==='aurora'&&stream.isTTY===true&&!process.env.CI&&!('NO_COLOR'in process.env)&&process.env.TERM!=='dumb';
     const color=interactive&&options.color!==false;
-    const terminal=new TerminalCoordinator({stream,interactive,color,maxQueued:options.maxQueued,onRejected:options.onRejected});
-    const presentation=createPresentation({columns,isTTY:interactive,color,unicode:options.unicode!==false});
+    const terminal=new TerminalCoordinator({stream,interactive,color,maxQueued:options.maxQueued,onRejected:options.onRejected,onCriticalRejected:options.onCriticalRejected});
+    const presentation=()=>createPresentation({columns:width(),isTTY:interactive,color,unicode:options.unicode!==false});
     const pretty=prettyFactory({colorize:false,translateTime:'SYS:HH:MM:ss',ignore:'pid,hostname,timestamp,sanitizedContext,operationId,traceId,spanId,eventCode,outcome,severity',singleLine:true});
     const incidents=new AuroraIncidentEngine(options.incidentCapacity??100);
     let bannerWritten=false;
@@ -55,14 +55,14 @@ export function createAuroraPipeline(options={}){
         if(incident&&incident.state!=='recovering'){
             const content=['FAILOVER '+incident.state.toUpperCase(),incident.backend.toUpperCase(),
                 incident.durationMs===undefined?'Duration: N/A':'Duration: '+prettyMs(incident.durationMs)].join('\n');
-            if(columns>=40&&options.unicode!==false)write(boxen(content,{padding:1,borderStyle:'round'}),record);
+            if(width()>=40&&options.unicode!==false)write(boxen(content,{padding:1,borderStyle:'round'}),record);
             else write(content,record);
             return;
         }
         if(isCritical(record)||options.detail===true){
             const definition=auroraCatalog[record.eventCode];
             write(String(pretty(JSON.stringify({...record,level:(rank[record.severity]+1)*10,msg:definition.message,time:Date.parse(record.timestamp)}))).trimEnd(),record);
-        }else write(presentation.event(record),record);
+        }else write(presentation().event(record),record);
     };
     // Consola is a reporter bridge, never a second terminal destination.
     const reporter=createConsola({level:5,throttle:0,reporters:[{log(log){renderRecord(log.args[0]);}}]});
@@ -86,6 +86,6 @@ export function createAuroraPipeline(options={}){
         logger[name](safe,auroraCatalog[safe.eventCode].message);
     }]));
     return {target,level,terminal,incidents,
-        banner(manager){if(format==='aurora'&&!bannerWritten){bannerWritten=true;terminal.write(presentation.banner(manager));}},
+        banner(manager){if(format==='aurora'&&!bannerWritten){bannerWritten=true;terminal.write(presentation().banner(manager));}},
         close:signal=>terminal.close(signal)};
 }

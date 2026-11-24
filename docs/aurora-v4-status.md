@@ -214,3 +214,15 @@ scheduled reconnect delay represented by CONNECTING. They are separate
 from the connection setup span and never include credentials or endpoints.
 No additional timers or global hooks. Integration/regression tests and CI
 are required for this increment.
+
+## Terminal ownership and cancellation hardening
+
+The coordinator now rejects a second owner of the same stream, automatically
+redraws an active ASCII region on resize, and shares the first close result
+among concurrent callers. It guards rejection callbacks against reentrant
+queue growth. An optional independent critical-record fallback receives
+sanitized terminal text when a queued critical event is rejected or evicted
+by shutdown; callers must not point it back at the coordinator. Delivery of
+bytes already accepted by the OS/stream cannot be guaranteed. Without a
+fallback, loss remains explicitly counted. Regression tests cover width
+changes, owner release, saturation, cancellation and callback reentrancy.
