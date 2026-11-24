@@ -74,8 +74,8 @@ export class AuroraPresentation {
 
     /** Renders allowlisted events, never arbitrary Pino message or payload fields. */
     event(event: AuroraEvent): string {
+        if (!Object.hasOwn(auroraCatalog, event.eventCode)) return '';
         const definition = auroraCatalog[event.eventCode];
-        if (!definition) return '';
         const symbol = definition.outcome === 'confirmed' ? 'success' :
             definition.level === 'error' ? 'error' :
             definition.level === 'warn' ? 'warning' : 'info';
