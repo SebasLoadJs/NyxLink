@@ -1,5 +1,5 @@
 import type { AuroraLevel } from './AuroraEvents';
-export type PinoOutputMeta = { level: number; time: number; msg?: string };
+export type PinoOutputMeta = { level: number; time: number; msg?: string; traceId?: string; spanId?: string };
 export interface PinoRecordEngine<T extends object> {
     write(level: AuroraLevel, record: T, message: string): void;
     close(): void;
@@ -25,8 +25,8 @@ export function createPinoRecordEngine<T extends object>(
         write(line: string) {
             if (closed) return;
             try {
-                const raw = JSON.parse(line) as PinoOutputMeta & { record: T };
-                consume(raw.record, { level: raw.level, time: raw.time, msg: raw.msg });
+                const raw = JSON.parse(line) as PinoOutputMeta & { record: T; trace_id?: string; span_id?: string };
+                consume(raw.record, { level: raw.level, time: raw.time, msg: raw.msg, traceId: raw.trace_id, spanId: raw.span_id });
             } catch { try { onError?.(); } catch {} }
         },
     });

@@ -19,18 +19,18 @@ test('performance endpoint remains private and exports fixed aggregate percentil
 
 test('logging diagnostics expose counters without payloads or a public endpoint', async t => {
   const { manager, endpoint, get } = await open(t);
-  const { Logger } = require('../dist');
+  const { AuroraEvents } = require('../dist');
   assert.deepEqual(await (await get('/logging')).json(), { configured: false });
-  manager.logger = new Logger({ level: 'info', maxQueue: 1, transports: [{ write() {} }] });
-  t.after(() => manager.logger.close());
-  manager.logger.info('Node', 'password=PRIVATE_LOG_METRICS'); manager.logger.error('Node', 'critical');
-  await manager.logger.flush();
+  const logger = new AuroraEvents({level:'info',target:Object.fromEntries(['trace','debug','info','warn','error','fatal'].map(level=>[level,()=>{if(level==='error')throw Error('PRIVATE_LOG_METRICS');}]))});
+  logger.attach(manager);t.after(()=>logger.close());
+  manager.emit('nodeReady',{backend:{kind:'lavalink'}},{});
+  manager.emit('nodeError',{backend:{kind:'lavalink'}},Error('PRIVATE_LOG_METRICS'));
   const counters = await (await get('/logging')).json();
   assert.equal(counters.configured, true);
-  assert.equal(counters.dropped, 1);
+  assert.equal(counters.accepted,1);assert.equal(counters.targetErrors,1);assert.equal(counters.criticalTargetErrors,1);
   const metrics = await (await get('/metrics')).text();
-  assert.match(metrics, /# TYPE nyxlink_log_dropped_total counter/);
-  assert.match(metrics, /nyxlink_log_dropped_total 1/);
+  assert.match(metrics,/nyxlink_log_target_accepted_total 1/);
+  assert.match(metrics,/nyxlink_log_critical_target_errors_total 1/);
   assert.ok(!JSON.stringify(counters).includes('PRIVATE_LOG_METRICS'));
   assert.equal((await fetch(endpoint.url + '/logging')).status, 401);
 });

@@ -185,7 +185,7 @@ export class LogPipeline {
 
     private enqueue(record: StructuredLogRecord): void {
         const sequenced = { ...record, sequence: ++this.sequence };
-        this.engine ??= createPinoRecordEngine('trace', value => this.enqueueSerialized(freeze(value)), () => { this.counters.transportErrors++; });
+        this.engine ??= createPinoRecordEngine<StructuredLogRecord>('trace', value => this.enqueueSerialized(freeze(value)), () => { this.counters.transportErrors++; });
         this.engine.write(sequenced.level, sequenced, sequenced.message);
     }
 

@@ -1,3 +1,4 @@
+import { getManagerLogRoute } from '../logging/ManagerLogRoute';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -182,7 +183,7 @@ export class PrivateMetricsServer {
                 this.send(response, 200, JSON.stringify(this.snapshot().players));
                 return;
             case '/logging':
-                this.send(response, 200, JSON.stringify({ configured: Boolean(this.manager.logger), ...this.manager.logger?.getStats() }));
+                this.send(response, 200, JSON.stringify({ configured: Boolean(getManagerLogRoute(this.manager)), ...getManagerLogRoute(this.manager)?.getStats() }));
                 return;
             case '/performance':
                 this.send(response, 200, JSON.stringify({ configured: Boolean(this.manager.performanceMonitor), snapshot: this.manager.performanceMonitor?.snapshot() }));
@@ -214,16 +215,13 @@ export class PrivateMetricsServer {
                     nyxlink_players_playing: players.playing,
                     nyxlink_players_paused: players.paused,
                 };
-                const logging = this.manager.logger?.getStats();
+                const logging = getManagerLogRoute(this.manager)?.getStats();
                 const counters = logging ? {
-                    nyxlink_log_written_total: logging.written,
-                    nyxlink_log_dropped_total: logging.dropped,
-                    nyxlink_log_dropped_critical_total: logging.droppedCritical,
-                    nyxlink_log_transport_errors_total: logging.transportErrors,
-                    nyxlink_log_sampled_total: logging.sampled,
-                    nyxlink_log_suppressed_total: logging.suppressed,
+                    nyxlink_log_target_accepted_total: logging.accepted,
+                    nyxlink_log_filtered_total: logging.filtered,
+                    nyxlink_log_target_errors_total: logging.targetErrors,
+                    nyxlink_log_critical_target_errors_total: logging.criticalTargetErrors,
                 } : {};
-                if (logging) values.nyxlink_log_queued = logging.queued;
                 const observed = this.manager.performanceMonitor?.snapshot();
                 if (observed) {
                     values.nyxlink_pending_requests = observed.resources.pendingRequests;

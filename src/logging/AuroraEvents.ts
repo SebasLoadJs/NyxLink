@@ -87,7 +87,10 @@ export type AuroraEvent = {
 export type AuroraPinoTarget = Record<AuroraLevel, (event: AuroraEvent, message: string) => unknown>;
 /** Host presentation consumes the detached record only after Pino serialization. */
 export function createAuroraPinoEngine(level: AuroraLevel, consume: (record: AuroraEvent, meta: PinoOutputMeta) => void, onError?: () => void): { target: AuroraPinoTarget; close(): void } {
-    const engine = createPinoRecordEngine<AuroraEvent>(level, consume, onError);
+    const engine = createPinoRecordEngine<AuroraEvent>(level, (record, meta) => {
+        const safe = normalizeAuroraEvent({ ...record, traceId: record.traceId ?? meta.traceId, spanId: record.spanId ?? meta.spanId });
+        if (safe) consume(safe, meta);
+    }, onError);
     const write = (severity: AuroraLevel) => (event: AuroraEvent, _message: string) => {
         try {
             const safe = normalizeAuroraEvent(event);
@@ -160,6 +163,10 @@ export class AuroraEvents {
     private readonly correlation = new AsyncLocalStorage<Operation>();
     private disposers: Array<() => void> = [];
     private closed = false;
+    private readonly counters = { accepted: 0, filtered: 0, targetErrors: 0, criticalTargetErrors: 0 };
+
+    /** Accepted means the host target returned, not that a stream was flushed. */
+    getStats() { return { ...this.counters, closed: this.closed }; }
 
     constructor(private readonly options: AuroraEventOptions) {
         this.minimum = ranks[options.level ?? 'silent'];
@@ -171,8 +178,8 @@ export class AuroraEvents {
 
     private emit(code: AuroraEventCode, input: AuroraContext = {}, operation?: Operation, finished = false): void {
         const definition = auroraCatalog[code];
-        if (this.closed || ranks[definition.level] < this.minimum ||
-            (this.categories && !this.categories.has(definition.category))) return;
+        if (this.closed) return;
+        if (ranks[definition.level] < this.minimum || (this.categories && !this.categories.has(definition.category))) { this.counters.filtered++; return; }
         const context = safeContext(input);
         const event: AuroraEvent = {
             eventCode: code, category: definition.category, severity: definition.level, outcome: definition.outcome,
@@ -188,8 +195,8 @@ export class AuroraEvents {
                 event.spanId = trace.spanId;
             }
         } catch { /* tracing is optional */ }
-        try { this.options.target?.[definition.level](event, definition.message); }
-        catch { /* diagnostics never break audio */ }
+        try { this.options.target?.[definition.level](event, definition.message); this.counters.accepted++; }
+        catch { this.counters.targetErrors++; if (definition.level === 'error' || definition.level === 'fatal') this.counters.criticalTargetErrors++; }
     }
 
     /** Exactly one terminal event per operation. Never forward request payloads or thrown errors. */

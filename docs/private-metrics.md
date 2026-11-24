@@ -53,3 +53,7 @@ The deterministic tests in tests/private-metrics.test.cjs cover authentication, 
 **Scope limit:** No Redis, shared storage, multi-process aggregation, dashboard hosting, Prometheus scraping configuration, authentication gateway or externally exposed admin panel is installed by the library. This serves one Manager instance. Multi-process aggregation belongs to an authorized infrastructure layer and requires its own access and privacy review.
 
 No release or npm publication is implied by this feature. The end-to-end acceptance gate remains in release-5.3-plan.md.
+
+### Canonical logging metrics
+
+`/logging` reports whether the canonical Aurora route is attached, its accepted/filtered/targetErrors/criticalTargetErrors counters and closed flag. `nyxlink_log_target_accepted_total` counts successful target invocations, not confirmed disk or terminal writes. `nyxlink_log_filtered_total`, `nyxlink_log_target_errors_total` and `nyxlink_log_critical_target_errors_total` are route-local. Queue/stream rejection counts belong to the host TerminalCoordinator and are not fabricated by the private endpoint. The removed legacy logger counters no longer describe Manager logging.
