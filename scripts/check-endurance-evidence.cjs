@@ -1,0 +1,51 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+
+function sourceRevision(root = path.resolve(__dirname, '..')) {
+  const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  const revision = git(['rev-parse', 'HEAD']);
+  if (!/^[0-9a-f]{40}$/.test(revision)) throw new Error('Invalid source revision');
+  if (git(['status', '--porcelain', '--untracked-files=normal'])) throw new Error('Evidence requires a clean checkout');
+  return revision;
+}
+
+function inspectEndurance(revision, report) {
+  if (!/^[0-9a-f]{40}$/.test(revision)) throw new TypeError('Invalid expected revision');
+  const checks = {
+    exactRevision: report?.sourceRevision === revision,
+    scope: report?.scope === 'local backend endurance; no Discord voice or audible playback',
+    passed: report?.passed === true && !report?.error,
+    duration: Number.isInteger(report?.durationSeconds) && report.durationSeconds >= 600 &&
+      Number.isFinite(report.elapsedSeconds) && report.elapsedSeconds >= report.durationSeconds,
+    backends: Array.isArray(report?.backends) && report.backends.length === 2 &&
+      ['lavalink', 'nodelink'].every(kind => report.backends.some(b => b.backend === kind &&
+        typeof b.version === 'string' && b.version.length > 0 &&
+        typeof b.image === 'string' && b.image.length > 0 &&
+        Number.isSafeInteger(b.cycles) && b.cycles >= Math.floor(report.durationSeconds / 2) &&
+        Number.isSafeInteger(b.resumes) && b.resumes >= 1 &&
+        Number.isSafeInteger(b.pings) && b.pings >= 1)),
+    cleanup: report?.cleanup?.players === 0 && report?.cleanup?.nodes === 0 &&
+      Array.isArray(report?.cleanup?.activeResources) && !report.cleanup.activeResources.includes('Timeout'),
+    samples: Array.isArray(report?.samples) && report.samples.length >= 2 &&
+      report.samples.every(s => Number.isFinite(s.elapsedSeconds) && s.elapsedSeconds >= 0 &&
+        Number.isFinite(s.heapUsedBytes) && s.heapUsedBytes >= 0 &&
+        Number.isFinite(s.rssBytes) && s.rssBytes >= 0),
+  };
+  return { revision, checks, enduranceEvidenceComplete: Object.values(checks).every(Boolean),
+    humanListeningRequired: true, releaseApproved: false };
+}
+if (require.main === module) {
+  try {
+    const revision = sourceRevision();
+    const report = JSON.parse(fs.readFileSync(path.resolve('.runtime/integration/endurance-report.json'), 'utf8'));
+    const result = inspectEndurance(revision, report);
+    console.log(JSON.stringify(result, null, 2));
+    if (!result.enduranceEvidenceComplete) process.exitCode = 1;
+  } catch {
+    console.error('Missing, invalid or unverifiable endurance evidence. Release approval not inferred.');
+    process.exitCode = 1;
+  }
+}
+module.exports = { sourceRevision, inspectEndurance };

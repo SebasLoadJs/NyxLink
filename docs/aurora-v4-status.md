@@ -302,3 +302,7 @@ the underlying transfer remains confirmed. This is not an audibility
 claim. The standalone Log Update renderer has a real PTY fixture driven
 by explicit input changes and clean exit. Eight PTY sessions are expected
 in the packed acceptance test; new results remain pending.
+
+## Verified consolidated checkpoint
+
+PR #48 passed all seven workflows at `34813758a2215d81339240de4c6b3416b55e81f5` and merged into dev as `a03829c91ef0965151b3175d39e268657a8d3c51`. Both packed consumer jobs passed all eight PTY sessions, including standalone Log Update and real resize; Inspector export, trace timestamps and latency sampling are included. [CI run and artifacts](https://github.com/SebasLoadJs/NyxLink/actions/runs/45463130184). Earlier pending-status paragraphs describe historical increments. This is automated acceptance of the implemented scope, not proof that every original visual ambition or live-audio requirement has been satisfied.

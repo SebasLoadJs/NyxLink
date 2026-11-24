@@ -31,7 +31,8 @@
     "test:lavalink-plugins": "pnpm run build && node scripts/test-lavalink-plugins.cjs",
     "release:check-tag": "node scripts/check-release-tag.cjs",
     "release:check-voice-evidence": "node scripts/check-live-voice-evidence.cjs",
-    "release:check-registry": "node scripts/check-npm-registry.cjs"
+    "release:check-registry": "node scripts/check-npm-registry.cjs",
+    "release:check-endurance-evidence": "node scripts/check-endurance-evidence.cjs"
   },
   "homepage": "https://github.com/SebasLoadJs/NyxLink#readme",
   "bugs": {
