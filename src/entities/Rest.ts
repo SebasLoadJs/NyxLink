@@ -70,7 +70,12 @@ export class Rest {
             const execute = () => monitor ? monitor.measure(operation === 'REST.http' ? 'rest' : 'streamOpen', () => Reflect.apply(target, receiver, args)) : Reflect.apply(target, receiver, args);
             const run = () => observeOperation(this.node.manager, 'nyxlink.rest', async () => {
                 const aurora = getManagerLogRoute(this.node.manager);
-                return aurora ? aurora.observe(operation === 'REST.http' ? 'rest' : 'stream', async () => execute(), { backend: this.node.backend?.kind }) : execute();
+                return aurora ? aurora.observe(operation === 'REST.http' ? 'rest' : 'stream', async () => execute(), { backend: this.node.backend?.kind }, result => {
+                    if (operation === 'REST.http' && typeof result === 'object' && result !== null && (result as { loadType?: unknown }).loadType === 'error') {
+                        try { if (new URL(args[0]).pathname === '/v4/loadtracks') return 'failed'; } catch {}
+                    }
+                    return 'completed';
+                }) : execute();
             }, result => {
                 if (result == null) return 'empty';
                 // Classify the load response only for the actual loadtracks endpoint.
@@ -82,19 +87,7 @@ export class Rest {
                 }
                 return 'resolved';
             });
-            const logger = this.node.manager.logger;
-            if (getManagerLogRoute(this.node.manager) || !logger?.isEnabled('error')) return run();
-            let route = 'invalid-url';
-            try {
-                // Credentials, hostname, query strings, session and guild path
-                // components never enter the request trace context.
-                if (typeof args[0] !== 'string') throw new TypeError('Invalid transport URL');
-                route = new URL(args[0]).pathname.replace(/\/sessions\/[^/]+/g, '/sessions/:session')
-                    .replace(/\/players\/[^/]+/g, '/players/:guild').replace(/\/mix\/[^/]+/g, '/mix/:layer');
-            } catch { /* The actual transport retains URL validation/error policy. */ }
-            return logger.traceOperation(operation, run, {
-                nodeId: this.node.identifier, route, method: typeof args[1]?.method === 'string' ? args[1].method : 'GET',
-            });
+            return run();
         } });
     }
 
@@ -132,11 +125,7 @@ export class Rest {
     }
 
     private async featureRequest<T = any>(operation: ExtensionOperation, params: ExtensionRouteParameters, options: http.RequestOptions & { body?: any }, validate?: (response: unknown) => void): Promise<T> {
-        const logger = this.node.manager.logger;
-        const run = () => this.runFeatureRequest<T>(operation, params, options, validate);
-        return !getManagerLogRoute(this.node.manager) && logger && logger.isEnabled('error')
-            ? logger.traceOperation('REST.' + operation, run, { nodeId: this.node.identifier, ...(params.guildId ? { guildId: params.guildId } : {}) })
-            : run();
+        return this.runFeatureRequest<T>(operation, params, options, validate);
     }
 
     private async runFeatureRequest<T>(operation: ExtensionOperation, params: ExtensionRouteParameters, options: http.RequestOptions & { body?: any }, validate?: (response: unknown) => void): Promise<T> {
@@ -287,10 +276,7 @@ export class Rest {
     }
 
     public async updatePlayer(guildId: string, data: PlayerUpdatePayload, noReplace: boolean = false): Promise<PlayerUpdateAcknowledgement | null> {
-        const logger = this.node.manager.logger;
-        const run = () => this.updatePlayerRequest(guildId, data, noReplace);
-        return !getManagerLogRoute(this.node.manager) && logger && logger.isEnabled('error')
-            ? logger.traceOperation('REST.updatePlayer', run, { nodeId: this.node.identifier, guildId }) : run();
+        return this.updatePlayerRequest(guildId, data, noReplace);
     }
 
     private async updatePlayerRequest(guildId: string, data: PlayerUpdatePayload, noReplace: boolean): Promise<PlayerUpdateAcknowledgement | null> {

@@ -4,7 +4,6 @@ import { Player } from "../entities/Player";
 import { Track } from "../entities/Track";
 import { Filters } from "../entities/Filters";
 import { NodeState, PlayerLoop, TrackEndReason, NodeSortStrategy, TPartialTrackProperties } from "./types";
-import type { LoggerOptions } from '../logging/Logger';
 import type { AuroraEventOptions } from '../logging/AuroraEvents';
 import type { OpenTelemetryOptions } from '../observability/OpenTelemetry';
 import type { FailoverOptions } from '../nodes/NodeFailover';
@@ -141,10 +140,8 @@ export interface IManagerNodeConfig {
 
 export interface IManagerOptionsConfig {
     recommendations?: import('../autoplay/RecommendationPreference').RecommendationPreferences;
-    /** Preferred: canonical Aurora target. Legacy Logger options remain temporarily supported. */
-    logging?: AuroraEventOptions | (LoggerOptions & { banner?: boolean });
-    /** @deprecated Use logging with a canonical Aurora target. */
-    aurora?: AuroraEventOptions;
+    /** Canonical Aurora logging; absent or silent means no output. */
+    logging?: AuroraEventOptions;
     telemetry?: OpenTelemetryOptions;
     clientName?: string;
     userAgent?: string;

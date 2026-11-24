@@ -7,8 +7,7 @@ import { TrackCodec } from '../tracks/TrackCodec';
 import { TrackResolver } from '../tracks/TrackResolver';
 import { playbackAttempt } from './PlaybackAttempt';
 import { playbackGuard } from './PlaybackGuard';
-import { randomUUID } from 'node:crypto';
-import { performance } from 'node:perf_hooks';
+import { getManagerLogRoute } from '../logging/ManagerLogRoute';
 
 export type MigrationStage = 'select-target' | 'resolve-track' | 'restore-player' | 'persist-snapshot' | 'cleanup-source' | 'rollback' | 'cleanup-target';
 export interface MigrationStageObservation {
@@ -28,16 +27,10 @@ export type RestartOptions = { destroyOnFailure?: boolean; startQueued?: boolean
 /** Runs entirely within one player command, including rollback and cleanup. */
 export async function migratePlayer(player: Player, target: Node, ticket: number): Promise<boolean> {
     const source = player.node;
-    const logger = player.manager.logger;
-    const migrationId = logger?.isEnabled('debug') ? randomUUID() : undefined;
-    const started = performance.now();
     let currentStage: MigrationStage = 'select-target';
     const observe = (stage: MigrationStage, status: MigrationStageObservation['status']) => {
         currentStage = stage;
-        if (!migrationId) return;
-        const observation: MigrationStageObservation = { migrationId, guildId: player.guildId, source: source.identifier,
-            target: target.identifier, stage, status, elapsedMs: performance.now() - started };
-        try { logger?.event('debug', 'Failover', 'migration.' + stage, { ...observation }); } catch { /* diagnostics never control migration */ }
+        try { getManagerLogRoute(player.manager)?.recordMigrationStage(player, stage, status); } catch { /* diagnostics never control migration */ }
     };
     const guard = playbackGuard(player);
     const attempts = playbackAttempt(player);
@@ -74,8 +67,8 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
     let committed = false;
     try {
         if (!active() || source === target) return false;
-        observe('select-target', 'acknowledged');
         report('in-progress');
+        observe('select-target', 'acknowledged');
         if (!active()) { report('cancelled', undefined, 'intent-cancelled'); return false; }
         const original = player.current;
         observe('resolve-track', 'started');

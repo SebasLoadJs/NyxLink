@@ -5,12 +5,22 @@ import type { Manager } from '../core/Manager';
 import { claimManagerLogRoute } from './ManagerLogRoute';
 import { createPinoRecordEngine, type PinoOutputMeta } from './PinoEngine';
 import type { Player } from '../entities/Player';
+import type { MigrationStage, MigrationStageObservation } from '../players/PlayerMigration';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { HttpError } from '../errors/HttpError';
 
 export type AuroraLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 export type AuroraCategory = 'CORE' | 'MANAGER' | 'NODE' | 'LAVALINK' | 'NODELINK' | 'WEBSOCKET' | 'REST' | 'PLAYER' | 'QUEUE' | 'TRACK' | 'SEARCH' | 'FILTERS' | 'AUTOPLAY' | 'CROSSFADE' | 'FAILOVER' | 'HEALTH' | 'PLUGIN' | 'TELEMETRY';
 export type AuroraOutcome = 'observed' | 'started' | 'confirmed' | 'failed' | 'cancelled';
 type Definition = { category: AuroraCategory; level: AuroraLevel; outcome: AuroraOutcome; message: string };
 export const auroraCatalog = {
+    MANAGER_INITIALIZED: { category: 'CORE', level: 'info', outcome: 'observed', message: 'Manager initialized' },
+    EXTENSION_FAILED: { category: 'PLUGIN', level: 'error', outcome: 'failed', message: 'Extension lifecycle failed' },
+    MIGRATION_STAGE_STARTED: { category: 'FAILOVER', level: 'debug', outcome: 'started', message: 'Migration stage started' },
+    MIGRATION_STAGE_ACKNOWLEDGED: { category: 'FAILOVER', level: 'debug', outcome: 'confirmed', message: 'Migration stage acknowledged' },
+    MIGRATION_STAGE_FAILED: { category: 'FAILOVER', level: 'error', outcome: 'failed', message: 'Migration stage failed' },
+    MIGRATION_STAGE_CANCELLED: { category: 'FAILOVER', level: 'debug', outcome: 'cancelled', message: 'Migration stage cancelled' },
+    MIGRATION_STAGE_PARTIAL: { category: 'FAILOVER', level: 'warn', outcome: 'observed', message: 'Migration stage partially completed' },
     NODE_READY: { category: 'NODE', level: 'info', outcome: 'confirmed', message: 'Backend session ready' },
     NODE_ERROR: { category: 'NODE', level: 'error', outcome: 'failed', message: 'Backend reported an error' },
     NODE_DISCONNECTED: { category: 'WEBSOCKET', level: 'warn', outcome: 'observed', message: 'Backend disconnected' },
@@ -57,6 +67,9 @@ export type AuroraContext = {
     attempt?: number;
     trackCount?: number;
     reasonCode?: FailoverReasonCode;
+    stage?: MigrationStage;
+    stageStatus?: MigrationStageObservation['status'];
+    httpStatus?: number;
 };
 export type AuroraEvent = {
     eventCode: AuroraEventCode;
@@ -66,6 +79,7 @@ export type AuroraEvent = {
     timestamp: string;
     durationMs?: number;
     operationId?: string;
+    parentOperationId?: string;
     sanitizedContext: AuroraContext;
     traceId?: string;
     spanId?: string;
@@ -74,10 +88,11 @@ export type AuroraPinoTarget = Record<AuroraLevel, (event: AuroraEvent, message:
 /** Host presentation consumes the detached record only after Pino serialization. */
 export function createAuroraPinoEngine(level: AuroraLevel, consume: (record: AuroraEvent, meta: PinoOutputMeta) => void, onError?: () => void): { target: AuroraPinoTarget; close(): void } {
     const engine = createPinoRecordEngine<AuroraEvent>(level, consume, onError);
-    const write = (severity: AuroraLevel) => (event: AuroraEvent, message: string) => {
-        if (Object.hasOwn(auroraCatalog, event.eventCode) && auroraCatalog[event.eventCode].level === severity) {
-            engine.write(severity, event, message);
-        }
+    const write = (severity: AuroraLevel) => (event: AuroraEvent, _message: string) => {
+        try {
+            const safe = normalizeAuroraEvent(event);
+            if (safe && safe.severity === severity) engine.write(severity, safe, auroraCatalog[safe.eventCode].message);
+        } catch { try { onError?.(); } catch {} }
     };
     return { target: { trace: write('trace'), debug: write('debug'), info: write('info'), warn: write('warn'), error: write('error'), fatal: write('fatal') }, close: () => engine.close() };
 }
@@ -85,7 +100,7 @@ export interface AuroraEventOptions {
     level?: AuroraLevel | 'silent';
     categories?: readonly AuroraCategory[];
     /** Host-provided Pino instance; configure one destination in the host. */
-    target: AuroraPinoTarget;
+    target?: AuroraPinoTarget;
     /** Optional host-owned active trace context provider. */
     traceContext?: () => { traceId: string; spanId: string } | undefined;
 }
@@ -101,13 +116,48 @@ export function safeFailoverReason(value: unknown): FailoverReasonCode | undefin
 }
 const validHex = (value: unknown, length: number): value is string =>
     typeof value === 'string' && value.length === length && /^[a-f0-9]+$/.test(value) && !/^0+$/.test(value);
-type Operation = { id: string; started: number };
+type Operation = { id: string; started: number; parentId?: string };
+const migrationStages = new Set<unknown>(['select-target','resolve-track','restore-player','persist-snapshot','cleanup-source','rollback','cleanup-target']);
+const migrationStatuses = new Set<unknown>(['started','acknowledged','failed','cancelled','partial']);
+function safeContext(input: AuroraContext = {}): AuroraContext {
+    const context: AuroraContext = {};
+    if (input.backend !== undefined) context.backend = backend(input.backend);
+    const attempt = count(input.attempt), trackCount = count(input.trackCount);
+    if (attempt !== undefined) context.attempt = attempt;
+    if (trackCount !== undefined) context.trackCount = trackCount;
+    const reasonCode = safeFailoverReason(input.reasonCode);
+    if (reasonCode) context.reasonCode = reasonCode;
+    if (migrationStages.has(input.stage)) context.stage = input.stage;
+    if (migrationStatuses.has(input.stageStatus)) context.stageStatus = input.stageStatus;
+    if (typeof input.httpStatus === 'number' && Number.isSafeInteger(input.httpStatus) && input.httpStatus >= 100 && input.httpStatus <= 599) context.httpStatus = input.httpStatus;
+    return context;
+}
+const operationId = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(value);
+/** Canonicalize before the native Pino engine, including records submitted by a host. */
+export function normalizeAuroraEvent(input: unknown): AuroraEvent | undefined {
+    if (!input || typeof input !== 'object') return;
+    const record = input as Partial<AuroraEvent>;
+    if (typeof record.eventCode !== 'string' || !Object.hasOwn(auroraCatalog, record.eventCode)) return;
+    const definition = auroraCatalog[record.eventCode];
+    const context = safeContext(record.sanitizedContext ?? {});
+    const event: AuroraEvent = {
+        eventCode: record.eventCode, category: definition.category, severity: definition.level, outcome: definition.outcome,
+        timestamp: typeof record.timestamp === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(record.timestamp) ? record.timestamp : new Date().toISOString(),
+        sanitizedContext: { backend: 'unknown', ...context },
+    };
+    if (typeof record.durationMs === 'number' && Number.isFinite(record.durationMs) && record.durationMs >= 0) event.durationMs = record.durationMs;
+    if (operationId(record.operationId)) event.operationId = record.operationId;
+    if (operationId(record.parentOperationId) && record.parentOperationId !== event.operationId) event.parentOperationId = record.parentOperationId;
+    if (validHex(record.traceId, 32) && validHex(record.spanId, 16)) { event.traceId = record.traceId; event.spanId = record.spanId; }
+    return event;
+}
 
 /** Single opt-in, allowlisted event route. No raw debug or backend payloads. */
 export class AuroraEvents {
     private readonly minimum: number;
     private readonly categories?: Set<AuroraCategory>;
     private readonly operations = new WeakMap<Player, Operation>();
+    private readonly correlation = new AsyncLocalStorage<Operation>();
     private disposers: Array<() => void> = [];
     private closed = false;
 
@@ -115,25 +165,20 @@ export class AuroraEvents {
         this.minimum = ranks[options.level ?? 'silent'];
         if (this.minimum === undefined) throw new TypeError('Invalid Aurora log level');
         this.categories = options.categories ? new Set(options.categories) : undefined;
-        if (!options.target || Object.keys(ranks).filter(level => level !== 'silent').some(level =>
-            typeof options.target[level as AuroraLevel] !== 'function')) throw new TypeError('Aurora requires a Pino-compatible target');
+        if (this.minimum !== Infinity && (!options.target || Object.keys(ranks).filter(level => level !== 'silent').some(level =>
+            typeof options.target?.[level as AuroraLevel] !== 'function'))) throw new TypeError('Aurora requires a Pino-compatible target');
     }
 
     private emit(code: AuroraEventCode, input: AuroraContext = {}, operation?: Operation, finished = false): void {
         const definition = auroraCatalog[code];
         if (this.closed || ranks[definition.level] < this.minimum ||
             (this.categories && !this.categories.has(definition.category))) return;
-        const context: AuroraContext = {};
-        if (input.backend !== undefined) context.backend = backend(input.backend);
-        const attempt = count(input.attempt), trackCount = count(input.trackCount);
-        if (attempt !== undefined) context.attempt = attempt;
-        if (trackCount !== undefined) context.trackCount = trackCount;
-        const reasonCode = safeFailoverReason(input.reasonCode);
-        if (reasonCode) context.reasonCode = reasonCode;
+        const context = safeContext(input);
         const event: AuroraEvent = {
             eventCode: code, category: definition.category, severity: definition.level, outcome: definition.outcome,
             timestamp: new Date().toISOString(), sanitizedContext: context,
             ...(operation ? { operationId: operation.id } : {}),
+            ...(operation?.parentId ? { parentOperationId: operation.parentId } : {}),
             ...(operation && finished ? { durationMs: performance.now() - operation.started } : {}),
         };
         try {
@@ -143,7 +188,7 @@ export class AuroraEvents {
                 event.spanId = trace.spanId;
             }
         } catch { /* tracing is optional */ }
-        try { this.options.target[definition.level](event, definition.message); }
+        try { this.options.target?.[definition.level](event, definition.message); }
         catch { /* diagnostics never break audio */ }
     }
 
@@ -155,17 +200,28 @@ export class AuroraEvents {
                 ? { completed: 'STREAM_OPENED', empty: 'STREAM_OPENED', failed: 'STREAM_OPEN_FAILED', cancelled: 'STREAM_OPEN_CANCELLED' } as const
                 : { completed: 'REST_COMPLETED', empty: 'REST_COMPLETED', failed: 'REST_FAILED', cancelled: 'REST_CANCELLED' } as const;
         if (this.closed || this.minimum === Infinity || (this.categories && !this.categories.has(auroraCatalog[codes.completed].category))) return run();
-        const operation = { id: randomUUID(), started: performance.now() };
+        const operation: Operation = { id: randomUUID(), started: performance.now(), parentId: this.correlation.getStore()?.id };
         let result: T;
-        try { result = await run(); }
+        try { result = await this.correlation.run(operation, run); }
         catch (error) {
-            this.emit(error instanceof Error && error.name === 'AbortError' ? codes.cancelled : codes.failed, input, operation, true);
+            this.emit(error instanceof Error && error.name === 'AbortError' ? codes.cancelled : codes.failed,
+                { ...input, ...(error instanceof HttpError ? { httpStatus: error.statusCode } : {}) }, operation, true);
             throw error;
         }
         let outcome: 'completed' | 'empty' | 'failed' = 'completed';
         try { outcome = classify?.(result) ?? 'completed'; } catch { /* diagnostics cannot change the result */ }
         this.emit(codes[outcome] ?? codes.completed, input, operation, true);
         return result;
+    }
+
+    recordInitialized(): void { this.emit('MANAGER_INITIALIZED'); }
+    recordExtensionFailure(): void { this.emit('EXTENSION_FAILED'); }
+    recordMigrationStage(player: Player, stage: MigrationStage, status: MigrationStageObservation['status']): void {
+        const operation = this.operations.get(player);
+        if (!operation || !migrationStages.has(stage) || !migrationStatuses.has(status)) return;
+        const codes = { started: 'MIGRATION_STAGE_STARTED', acknowledged: 'MIGRATION_STAGE_ACKNOWLEDGED',
+            failed: 'MIGRATION_STAGE_FAILED', cancelled: 'MIGRATION_STAGE_CANCELLED', partial: 'MIGRATION_STAGE_PARTIAL' } as const;
+        this.emit(codes[status], { backend: backend(player.node.backend?.kind), stage, stageStatus: status }, operation, true);
     }
 
     attach(manager: Manager): void {
@@ -218,6 +274,7 @@ export class AuroraEvents {
     close(): void {
         if (this.closed) return;
         this.closed = true;
+        this.correlation.disable();
         for (const dispose of this.disposers.splice(0)) {
             try { dispose(); } catch { /* independent cleanup */ }
         }

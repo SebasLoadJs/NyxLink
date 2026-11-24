@@ -19,7 +19,6 @@ import { Connector } from "../connectors/Connector";
 import { version } from "../..";
 import { SpotifySource } from "../sources/spotify";
 import { DeezerSource } from "../sources/deezer";
-import { Logger } from "../logging/Logger";
 import { AuroraEvents } from '../logging/AuroraEvents';
 import { getManagerLogRoute } from '../logging/ManagerLogRoute';
 import { OpenTelemetry } from '../observability/OpenTelemetry';
@@ -44,12 +43,10 @@ export class Manager extends EventEmitter<IManagerEvents> {
         return this.databaseInstance;
     }
     public set database(database: DatabaseManager) { this.databaseInstance = database; }
-    public readonly logger?: Logger;
     public readonly aurora?: AuroraEvents;
     private readonly telemetry?: OpenTelemetry;
     public performanceMonitor?: PerformanceMonitor;
     private extensionHost?: ExtensionHost;
-    private detachLogging?: () => void;
     private idleCheckInterval?: NodeJS.Timeout;
     private initializationPromise?: Promise<this>;
     private shutdownPromise?: Promise<void>;
@@ -166,10 +163,9 @@ export class Manager extends EventEmitter<IManagerEvents> {
             }
         };
 
-        if (this.options.aurora && this.options.logging) throw new TypeError('Select logging or its aurora alias, not both');
-        const logging = this.options.logging;
-        const canonicalLogging = logging && 'target' in logging ? logging : this.options.aurora;
-        const legacyLogging = logging && !('target' in logging) ? logging : undefined;
+        if (Object.hasOwn(config.options ?? {}, 'aurora')) throw new TypeError('Use options.logging for Aurora');
+        const canonicalLogging = this.options.logging;
+        if (canonicalLogging && Object.keys(canonicalLogging).some(key => !['level','target','categories','traceContext'].includes(key))) throw new TypeError('Unsupported logging option: use the canonical Aurora configuration');
         this.searches = new SearchService(this, query => this.resolveNativeSource(query));
         Structure.setManager(this);
 
@@ -179,11 +175,6 @@ export class Manager extends EventEmitter<IManagerEvents> {
         if (canonicalLogging) {
             this.aurora = new AuroraEvents(canonicalLogging);
             this.aurora.attach(this);
-        }
-        if (legacyLogging) {
-            this.logger = new Logger(legacyLogging);
-            this.detachLogging = this.logger.attachManager(this);
-            if (legacyLogging.banner) this.logger.banner();
         }
     }
 
@@ -210,9 +201,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
     }
 
     public detachLogger(): void {
-        this.detachLogging?.();
-        this.detachLogging = undefined;
-        this.aurora?.close();
+        getManagerLogRoute(this)?.close();
     }
 
     /** Starts bounded, optional observations independently of logging level. */
@@ -258,8 +247,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
             if (this.destroyed) return this;
             if (this.options.playerDestruction?.autoDestroyOnIdle) this.startIdleMonitoring();
             this.initialized = true;
-            const logging = this.options.logging;
-            if (logging && !('target' in logging) && logging.startup) this.logger?.startup(this);
+            getManagerLogRoute(this)?.recordInitialized();
             this.emit('debug', `Moonlink.js > Manager >> Initialized. ClientId: ${this.clientId}`);
             return this;
             } catch (error) {
@@ -306,8 +294,6 @@ export class Manager extends EventEmitter<IManagerEvents> {
             for (const connector of this.connectors) await attempt(() => connector.dispose?.());
             this.connectors.clear();
             await attempt(() => this.detachLogger());
-            await attempt(() => this.logger?.close());
-            await attempt(() => this.aurora?.close());
             if (this.databaseInstance) await attempt(() => this.databaseInstance?.shutdown());
             if (Structure.getManager() === this) Structure.setManager(undefined);
             if (errors.length) throw new AggregateError(errors, 'Manager shutdown encountered cleanup failures');

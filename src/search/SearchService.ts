@@ -1,5 +1,4 @@
 import type { Manager } from '../core/Manager';
-import { getManagerLogRoute } from '../logging/ManagerLogRoute';
 import { validateLoadResponse } from '../backends/ProtocolValidation';
 import type { Node } from '../entities/Node';
 import type { SearchResult } from '../structures/SearchResult';
@@ -46,9 +45,7 @@ export class SearchService {
     }
 
     public async search(query: ISearchQuery): Promise<SearchResult> {
-        const logger = this.manager.logger;
-        const run = () => this.runSearch(query);
-        return !getManagerLogRoute(this.manager) && logger && logger.isEnabled('error') ? logger.traceOperation('Search.search', run) : run();
+        return this.runSearch(query);
     }
 
     private async runSearch(query: ISearchQuery): Promise<SearchResult> {
