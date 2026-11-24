@@ -1,21 +1,18 @@
 # Aurora V4 — implementation status
 
-This increment establishes the event contract before introducing terminal UI.
-It is an expansion of the 5.3 master plan, not a completed terminal suite.
+Aurora V4 expands the 5.3 master plan. This table distinguishes merged
+baseline evidence from changes awaiting final acceptance.
 
 | Area | Status |
 | --- | --- |
-| Typed catalog, Pino route, filtering, allowlisted context, lifecycle | Implemented in this PR; CI pending |
-| Failover correlation and measured duration | Implemented for observed start and final report |
-| Optional trace correlation | Host context injection; no automatic active span propagation yet |
-| Legacy API | Preserved; manager selects one logging route explicitly |
-| JSON / pretty | Host Pino transport, verified by existing packed consumer test; Aurora event consumer check added |
-| TerminalCoordinator and bounded queues | Initial single-line region, bounded queue and rejection accounting implemented; CI pending |
-| Bootstrap, Event Stream, Music Strip, Incident Engine, Capability Explorer | Not implemented |
-| Independent Ink Inspector and live snapshots | Not implemented |
-| Optional visual dependencies and PTY demos | Not implemented |
-| Expanded OTel instrumentation and SDK example | Not implemented |
-| Benchmarks, compatibility matrix, release acceptance | Pending |
+| Typed event catalog, Pino routing, privacy and lifecycle | CI verified in #37 |
+| TerminalCoordinator and queue limits | CI verified in #38; real Linux PTY in #44 |
+| Visual presentation and optional dependencies | CI verified in #39 |
+| Bootstrap, Music Strip, Incident Engine, Capability Explorer, Ink Inspector | CI verified in #42; initial models, not full live-audio acceptance |
+| Silent / JSON / Pretty / Aurora / Custom and host SDK / OTLP | CI verified in #43 |
+| Real PTY captures and comparative synthetic benchmark | CI verified in #44 |
+| Additional operation tracing and Inspector demo event routing | This PR; CI pending |
+| Complete REST/handshake coverage, detailed visual requirements, live audio and release acceptance | Not fully accepted |
 
 Privacy: only enumerated event codes, fixed messages, backend kind and numeric
 counters are emitted. Raw debug messages, node identifiers, guild IDs, track
@@ -157,3 +154,38 @@ throughput threshold. GitHub Actions uploads the transcripts and JSON
 measurements per Node version even on failure. Consola repeat throttling
 is disabled on the canonical event route to avoid collapsing events.
 CI results are still required; no benchmark numbers are assumed.
+
+## Remaining operation coverage
+
+Adds spans for connection setup (not READY confirmation), synchronous node
+selection, cross-backend track resolution, session restoration attempts,
+autoplay playback and crossfade configuration requests. Reconnection,
+session resumed and crossfade/gapless transition reports use real events;
+configuration is not evidence of audible transition. Runtime operation
+names and classification labels are allowlisted even for JavaScript callers.
+Some REST endpoints and complete handshake timing are not instrumented.
+CI, PTY and live-audio acceptance are required.
+
+## Verified acceptance baseline (PR #44)
+
+Commit `37e10fe5f9766a4874ef87b9bcd8ff03cace2b1c`; [GitHub Actions run 45459627521](https://github.com/SebasLoadJs/NyxLink/actions/runs/45459627521).
+Both package validation jobs passed. Six PTY sessions were captured for each
+Node version. The following are measured medians from the corresponding
+benchmark.json files, three repetitions of 2,000 synthetic queue events per mode.
+
+| Mode | Node 22.23.5 events/s | Node 24.22.3 events/s |
+| --- | ---: | ---: |
+| JSON | 90,542 | 80,005 |
+| Pretty | 53,764 | 29,887 |
+| Aurora | 39,666 | 38,459 |
+
+Each active mode rendered all 6,000 events per runtime, with zero rejected
+records. No throughput threshold or claim about real backend performance is
+inferred. The destination is a synthetic synchronous Writable, not Discord,
+a network transport, or a terminal rendering benchmark under real load.
+CI artifact IDs 14952985134 (Node 22) and 14952795737 (Node 24) expire on
+2026-12-08. Final candidate evidence must be collected again on its own SHA.
+
+The Inspector demo now routes events to a custom read-only store without
+another stdout renderer. The expanded PTY fixture exercises all five tabs;
+those additional checks remain pending for the new commit.

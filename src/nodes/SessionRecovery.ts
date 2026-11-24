@@ -1,3 +1,4 @@
+import { observeOperation } from '../observability/OpenTelemetry';
 import type { Node } from '../entities/Node';
 import type { Player } from '../entities/Player';
 import type { IPlayerConfig, IRESTGetPlayers } from '../typings/Interfaces';
@@ -116,7 +117,7 @@ export function resumeSessionPlayers(node: Node): Promise<void> {
     const previous = pending.get(node);
     if (previous && previous.sessionId === context.sessionId && previous.socket === context.socket) return previous.operation;
     const known = new Map(node.manager.players.all.map(player => [player.guildId, snapshot(player)]));
-    const operation: Promise<void> = Promise.resolve().then(() => recover(context, known)).catch(error => {
+    const operation: Promise<void> = Promise.resolve().then(() => observeOperation(node.manager, 'nyxlink.session.restore', () => recover(context, known))).catch(error => {
         if (current(context)) node.manager.emit('nodeError', node, error instanceof Error ? error : new Error(String(error)));
     }).finally(() => { if (pending.get(node)?.operation === operation) pending.delete(node); });
     pending.set(node, { ...context, operation });

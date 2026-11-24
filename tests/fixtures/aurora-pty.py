@@ -81,6 +81,7 @@ assert b"PERSISTENT EVENT" in region
 assert region.count(b"connecting") == 2
 assert b"\x1b[?25l" not in region
 inspector = session("inspector", ["aurora-demo.mjs", "--format", "silent", "--inspector"],
-    steps=((b"[Overview]", b"\t"), (b"[Nodes]", b"\t"), (b"[Players]", b"q")))
+    steps=((b"[Overview]", b"\t"), (b"[Nodes]", b"\t"), (b"[Players]", b"\t"), (b"[Events]", b"\t"), (b"[Traces]", b"q")))
 assert b"SIMULATED" in inspector and b"PLAYER-01" in inspector
+assert b"QUEUE_ADDED" in inspector and b"No completed spans supplied by host." in inspector
 print("PTY acceptance: 6 sessions passed")

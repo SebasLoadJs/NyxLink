@@ -2,12 +2,20 @@ import { performance } from 'node:perf_hooks';
 import type { Manager } from '../core/Manager';
 import type { SearchResult } from '../structures/SearchResult';
 
-export type TelemetryOperation = 'nyxlink.rest' | 'nyxlink.player.play' | 'nyxlink.player.seek' | 'nyxlink.player.stop' | 'nyxlink.failover';
+const operationNames = ['nyxlink.rest', 'nyxlink.player.play', 'nyxlink.player.seek', 'nyxlink.player.stop', 'nyxlink.failover', 'nyxlink.connect', 'nyxlink.resolve', 'nyxlink.node.select', 'nyxlink.session.restore', 'nyxlink.autoplay', 'nyxlink.crossfade'] as const;
+export type TelemetryOperation = typeof operationNames[number];
+const validOperations = new Set<string>(operationNames);
+const validOutcomes = new Set<string>(['success', 'empty', 'error', 'cancelled', 'resolved']);
 export type TelemetryOutcome = 'success' | 'empty' | 'error' | 'cancelled' | 'resolved';
 const installed = new WeakMap<Manager, OpenTelemetry>();
 export function observeOperation<T>(manager: Manager, name: TelemetryOperation, operation: () => Promise<T>, classify?: (result: T) => TelemetryOutcome): Promise<T> {
     const telemetry = installed.get(manager);
     return telemetry ? telemetry.operation(name, operation, classify) : operation();
+}
+
+export function observeSyncOperation<T>(manager: Manager, name: TelemetryOperation, operation: () => T, classify?: (result: T) => TelemetryOutcome): T {
+    const telemetry = installed.get(manager);
+    return telemetry ? telemetry.syncOperation(name, operation, classify) : operation();
 }
 
 type Attributes = Record<string, string>;
@@ -51,6 +59,12 @@ export class OpenTelemetry {
             manager.on('nodeReady', node => this.event('node.ready', this.backend(node.backend?.kind))),
             manager.on('nodeError', node => this.event('node.error', this.backend(node.backend?.kind))),
             manager.on('nodeDisconnect', node => this.event('node.disconnect', this.backend(node.backend?.kind))),
+            manager.on('nodeReconnecting', node => this.event('node.reconnecting', this.backend(node.backend?.kind))),
+            manager.on('nodeResume', node => this.event('node.resume', this.backend(node.backend?.kind))),
+            manager.on('playerResumed', player => this.event('player.resumed', this.backend(player.node.backend?.kind))),
+            manager.on('trackEnd', (player, _track, reason) => {
+                if (reason === 'crossfading' || reason === 'gapless') this.event('track.transition.' + reason, this.backend(player.node.backend?.kind));
+            }),
             manager.on('trackStart', player => this.event('track.start', this.backend(player.node.backend?.kind))),
             manager.on('trackException', player => this.event('track.error', this.backend(player.node.backend?.kind))),
             manager.on('queueEnd', player => this.event('queue.end', this.backend(player.node.backend?.kind))),
@@ -86,7 +100,8 @@ export class OpenTelemetry {
                 let outcome: TelemetryOutcome = 'error';
                 try {
                     const result = await operation();
-                    outcome = this.safe(() => classify(result)) ?? 'resolved';
+                    const observed = this.safe(() => classify(result));
+                    outcome = observed && validOutcomes.has(observed) ? observed : 'resolved';
                     return result;
                 } catch (error) {
                     if (error instanceof Error && error.name === 'AbortError') outcome = 'cancelled';
@@ -124,7 +139,30 @@ export class OpenTelemetry {
 
     operation<T>(name: TelemetryOperation, operation: () => Promise<T>,
         classify: (result: T) => TelemetryOutcome = () => 'resolved'): Promise<T> {
-        return this.run(name, operation, classify);
+        return validOperations.has(name) ? this.run(name, operation, classify) : operation();
+    }
+
+    /** Selection remains synchronous; diagnostics must never defer or repeat it. */
+    syncOperation<T>(name: TelemetryOperation, operation: () => T,
+        classify: (result: T) => TelemetryOutcome = () => 'resolved'): T {
+        if (this.closed || !validOperations.has(name)) return operation();
+        const start = performance.now();
+        const span = this.safe(() => this.options.tracer?.startSpan(name));
+        let outcome: TelemetryOutcome = 'error';
+        try {
+            const result = operation();
+            const observed = this.safe(() => classify(result));
+            outcome = observed && validOutcomes.has(observed) ? observed : 'resolved';
+            return result;
+        } finally {
+            this.safe(() => span?.setAttribute('nyxlink.outcome', outcome));
+            this.safe(() => span?.setStatus({ code: outcome === 'error' ? 2 : 0 }));
+            this.safe(() => span?.end());
+            if (!this.closed) {
+                this.safe(() => this.operationsDuration?.record(performance.now() - start, { operation: name, outcome }));
+                this.event('operation.' + name.slice(8) + '.' + outcome, 'unknown');
+            }
+        }
     }
 
     close(): void {

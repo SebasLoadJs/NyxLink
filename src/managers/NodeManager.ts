@@ -1,3 +1,4 @@
+import { observeSyncOperation } from '../observability/OpenTelemetry';
 import { NodeFailover } from "../nodes/NodeFailover";
 import { NodeSelector, type NodeSelectionOptions } from "../nodes/NodeSelector";
 import { NodeHealthMonitor } from "../nodes/NodeHealthMonitor";
@@ -105,7 +106,7 @@ export class NodeManager {
     }
 
     public findNode(options: NodeSelectionOptions = {}): Node | undefined {
-        return NodeSelector.select(this.nodes.values(), this.manager.options.node, options);
+        return observeSyncOperation(this.manager, 'nyxlink.node.select', () => NodeSelector.select(this.nodes.values(), this.manager.options.node, options), result => result ? 'success' : 'empty');
     }
 
     public setDraining(identifier: string, draining = true): boolean {

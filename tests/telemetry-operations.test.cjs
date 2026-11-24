@@ -20,3 +20,15 @@ test('cancelled and failed operation spans end without leaking original errors',
  assert.deepEqual(metrics.map(m=>m.attrs.outcome),['cancelled','error','error']);assert.doesNotMatch(JSON.stringify({spans,metrics}),/private-/);
  }finally{t.close();await m.shutdown();}
 });
+
+test('node selection stays synchronous and arbitrary labels are excluded',async()=>{
+ const m=make(), names=[], outcomes=[];
+ const t=new OpenTelemetry(m,{tracer:{startSpan(name){names.push(name);return{setStatus(){},setAttribute(_k,v){outcomes.push(v);},end(){}};}}});
+ try{
+   assert.equal(m.nodes.findNode(),undefined);
+   assert.equal(t.syncOperation('nyxlink.node.select',()=>42,()=> 'private-label'),42);
+   assert.equal(await t.operation('private-operation',async()=>17),17);
+   assert.deepEqual(names,['nyxlink.node.select','nyxlink.node.select']);
+   assert.deepEqual(outcomes,['empty','resolved']);
+ }finally{t.close();await m.shutdown();}
+});

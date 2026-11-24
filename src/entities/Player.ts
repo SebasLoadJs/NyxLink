@@ -420,12 +420,12 @@ export class Player {
             let automaticTrackQueued = false;
             const markAutomaticQueue = (queued: boolean) => { automaticTrackQueued = queued; };
             try {
-                return await this.playNext({ track }, ticket,
+                return await observeOperation(this.manager, 'nyxlink.autoplay', () => this.playNext({ track }, ticket,
                     () => this.autoPlay && playbackGuard(this).isAutoCurrent(automaticTicket) &&
                         (automaticTrackQueued
                             ? this.queue.size === 1 && this.queue.first === track
                             : this.queue.size === 0),
-                    markAutomaticQueue);
+                    markAutomaticQueue), result => result ? 'success' : 'resolved');
             } finally {
                 // Remove only an insertion owned by this automatic attempt.
                 // Once shifted for playback, another reference to the same
@@ -724,7 +724,7 @@ export class Player {
         return this.commands.enqueue(async () => {
             if (this.destroyed) throw new Error("Cannot update a destroyed player");
             this.assertNodeLinkFeature("crossfade");
-            await this.sendPlayerUpdate({ crossfade: config });
+            await observeOperation(this.manager, 'nyxlink.crossfade', () => this.sendPlayerUpdate({ crossfade: config }));
             if (!this.destroyed) {
                 this.crossfade = config;
                 this.requestQueuePreload();

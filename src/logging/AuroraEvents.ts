@@ -14,6 +14,9 @@ export const auroraCatalog = {
     NODE_RECONNECTING: { category: 'WEBSOCKET', level: 'info', outcome: 'started', message: 'Backend reconnect attempt' },
     NODE_RESUMED: { category: 'NODE', level: 'info', outcome: 'confirmed', message: 'Backend session resumed' },
     TRACK_STARTED: { category: 'TRACK', level: 'info', outcome: 'observed', message: 'Backend reported track start' },
+    TRACK_CROSSFADING: { category: 'CROSSFADE', level: 'info', outcome: 'observed', message: 'Backend reported crossfade transition' },
+    TRACK_GAPLESS: { category: 'CROSSFADE', level: 'info', outcome: 'observed', message: 'Backend reported gapless transition' },
+    PLAYER_RESUMED: { category: 'PLAYER', level: 'info', outcome: 'observed', message: 'Player session state restored' },
     TRACK_FAILED: { category: 'TRACK', level: 'error', outcome: 'failed', message: 'Backend reported playback exception' },
     QUEUE_ADDED: { category: 'QUEUE', level: 'debug', outcome: 'observed', message: 'Tracks queued' },
     QUEUE_ENDED: { category: 'QUEUE', level: 'info', outcome: 'observed', message: 'Queue exhausted' },
@@ -113,6 +116,10 @@ export class AuroraEvents {
             manager.on('nodeReconnecting', (node, attempt) => this.emit('NODE_RECONNECTING', { backend: backend(node.backend?.kind), attempt })),
             manager.on('nodeResume', node => this.emit('NODE_RESUMED', { backend: backend(node.backend?.kind) })),
             manager.on('trackStart', player => this.emit('TRACK_STARTED', { backend: backend(player.node.backend?.kind) })),
+            manager.on('trackEnd', (player, _track, reason) => {
+                if (reason === 'crossfading' || reason === 'gapless') this.emit(reason === 'crossfading' ? 'TRACK_CROSSFADING' : 'TRACK_GAPLESS', { backend: backend(player.node.backend?.kind) });
+            }),
+            manager.on('playerResumed', player => this.emit('PLAYER_RESUMED', { backend: backend(player.node.backend?.kind) })),
             manager.on('trackException', player => this.emit('TRACK_FAILED', { backend: backend(player.node.backend?.kind) })),
             manager.on('queueAdd', (player, tracks) => this.emit('QUEUE_ADDED', { backend: backend(player.node.backend?.kind), trackCount: Array.isArray(tracks) ? tracks.length : 1 })),
             manager.on('queueEnd', player => this.emit('QUEUE_ENDED', { backend: backend(player.node.backend?.kind) })),
