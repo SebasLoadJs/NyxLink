@@ -74,3 +74,51 @@ test('invalid monitor limits fail before attaching resources', async t => {
     assert.throws(() => new PerformanceMonitor(manager, options), TypeError);
   }
 });
+
+test('READY timing ignores a late acknowledgement after disconnect and accepts a new attempt', async t => {
+  const { manager, node } = createPlayer(t);
+  const monitor = manager.startPerformanceMonitor();
+  t.after(() => monitor.close());
+  manager.emit('nodeStateChange', node, NodeState.DISCONNECTED, NodeState.CONNECTING);
+  manager.emit('nodeStateChange', node, NodeState.CONNECTING, NodeState.DISCONNECTED);
+  manager.emit('nodeReady', node, {});
+  assert.equal(monitor.snapshot().durations.nodeReady.count, 0, 'a disconnected attempt must not produce a READY duration');
+  manager.emit('nodeStateChange', node, NodeState.DISCONNECTED, NodeState.CONNECTING);
+  manager.emit('nodeReady', node, {});
+  assert.equal(monitor.snapshot().durations.nodeReady.count, 1);
+});
+
+test('stale TrackStart from a previous recording cannot consume a newer playback measurement', async t => {
+  const { manager, player } = createPlayer(t);
+  const monitor = manager.startPerformanceMonitor();
+  t.after(() => monitor.close());
+  const current = createTrack('current-intent');
+  const previous = createTrack('previous-intent');
+  manager.emit('playerTriggeredPlay', player, current);
+  manager.emit('trackStart', player, previous);
+  assert.equal(monitor.snapshot().durations.playbackStart.count, 0);
+  manager.emit('trackStart', player, current);
+  assert.equal(monitor.snapshot().durations.playbackStart.count, 1);
+  manager.emit('trackStart', player, current);
+  assert.equal(monitor.snapshot().durations.playbackStart.count, 1, 'duplicate acknowledgement must not count twice');
+});
+
+test('recovery counters count only paired lifecycle outcomes, not duplicate or stray reports', async t => {
+  const { manager, player } = createPlayer(t);
+  const monitor = manager.startPerformanceMonitor();
+  t.after(() => monitor.close());
+  manager.emit('playerRecoverySuccess', player);
+  manager.emit('playerRecoveryFailed', player);
+  assert.equal(monitor.snapshot().counters.recoveries, 0);
+  assert.equal(monitor.snapshot().counters.recoveryFailures, 0);
+  manager.emit('playerRecoveryStarted', player);
+  manager.emit('playerRecoveryFailed', player);
+  manager.emit('playerRecoverySuccess', player);
+  assert.equal(monitor.snapshot().counters.recoveryFailures, 1);
+  assert.equal(monitor.snapshot().counters.recoveries, 0);
+  manager.emit('playerRecoveryStarted', player);
+  manager.emit('playerRecoverySuccess', player);
+  manager.emit('playerRecoverySuccess', player);
+  assert.equal(monitor.snapshot().durations.recovery.count, 1);
+  assert.equal(monitor.snapshot().counters.recoveries, 1);
+});
