@@ -53,9 +53,9 @@ Consult `examples/discordjs.cjs` and `examples/discordjs.ts` for full applicatio
 
 ## Backend-specific additions (opt-in)
 
-NodeLink capabilities include source-health telemetry, server-side crossfade controls, queue preload, remote mix/group controls, SponsorBlock, and lyrics/caption request options **where exposed by the connected server**. See `docs/phase-3-nodelink.md` for exact methods and constraints.
+NodeLink capabilities include source-health telemetry, server-side crossfade controls, queue preload, remote mix/group controls, SponsorBlock, and lyrics/caption request options **where exposed by the connected server**. See [NodeLink API](nodelink.md) for exact methods and constraints.
 
-Lavalink optional LavaLyrics and SponsorBlock integrations are separate from NodeLink APIs. The detected plugin and route must both be supported. See `docs/phase-4-lavalink.md`.
+Lavalink optional LavaLyrics and SponsorBlock integrations are separate from NodeLink APIs. The detected plugin and route must both be supported. See [Lavalink plugins](lavalink.md).
 
 Never mistake successful HTTP control acknowledgement for audible crossfade, live AutoMix, or sample-accurate gapless audio. Those require controlled Discord voice testing.
 

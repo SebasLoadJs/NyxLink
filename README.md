@@ -5,6 +5,10 @@
 <h1 align="center">NyxLink</h1>
 
 <p align="center">
+  <img src="https://raw.githubusercontent.com/SebasLoadJs/NyxLink/dev/assets/nyxlink-wave.svg" alt="NyxLink · Audio client for Discord" width="600">
+</p>
+
+<p align="center">
   <strong>Audio para Discord con Lavalink v4 y NodeLink.</strong><br>
   Conecta tus nodos, administra reproductores y controla la reproducción desde JavaScript o TypeScript.
 </p>
@@ -30,7 +34,7 @@
 
 NyxLink es un cliente TypeScript para bots musicales de Discord que conecta **Lavalink v4 y NodeLink** mediante REST y WebSocket. Administra nodos, sesiones, reproductores y colas desde una API común, con integración Discord.js y soporte para ESM y CommonJS.
 
-## Funcionalidades
+## ⚡ Funcionalidades
 
 | Sistema | Capacidades |
 | --- | --- |
@@ -46,7 +50,7 @@ NyxLink es un cliente TypeScript para bots musicales de Discord que conecta **La
 
 NyxLink controla un servidor de audio externo. El servidor Lavalink o NodeLink proporciona la reproducción, las fuentes y los plugins. La disponibilidad de funciones específicas se determina por las capacidades detectadas, no solo por el nombre del backend.
 
-## Instalación
+## 📦 Instalación
 
 **Node.js 22.12.0 o superior.** Un servidor Lavalink v4 o NodeLink operativo.
 
@@ -68,7 +72,7 @@ npm install discord.js@14
 
 Consulta las [versiones publicadas en npm](https://www.npmjs.com/package/nyxlink) y los [releases de GitHub](https://github.com/SebasLoadJs/NyxLink/releases). La rama `dev` contiene el desarrollo de 5.3; no representa por sí misma una publicación estable.
 
-## Inicio rápido
+## 🚀 Inicio rápido
 
 Define `BOT_TOKEN` y `AUDIO_NODE_PASSWORD` en el entorno. Ajusta la dirección, el puerto y TLS a tu servidor.
 
@@ -77,9 +81,10 @@ const { Client, GatewayIntentBits } = require('discord.js');
 const { Manager, Connectors } = require('nyxlink');
 
 const token = process.env.BOT_TOKEN;
+const password = process.env.AUDIO_NODE_PASSWORD;
 
-if (!token) {
-  throw new Error('Configura BOT_TOKEN.');
+if (!token || !password) {
+  throw new Error('Configura BOT_TOKEN y AUDIO_NODE_PASSWORD.');
 }
 
 const client = new Client({
@@ -90,7 +95,7 @@ const nodes = [{
   identifier: 'principal',
   host: 'localhost',
   port: 3000,
-  password: process.env.AUDIO_NODE_PASSWORD,
+  password,
   secure: false,
 }];
 
@@ -122,7 +127,7 @@ client.login(token).catch(console.error);
 
 El conector se registra antes de iniciar sesión en Discord. El evento `nodeReady` indica que el nodo ha establecido su sesión.
 
-## Reproducción
+## 🎵 Reproducción
 
 ```js
 async function play(guildId, voiceChannelId, query, requester) {
@@ -170,7 +175,7 @@ La búsqueda acepta texto o URL. Para encolar todos los resultados de una playli
 
 `play()`, `skip()` y `transferNode()` devuelven un booleano de aceptación de la operación. `setVolumeAsync()` espera la confirmación del nodo. La confirmación de protocolo no equivale a una comprobación audible en Discord.
 
-## Configuración
+## ⚙️ Configuración
 
 ```js
 const manager = new Manager({
@@ -216,7 +221,7 @@ const player = manager.players.create({
 
 La selección respeta los requisitos de backend, capacidades y región. Las migraciones conservan el reproductor de origen hasta confirmar el destino; los fallos desencadenan rollback y limpieza. Las capacidades opcionales pueden devolver `FeatureUnavailableError`. Consulta [selección de nodos](docs/node-selection.md) y [compatibilidad de backends](docs/backend-compatibility.md).
 
-## Aurora
+## ✨ Aurora
 
 Aurora es el sistema de logging y observabilidad integrado. El núcleo es silencioso por defecto. Pino procesa los eventos canónicos; Consola y las herramientas de terminal presentan esos eventos sin introducir un segundo motor de logging.
 
@@ -262,7 +267,7 @@ npx nyxlink-aurora --scenario all --snapshot
 
 La demostración usa eventos simulados. La API de logging acepta `options.logging`; las antiguas clases Logger y el alias `options.aurora` ya no forman parte de la API.
 
-## Eventos
+## 📡 Eventos
 
 | Evento | Descripción |
 | --- | --- |
@@ -277,20 +282,21 @@ La demostración usa eventos simulados. La API de logging acepta `options.loggin
 
 Todos los eventos y argumentos se definen en [IManagerEvents](src/typings/Interfaces.ts) y en la [referencia de API generada](docs/api-generated.md).
 
-## Documentación
+## 📚 Documentación
 
 | Guía | Contenido |
 | --- | --- |
 | [API](docs/api-reference.md) · [Tipos y exports](docs/api-generated.md) | Contratos públicos, lifecycle y declaraciones. |
 | [JavaScript](examples/discordjs.cjs) · [TypeScript](examples/discordjs.ts) | Integraciones con Discord.js. |
 | [Backends](docs/backend-compatibility.md) · [Nodos](docs/node-selection.md) | Compatibilidad, capacidades y recuperación. |
+| [NodeLink](docs/nodelink.md) · [Lavalink](docs/lavalink.md) | APIs específicas, streaming y plugins. |
 | [Mixer](docs/mixer.md) · [Extensiones](docs/extensions.md) | Funciones opcionales y contratos tipados. |
 | [Redis](docs/redis-storage.md) · [Métricas](docs/private-metrics.md) | Persistencia, control distribuido y observabilidad. |
 | [Aurora](docs/aurora-installation.md) · [Logging](docs/logging-guide.md) · [OpenTelemetry](docs/aurora-observability.md) | Instalación y runtime de diagnóstico. |
 | [Migración desde Moonlink](docs/migrating-from-moonlink.md) | Cambios de API y comportamiento. |
 | [Changelog](CHANGELOG.md) | Historial de cambios. |
 
-## Desarrollo
+## 🛠️ Desarrollo
 
 ```sh
 git clone https://github.com/SebasLoadJs/NyxLink.git
@@ -305,7 +311,7 @@ pnpm run pack:check
 
 Los tests de integración de backends y plugins requieren Linux y Docker o Podman.
 
-## Licencia
+## 📄 Licencia
 
 Mantenido por [SebasLoadJs](https://github.com/SebasLoadJs), bajo la licencia [OSL-3.0](LICENSE).
 

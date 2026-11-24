@@ -77,7 +77,7 @@ Playback intent, player registration identity and node/session/transport ownersh
 | VoiceReceiver | Optional NodeLink receiver; explicit application consent, lifecycle and privacy required |
 | YouTubeLiveChat | `node.createYouTubeLiveChat(...)`; separate bounded optional connection lifecycle |
 
-See [NodeLink](phase-3-nodelink.md), [Lavalink plugins](phase-4-lavalink.md), [compatibility evidence](backend-compatibility.md) and [real voice acceptance](live-voice-verification.md). No automatic Native Voice, FFmpeg, internal audio backend or client-side source extraction was added.
+See [NodeLink](nodelink.md), [Lavalink plugins](lavalink.md), [compatibility evidence](backend-compatibility.md) and [real voice acceptance](live-voice-verification.md). No automatic Native Voice, FFmpeg, internal audio backend or client-side source extraction was added.
 
 ## Persistence and distributed applications
 
@@ -93,6 +93,6 @@ Catch rejected async commands and inspect typed `code`/status where present. Fea
 
 `diagnoseError` produces redacted advice from known errors; it does not automatically retry or fix backend behavior. Application event observers should also catch their own failures. The optional ExtensionContext observer wrapper provides isolation for hooks registered through it.
 
-## Version and release status
+## Versions
 
-The manifest stays on its existing development version/channel. No RC, stable tag or npm publish is implied. The original 38-task backlog and the 24-chapter modernization are tracked separately in [master reconciliation](master-plan-reconciliation.md) and [modernization checkpoint](modernization-status.md). Unexecuted Docker, Redis, remote CI, legal/ownership and audible acceptance gates remain open.
+See the [changelog](../CHANGELOG.md) and [GitHub releases](https://github.com/SebasLoadJs/NyxLink/releases). The development branch may contain changes not yet published to npm. Backend protocol acknowledgement does not certify audible Discord playback.

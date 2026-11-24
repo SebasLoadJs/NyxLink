@@ -61,5 +61,4 @@ export against a loopback HTTP receiver, not a deployed Grafana stack.
 Use `pnpm run test:package` for the isolated packed consumer and Linux PTY
 fixtures. The workflow attaches ANSI captures and benchmark measurements
 to the run; use the SHA under test and do not substitute prior measurements
-for the release candidate. See `docs/aurora-v4-status.md` for outstanding
-scope and `docs/live-voice-verification.md` for audible Discord acceptance.
+for the release candidate. See [Aurora installation](aurora-installation.md) and [real voice verification](live-voice-verification.md).

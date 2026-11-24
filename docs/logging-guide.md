@@ -36,6 +36,6 @@ The host SDK can be started explicitly before Pino, with an explicit OTLP endpoi
 
 ## Diagnostics and verification
 
-See [Aurora installation](aurora-installation.md), [private metrics](private-metrics.md) and [final convergence](final-convergence.md). The private metrics server exposes aggregate logging statistics when configured; it does not expose messages or history. The Inspector displays bounded retained events, completed spans and observed snapshots, and exports local reports only on explicit request.
+See [Aurora installation](aurora-installation.md) and [private metrics](private-metrics.md). The private metrics server exposes aggregate logging statistics when configured; it does not expose messages or history. The Inspector displays bounded retained events, completed spans and observed snapshots, and exports local reports only on explicit request.
 
 The old standalone Logger, ConsoleReporter and legacy transport classes have been removed. Use Aurora's canonical Manager event route, the native file target, or a single host target; there is no compatibility adapter. Pure error diagnostics and formatting functions remain available without creating a logger. TerminalDashboard(manager, options) reads local snapshots and emits aggregate DASHBOARD_SNAPSHOT records through the existing route. Raw debug events remain explicit application events, never an automatic log source. The 5.3 release remains gated by tests, audit and real-world acceptance.

@@ -52,7 +52,7 @@ The deterministic tests in tests/private-metrics.test.cjs cover authentication, 
 
 **Scope limit:** No Redis, shared storage, multi-process aggregation, dashboard hosting, Prometheus scraping configuration, authentication gateway or externally exposed admin panel is installed by the library. This serves one Manager instance. Multi-process aggregation belongs to an authorized infrastructure layer and requires its own access and privacy review.
 
-No release or npm publication is implied by this feature. The end-to-end acceptance gate remains in release-5.3-plan.md.
+No release or npm publication is implied by this feature. The end-to-end acceptance gate remains in [release runbook](release-5.3-rc-runbook.md).
 
 ### Canonical logging metrics
 

@@ -34,7 +34,7 @@ After gathering the five `.runtime/live-voice/` reports on a **clean candidate c
 On a clean `dev` checkout, after freezing the candidate:
 
 1. Set `package.json.version` to `5.3.0-rc.1` and `publishConfig.tag` to `next`. Update the lockfile if package metadata change requires it.
-2. Run the complete mandatory suite in [release-5.3-plan.md](release-5.3-plan.md), including real backend and 600-second tests, against **the new version commit**. Confirm package `version` is reflected in the compiled public API.
+2. Run the mandatory acceptance commands below, including real backend and 600-second tests, against **the new version commit**. Confirm package `version` is reflected in the compiled public API.
 3. Inspect a clean `npm pack --dry-run` and `pnpm run test:package` report; verify `LICENSE`, `NOTICE.md` and absence of secrets.
    - Run `pnpm run release:check-registry` with the RC manifest. It must report `versionAlreadyPublished: false`; if the intended version is already present, do not attempt to overwrite it. This is not an npm ownership or authorization check.
 4. Only when the candidate SHA is approved, create an **annotated** Git tag `v5.3.0-rc.1` pointing to that exact commit; do not move the tag later.
@@ -84,8 +84,27 @@ Only after **every accepted item in the original 38-task backlog and modernizati
 4. Verify GitHub Release/tag SHA, `npm view nyxlink@5.3.0`, `npm dist-tag ls nyxlink`, a clean install, and preserve rollback evidence. Do not conflate the successful publication with continuous audio acceptance.
 5. **Only after stable release is verified**, inventory *all* branches and open PRs. Retain `dev`, `v5.2`, `v5.3`, any still-supported version branches, release/maintenance branches with documented purpose, and any branches backing active PRs or containing unmerged commits. Produce a deletion proposal listing exact branch names, unique commits, open PRs, tags and remote protection. Ask the owner to explicitly approve the exact deletion list before removing any remote branches. Never delete protected branches, tags, `dev`, `v5.2` or a branch with unmerged work merely because a release succeeded.
 
-There is **no automatic cleanup**, forced branch deletion, npm publish or GitHub Release creation in this plan. Current PR `#32` targets `dev` and remains a development checkpoint; neither its existence nor a passing CI job authorizes merge or release.
+There is **no automatic cleanup**, forced branch deletion, npm publish or GitHub Release creation in this plan. PR #50 was merged into dev after all eleven automated workflows passed; a later version commit still requires its own acceptance.
 
 ## Stop conditions
 
 No candidate or stable publication if **any** required job is failing/unverified on its SHA, live audio remains unobserved, ownership/license clearance is missing, the package includes private data, registry or tag identity differs, or release approval has not been recorded. Avoid tagging from a partially validated development commit.
+
+## Mandatory acceptance commands
+
+```sh
+pnpm install --frozen-lockfile
+pnpm run typecheck:strict
+pnpm run test:coverage
+pnpm run test:types
+pnpm run test:package
+pnpm run pack:check
+pnpm audit --prod --audit-level=high
+NYXLINK_CONTAINER_ENGINE=docker pnpm run test:backends
+NYXLINK_CONTAINER_ENGINE=docker NYXLINK_NODELINK_PROFILE=modern pnpm run test:backends
+NYXLINK_CONTAINER_ENGINE=docker pnpm run test:extensions
+NYXLINK_CONTAINER_ENGINE=docker pnpm run test:lavalink-plugins
+NYXLINK_CONTAINER_ENGINE=docker pnpm run test:endurance -- 600
+```
+
+Run the modern and baseline backend profiles, Redis, security, PTY, generated API and installed-package checks on the candidate. Preserve real voice, long-soak, provenance and ownership gates described above and in [external acceptance](pending-real-world-acceptance.md). Historical implementation-plan evidence remains accessible at [the pre-cleanup revision](https://github.com/SebasLoadJs/NyxLink/tree/6a2cedebc0e6a97f52cf778df1b39cc965855bd8/docs).
