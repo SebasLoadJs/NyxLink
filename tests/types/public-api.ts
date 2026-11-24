@@ -29,6 +29,7 @@ void [asyncVolume, detach, playing, stopping, volume, autoplay, transfer, search
 const snapshot: TrackSnapshot = TrackCodec.serialize(track);
 const restored: Track = TrackCodec.restore(snapshot);
 const resolved: Promise<Track> = TrackResolver.resolve(track, node);
+const abortableResolved: Promise<Track> = TrackResolver.resolve(track, node, undefined, AbortSignal.timeout(1000));
 const adapter: StorageAdapter = new Memory();
 const local: StorageAdapter = new Local();
 const configured = new Manager({ nodes: [configuredNode], options: { database: { type: 'memory', adapter } } });
@@ -43,9 +44,12 @@ const disposed: void = connector.dispose();
 void [shuttingDown, isClosed, disposed];
 
 const searchConfig = new Manager({ nodes: [configuredNode], options: { search: { timeoutMs: 1000, fallbackPlatforms: ['soundcloud'], cache: { ttlMs: 5000, maxEntries: 10 }, resolver: async (_query, _node) => null } } });
+const metadataResolutionConfig = new Manager({ nodes: [configuredNode], options: { search: {
+  trackResolution: { sources: ['youtube', 'soundcloud'], minimumScore: 0.85, durationToleranceMs: 9000, maxCandidates: 20, timeoutMs: 2500 },
+} } });
 const cancellable = manager.search({ query: 'local fixture', signal: AbortSignal.timeout(1000) });
 const streaming = node.rest.loadStream({ encodedTrack: track.encoded, format: 'wav' }, { signal: AbortSignal.timeout(1000), timeoutMs: 1000 });
-void [searchConfig, cancellable, streaming];
+void [searchConfig, metadataResolutionConfig, abortableResolved, cancellable, streaming];
 
 const requirements: NodeRequirements = { backend: 'nodelink', requiredCapabilities: ['source:http'] as const, region: 'eu', regionPolicy: 'require' };
 const selection: NodeSelectionOptions = { ...requirements, exclude: ['maintenance'] as const, allowUnhealthyFallback: false };
