@@ -13,15 +13,17 @@ assert.match(notice, /Moonlink\.js/);
 assert.match(notice, /Ecliptia\/moonlink\.js/);
 assert.match(notice, /Open Software License \(OSL\) version 3\.0/);
 
-const result = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { encoding: 'utf8' });
+const { packageManagerCommand } = require('./package-manager-command.cjs');
+const invocation = packageManagerCommand('npm', ['pack', '--dry-run', '--json', '--ignore-scripts']);
+const result = spawnSync(invocation.command, invocation.args, { encoding: 'utf8', timeout: 120000 });
 assert.equal(result.status, 0, result.stderr || result.error?.message);
 const [archive] = JSON.parse(result.stdout);
 const files = archive.files.map(file => file.path);
-for (const required of ['package.json', 'README.md', 'LICENSE', 'NOTICE.md', 'dist/index.js', 'dist/index.d.ts', 'assets/nyxlink_banner.png']) {
+for (const required of ['package.json', 'README.md', 'LICENSE', 'NOTICE.md', 'dist/index.js', 'dist/index.d.ts', 'assets/nyxlink_banner.png', 'examples/aurora-pipeline.mjs', 'examples/aurora-pipeline.d.mts', 'examples/aurora-inspector.mjs', 'examples/aurora-sdk.cjs']) {
   assert.ok(files.includes(required), `Package missing ${required}`);
 }
 for (const file of files) {
-  assert.ok(/^(dist\/|assets\/nyxlink_banner\.png$|package\.json$|README\.md$|LICENSE$|NOTICE\.md$)/.test(file), `Unexpected package file: ${file}`);
+  assert.ok(/^(dist\/|assets\/nyxlink_banner\.png$|package\.json$|README\.md$|LICENSE$|NOTICE\.md$|examples\/aurora-(?:pipeline|visual|terminal-tools|bootstrap|diagnostics|inspector|otel|demo|file)\.(?:mjs|d\.mts)$|examples\/aurora-sdk\.(?:cjs|d\.cts)$)/.test(file), `Unexpected package file: ${file}`);
   assert.ok(!/(^|\/)(\.env(?:\.|$)|node_modules|datastore|\.moonlink)|\.(?:log|tgz)$/.test(file), `Private runtime data in package: ${file}`);
 }
 console.log(`Package verified: ${files.length} files, ${archive.size} bytes; no publication performed.`);

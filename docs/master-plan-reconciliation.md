@@ -2,6 +2,8 @@
 
 Fecha de revisión: **23 de noviembre de 2026**. Rama: `dev` (no `v5.2`).
 
+Actualización de continuación — **24 de noviembre**, rama `codex/resume-stabilization`, [PR #32](https://github.com/SebasLoadJs/NyxLink/pull/32): nueve workflows aprobados en `770053d8`, incluidos Node 22/24, protocolos baseline/modern, plugins, Redis, CodeQL y endurance 600,6 s. Esa evidencia reemplaza el fallo transitorio histórico descrito abajo, pero no certifica automáticamente cambios posteriores. Las pruebas externas quedan en [un único registro pendiente](pending-real-world-acceptance.md); el [cierre técnico](implementation-closure.md) incluye el refactor incremental y la selección ponderada/histéresis del nuevo incremento, a revalidar en HEAD.
+
 ## Procedencia y reglas
 
 Este inventario restaura los IDs de `NyxLink-Plan-Maestro-v1/08-ROADMAP/BACKLOG.csv` (plan del 1 de noviembre). Las fases **0–5 aquí son las del plan original**. No deben confundirse con los documentos técnicos `docs/phase-1-audit.md` a `docs/phase-5-playback-recovery.md`, que describen incrementos posteriores con numeración distinta.
@@ -10,7 +12,11 @@ Leyenda: **CI verificado** significa que existía evidencia de ejecución automa
 
 Referencia inicial CI: commit `2e2bc6bbfd1db20841cf658367c2c4956cc7915d` — [validación Node 22/24](https://github.com/SebasLoadJs/NyxLink/actions/runs/45104859133), [Lavalink/NodeLink](https://github.com/SebasLoadJs/NyxLink/actions/runs/45104859183), [endurance extendida](https://github.com/SebasLoadJs/NyxLink/actions/runs/45104859114), [CodeQL](https://github.com/SebasLoadJs/NyxLink/actions/runs/45104859127). Esas ejecuciones **no certifican commits posteriores**.
 
+Reanudación local del 23 de noviembre: base `03546fd`, rama `codex/resume-stabilization`. El último job de integración falló durante la descarga implícita de NodeLink moderno; no hay causa de registro demostrada. Se separó la descarga del arranque con reintentos transitorios acotados y diagnósticos sin credenciales. P1-021 y los gates de CI siguen pendientes de repetir en Linux con Docker; los resultados históricos de la tabla no certifican este cambio local. Evidencia y limitaciones: [resumption-verification.md](resumption-verification.md).
+
 ## Matriz de los 38 trabajos
+
+La implementación posterior agrega pipeline/JSON/correlación/diagnósticos y dashboard (P1-018/P3-037), mixer tipado/serializado (P2-022), extensiones opcionales, API generada de 208 exports y ejemplos (P2-028), recuperación compartida y etapas de migración (P3-038). El primer candidato pasó 930 pruebas en Node.js 22/24 y CI completo con endurance 600 s en `2981fd84`; el incremento posterior se revalida por separado. El operador ejecutará después los cinco escenarios de voz y el soak preparado. Ver [modernization-status.md](modernization-status.md) y [handoff](run-live-tests-es.md). Los IDs originales se mantienen sin duplicación.
 
 | ID | Fase | Trabajo original | Estado de evidencia | Implementación / tests relevantes | Falta para cerrar |
 | --- | --- | --- | --- | --- | --- |
@@ -31,17 +37,17 @@ Referencia inicial CI: commit `2e2bc6bbfd1db20841cf658367c2c4956cc7915d` — [va
 | P1-015 | 1 (P1) | Health y selección de nodos | CI verificado | `src/nodes/NodeSelector.ts`, `tests/node-selection.test.cjs` | Medir selección bajo carga real |
 | P1-016 | 1 (P1) | Resume 404 y reconexión WS | CI verificado | `src/nodes/SessionRecovery.ts`, `tests/node-recovery-rest.test.cjs` | Confirmar recuperación de voz |
 | P1-017 | 1 (P1) | Failover y transferNode | CI verificado | `src/nodes/NodeFailover.ts`, `tests/player-migration-regression.test.cjs` | Confirmar continuidad audible y fallo en vivo |
-| P1-018 | 1 (P1) | Logging/eventos estructurados | Aurora V4 consolidado en #48, CI 7/7; aceptación de candidata pendiente | `src/logging/`, `src/observability/OpenTelemetry.ts`, `docs/aurora-v4-status.md` | Revisar diferencias restantes del brief y repetir aceptación sobre SHA de candidata |
+| P1-018 | 1 (P1) | Logging/eventos estructurados | Aurora único; retiro del logger #32 y validación principal de 9d4ba78 aprobada; revalidar HEAD | `src/logging/AuroraEvents.ts`, `src/logging/PinoEngine.ts`, `tests/aurora-events.test.cjs`, `docs/logging-guide.md` | Validar convergencia y LIVE-12 sobre candidata |
 | P1-019 | 1 (P1) | Staging Lavalink con audio real | Harness de comandos y reconexión para Lavalink/NodeLink y crossfade NodeLink implementado; aceptación audible manual pendiente | `scripts/test-live-voice.cjs`, `scripts/live-voice-commands.cjs`, `tests/live-voice-safety.test.cjs`, `tests/live-voice-commands.test.cjs`, `docs/live-voice-verification.md` | Ejecutar los tres modos autorizados, certificar audio, seek, crossfade, voz recuperada y fallos reales de nodo/partición |
 | P1-020 | 2 (P1) | Detección NodeLink/capabilities | CI verificado | `src/backends/BackendDetector.ts`, `tests/backend-features.test.cjs` | Fijar matriz por versión del servidor |
 | P1-021 | 2 (P1) | REST/WS NodeLink y errores | CI verificado | `scripts/test-nodelink-modern.cjs`, `tests/nodelink-modern-contracts.test.cjs` | Probar audio real de NodeLink actualizado |
-| P2-022 | 2 (P2) | Mixer y lifecycle | Implementado parcialmente | `src/backends/NodeLinkOrchestration.ts`, `tests/nodelink-orchestration.test.cjs` | Mezcla audible, cleanup, error y concurrencia |
+| P2-022 | 2 (P2) | Mixer y lifecycle | Contratos/serialización/cancelación implementados | `src/backends/NodeLinkMixContracts.ts`, `src/entities/Player.ts`, pruebas mixer | LIVE-07: mezcla audible y cleanup del servidor activo |
 | P2-023 | 2 (P2) | Lyrics y chapters tipados | CI verificado | `src/backends/NodeLinkContracts.ts`, `tests/nodelink-modern-contracts.test.cjs` | Proveedores reales, idiomas y ausencias |
 | P2-024 | 2 (P2) | Direct stream opcional | CI verificado | `src/backends/NodeLinkStreamResponse.ts`, `tests/nodelink-stream-format.test.cjs` | Verificar proveedor autorizado y límites reales |
 | P2-025 | 2 (P2) | Eventos extendidos NodeLink | CI verificado | `src/nodes/SourceHealthMonitor.ts`, `tests/source-health-events.test.cjs` | Inventario de eventos según versión exacta |
 | P2-026 | 3 (P2) | Resolver search y fuentes | CI verificado | `src/search/SearchService.ts`, `tests/search.test.cjs` | Recomendaciones reales y degradación de proveedores |
 | P2-027 | 3 (P2) | Caché opcional búsqueda TTL | Implementado; CI actual pendiente | `src/search/SearchService.ts`, `tests/search.test.cjs` | Revalidar identidad de nodos y reemplazo en CI |
-| P2-028 | 3 (P2) | Documentación y migración | Implementado parcialmente | `docs/migrating-from-moonlink.md`, `README.md` | Guías de API completas, recetas y changelog de release |
+| P2-028 | 3 (P2) | Documentación y migración | Implementado | API generada, guías/recetas compiladas, migración y CHANGELOG unreleased | Notas de versión publicada cuando se autorice RELEASE-03 |
 | P2-029 | 3 (P2) | API pública CJS/TS end-to-end | CI verificado | `tests/types/public-api.ts`, `scripts/test-package.cjs` | Repetir tras fijar la versión candidata |
 | P2-030 | 4 (P2) | Nombre y titularidad npm | Implementado parcialmente | `package.json`, `scripts/release-policy.cjs` | Verificar propiedad npm y permisos de distribución |
 | P2-031 | 4 (P2) | Release candidate | Pendiente | `docs/release-5.3-plan.md` | Preparar 5.3.0-rc.1, probar instalación npm next |
@@ -51,7 +57,7 @@ Referencia inicial CI: commit `2e2bc6bbfd1db20841cf658367c2c4956cc7915d` — [va
 | P3-035 | 5 (P3) | YouTube LiveChat | Implementado, lifecycle con regresiones | `src/entities/YouTubeLiveChat.ts`, `tests/youtube-livechat-lifecycle.test.cjs`, `docs/phase-3-nodelink.md` | Verificar chat real, permisos del proveedor y rate limits |
 | P3-036 | 5 (P3) | Storage externo y multi-proceso | Redis CAS, leases e IPC de voz v2 con secuencias y entrega serializada; CI final en verificación | `src/database/RedisStorage.ts`, `src/database/RedisGuildLeaseCoordinator.ts`, `src/cluster/GuildOwnership.ts`, `src/cluster/RedisGuildIpcRouter.ts`, `tests/integration/redis-guild-ipc.test.cjs`, `tests/redis-guild-ipc.test.cjs`, `docs/redis-storage.md` | Completar CI del SHA definitivo, migrar clientes IPC v1 a v2, enlazar gateway autenticado y probar traspaso audible entre shards |
 | P3-037 | 5 (P3) | API privada de métricas opt-in | Implementado, CI final pendiente | `src/observability/PrivateMetricsServer.ts`, `tests/private-metrics.test.cjs`, `tests/types/public-api.ts`, `docs/private-metrics.md` | Verificar CI en HEAD, integración con panel autorizado y privacidad operativa real |
-| P3-038 | 5 (P3) | Refactor gradual Node/Player | Implementado parcialmente | `src/players/PlayerMigration.ts`, `src/nodes/SessionRecovery.ts` | Completar límites de módulos sin romper API |
+| P3-038 | 5 (P3) | Refactor gradual Node/Player | Incremento implementado; revalidar nuevo HEAD | SessionRecovery, VoiceRecovery, PlayerMigration, QueuePreload, comandos y PlaybackAttempt | API conservada; validar checks por SHA, sin reescritura adicional obligatoria |
 
 ## Ampliaciones acordadas después del plan original
 
@@ -84,3 +90,5 @@ La personalización de gustos por usuario y la UI/catálogo musical de OBEY **no
 ## Actualización 2026-11-24
 
 PR #48 integrado en dev (`a03829c`); PR #40, #41 y #47 cerrados por consolidación sin borrar ramas. La aceptación automatizada del PR #48 está aprobada, pero las puertas de voz, atribución, propiedad npm y candidata inmutable siguen abiertas. Véase `docs/release-5.3-plan.md`.
+
+La [matriz de cierre](plan-acceptance-matrix.md) vincula estas 38 tareas y F01–F27 con las 10 ampliaciones originales A–J y 24 capítulos. Las excepciones y las puertas externas siguen explícitas.

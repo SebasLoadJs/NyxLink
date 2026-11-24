@@ -6,7 +6,7 @@ function fixture(options = {}) {
     const target = Object.fromEntries(['trace','debug','info','warn','error','fatal'].map(level => [level, (event, message) => events.push({ level, event, message })]));
     const manager = new Manager({
         nodes: [{ identifier: 'private-node', host: '127.0.0.1', port: 2333, password: 'private-password', secure: false }],
-        options: { aurora: { level: 'debug', target, ...options } },
+        options: { logging: { level: 'debug', target, ...options } },
     });
     return { manager, events };
 }
@@ -45,7 +45,7 @@ test('Aurora is silent by default, rejects dual routing and isolates sink failur
     assert.equal(events.length, 0);
     await manager.shutdown();
     const nodes = [{ host: '127.0.0.1', port: 2333, password: 'fixture', secure: false }];
-    assert.throws(() => new Manager({ nodes, options: { logging: {}, aurora: {} } }), /not both/);
+    assert.throws(() => new Manager({ nodes, options: { logging: {}, aurora: {} } }), /Use options.logging/);
     const fail = () => { throw Error('sink failure'); };
     const second = fixture({ target: Object.fromEntries(['trace','debug','info','warn','error','fatal'].map(level => [level, fail])), traceContext: fail });
     assert.doesNotThrow(() => second.manager.emit('nodeReady', {}));
@@ -68,4 +68,72 @@ test('failover reason codes are fixed and never inferred from raw error text',as
   assert.equal(events[2].event.sanitizedContext.reasonCode,undefined);
   assert.doesNotMatch(JSON.stringify(events),/private-/);
  }finally{await manager.shutdown();}
+});
+
+test('canonical search, REST and player observations emit once and retain no private payloads',async()=>{
+ const {manager,events}=fixture();
+ try{
+  const result={isError:false,tracks:[{title:'private-title'}]};
+  manager.searches.search=async()=>result;
+  assert.equal(await manager.search({query:'private-query'}),result);
+  manager.searches.search=async()=>({isError:false,tracks:[]});
+  await manager.search({query:'private-query'});
+  const failure=Error('private-error');let calls=0;
+  await assert.rejects(manager.aurora.observe('rest',async()=>{calls++;throw failure;}),e=>e===failure);
+  assert.equal(calls,1);
+  await manager.aurora.observe('stream',async()=>({body:'private-response'}));
+  const player={node:{backend:{kind:'nodelink'}},guildId:'private-guild'};
+  manager.emit('playerPause',player,true);
+  manager.emit('filtersUpdate',player,{token:'private-token'});
+  assert.deepEqual(events.map(x=>x.event.eventCode),['SEARCH_COMPLETED','SEARCH_EMPTY','REST_FAILED','STREAM_OPENED','PLAYER_PAUSED','FILTERS_UPDATED']);
+  assert.ok(events.slice(0,4).every(x=>x.event.durationMs>=0&&x.event.operationId));
+  assert.doesNotMatch(JSON.stringify(events),/private-/);
+ }finally{await manager.shutdown();}
+});
+
+test('canonical logging rejects duplicate attachment and removes its listeners',async()=>{
+ const { AuroraEvents }=require('../dist');
+ const records=[];
+ const target=Object.fromEntries(['trace','debug','info','warn','error','fatal'].map(level=>[level,event=>records.push(event)]));
+ const manager=new Manager({nodes:[{host:'localhost',port:2333,password:'fixture',secure:false}],options:{logging:{level:'debug',target}}});
+ const duplicate=new AuroraEvents({level:'debug',target});
+ try{
+  assert.equal(manager.logger,undefined);
+  assert.ok(manager.aurora);
+  assert.throws(()=>duplicate.attach(manager),/already has a logging route/);
+  manager.emit('nodeReady',{backend:{kind:'lavalink'}},{});
+  assert.equal(records.length,1);
+  manager.detachLogger();
+  manager.emit('nodeReady',{backend:{kind:'lavalink'}},{});
+  assert.equal(records.length,1);
+ }finally{duplicate.close();await manager.shutdown();}
+});
+
+test('removed legacy options cannot instantiate an alternative logger',()=>{
+ const nodes=[{host:'localhost',port:2333,password:'fixture',secure:false}];
+ assert.throws(()=>new Manager({nodes,options:{logging:{level:'debug',mode:'json'}}}),/Unsupported logging option/);
+ assert.throws(()=>new Manager({nodes,options:{aurora:{level:'silent'}}}),/Use options.logging/);
+});
+test('nested operations retain parent correlation and never expose payloads',async()=>{
+ const {manager,events}=fixture();
+ try {
+  await manager.aurora.observe('search',()=>manager.aurora.observe('rest',async()=>({private:'never'})));
+  assert.equal(events.length,2);
+  assert.equal(events[0].event.parentOperationId,events[1].event.operationId);
+  assert.doesNotMatch(JSON.stringify(events),/never/);
+ }finally{await manager.shutdown();}
+});
+
+test('canonical normalization ignores inherited fields and never executes accessors or proxy traps',()=>{
+ const {normalizeAuroraEvent,AuroraEvents}=require('../dist');
+ let touched=0;
+ const getter=()=>{touched++;throw Error('must not run');};
+ const proxy=new Proxy({}, {get:getter,getOwnPropertyDescriptor:getter});
+ assert.equal(normalizeAuroraEvent(proxy),undefined);
+ assert.equal(normalizeAuroraEvent(Object.create({eventCode:'NODE_READY'})),undefined);
+ assert.equal(normalizeAuroraEvent({get eventCode(){return getter();}}),undefined);
+ const event=normalizeAuroraEvent({eventCode:'NODE_READY',get durationMs(){return getter();},sanitizedContext:{get backend(){return getter();},get token(){return getter();},trackCount:2}});
+ assert.deepEqual(event.sanitizedContext,{backend:'unknown',trackCount:2});assert.equal(event.durationMs,undefined);
+ assert.equal(touched,0);
+ for(const level of ['constructor','toString','__proto__','invalid'])assert.throws(()=>new AuroraEvents({level}),/Invalid Aurora log level/);
 });

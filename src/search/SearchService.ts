@@ -4,6 +4,7 @@ import type { Node } from '../entities/Node';
 import type { SearchResult } from '../structures/SearchResult';
 import type { IRESTLoadTracks, ISearchQuery } from '../typings/Interfaces';
 import { Structure, sources, nodeLinkSources } from '../Util';
+import { SharedSearchRequests } from './SharedSearchRequests';
 
 /** Coordinates backend search policy; cache is opt-in, bounded and local to this manager. */
 export class SearchService {
@@ -13,10 +14,12 @@ export class SearchService {
     private readonly cacheNodeIds = new WeakMap<Node, number>();
     private nextCacheNodeId = 0;
     private readonly pending = new Set<AbortController>();
+    private readonly shared = new SharedSearchRequests<IRESTLoadTracks>();
     constructor(private readonly manager: Manager, private readonly native: (query: ISearchQuery) => Promise<IRESTLoadTracks | null>) {}
 
     public close(): void {
         this.cache.clear();
+        this.shared.close();
         for (const operation of this.pending) operation.abort(new Error('Manager is shut down'));
         this.pending.clear();
     }
@@ -42,6 +45,10 @@ export class SearchService {
     }
 
     public async search(query: ISearchQuery): Promise<SearchResult> {
+        return this.runSearch(query);
+    }
+
+    private async runSearch(query: ISearchQuery): Promise<SearchResult> {
         if (this.manager.destroyed) throw new Error('Manager is shut down');
         if (!query || typeof query !== 'object' || Array.isArray(query)) throw new TypeError('Search options must be an object');
         if (typeof query.query !== 'string' || !query.query.trim()) throw new TypeError('Search query must be a non-empty string');
@@ -61,6 +68,7 @@ export class SearchService {
                 return result;
             }
             const options = this.manager.options.search ?? {};
+            if (options.deduplicate !== undefined && typeof options.deduplicate !== 'boolean') throw new TypeError('Search deduplicate must be boolean');
             const sourceHealth = options.sourceHealth;
             if (sourceHealth !== undefined && (typeof sourceHealth !== 'boolean')) throw new TypeError('Invalid search sourceHealth option');
             const source = query.source ?? options.defaultPlatform ?? 'youtube';
@@ -74,6 +82,19 @@ export class SearchService {
             const preferSource = sourceHealth && !isUrl && Object.hasOwn(sourceAliases, source) ? sourceAliases[source] : undefined;
             const node = query.node ? this.manager.nodes.nodes.get(query.node) : this.manager.nodes.findNode({ preferSource });
             if (!node || node.destroyed || !node.connected) throw new Error('No available nodes for searching');
+            // Search responses are tied to the selected node and its session.
+            // A late response must not advertise tracks from a node that has
+            // disconnected, rotated sessions, or been replaced under the same ID.
+            const searchSession = node.sessionId;
+            const searchBackend = node.backend;
+            const assertCurrentNode = (): void => {
+                signal.throwIfAborted();
+                if (this.manager.destroyed || node.destroyed || !node.connected ||
+                    this.manager.nodes.nodes.get(node.identifier) !== node ||
+                    node.sessionId !== searchSession || node.backend !== searchBackend) {
+                    throw new Error('Search node changed while the request was pending');
+                }
+            };
             const fallback = options.fallbackPlatforms ?? [];
             if (!Array.isArray(fallback) || fallback.length > 3 || fallback.some(source => typeof source !== 'string' || !source)) throw new TypeError('Search fallbackPlatforms requires at most three source names');
             const platforms = isUrl ? [''] : [...new Set([query.source ?? options.defaultPlatform ?? 'youtube', ...fallback])];
@@ -89,23 +110,28 @@ export class SearchService {
             const key = JSON.stringify([nodeId, node.sessionId, node.backend?.kind, node.backend?.version, query.query, platforms]);
             const cached = this.cache.get(key);
             if (ttl && !options.resolver && cached && cached.expires > Date.now()) {
+                assertCurrentNode();
                 this.cache.delete(key); this.cache.set(key, cached);
                 return this.present(structuredClone(cached.value), query, node);
             }
             this.cache.delete(key);
-            let response: IRESTLoadTracks = { loadType: 'empty', data: {} };
             const custom = options.resolver ? await this.wait(Promise.resolve().then(() => options.resolver!({ ...query, signal }, node)), signal) : null;
-            if (custom) response = custom;
-            else for (const platform of platforms) {
-                signal.throwIfAborted();
-                if (nodeLinkSources.has(platform)) node.assertFeature(`search:${platform}`);
-                const prefix = Object.hasOwn(sources, platform) ? sources[platform as keyof typeof sources] : platform;
-                const identifier = isUrl ? query.query : `${prefix}:${query.query}`;
-                response = await this.wait(node.rest.loadTracks(identifier, { timeoutMs, signal }), signal);
-                validateLoadResponse(response);
-                if (!['empty', 'error'].includes(response.loadType) && !(response.loadType === 'search' && response.data.length === 0)) break;
-            }
-            signal.throwIfAborted();
+            const load = async (activeSignal: AbortSignal): Promise<IRESTLoadTracks> => {
+                let response: IRESTLoadTracks = { loadType: 'empty', data: {} };
+                for (const platform of platforms) {
+                    activeSignal.throwIfAborted();
+                    if (nodeLinkSources.has(platform)) node.assertFeature(`search:${platform}`);
+                    const prefix = Object.hasOwn(sources, platform) ? sources[platform as keyof typeof sources] : platform;
+                    const identifier = isUrl ? query.query : `${prefix}:${query.query}`;
+                    response = await this.wait(node.rest.loadTracks(identifier, { timeoutMs, signal: activeSignal }), activeSignal);
+                    validateLoadResponse(response);
+                    if (!['empty', 'error'].includes(response.loadType) && !(response.loadType === 'search' && response.data.length === 0)) break;
+                }
+                return response;
+            };
+            const response = custom ?? (options.deduplicate && !options.resolver
+                ? structuredClone(await this.shared.run(key, signal, load)) : await load(signal));
+            assertCurrentNode();
             validateLoadResponse(response);
             if (ttl && !options.resolver && !['empty', 'error'].includes(response.loadType)) {
                 try {
@@ -121,6 +147,7 @@ export class SearchService {
                     this.cache.set(key, { expires: Date.now() + ttl, value });
                 } catch { /* Non-JSON custom plugin metadata is returned without caching. */ }
             }
+            assertCurrentNode();
             this.manager.emit('debug', `Moonlink.js > Manager <- Search result for query "${query.query}". LoadType: ${response.loadType}`);
             return this.present(response, query, node);
         } finally { clearTimeout(timer); this.pending.delete(controller); }

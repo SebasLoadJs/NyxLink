@@ -1,10 +1,13 @@
+#!/usr/bin/env node
 import { parseArgs } from 'node:util';
 import { Manager, AuroraInspectorStore } from 'nyxlink';
 import { createAuroraPipeline } from './aurora-pipeline.mjs';
 import { startInspector } from './aurora-inspector.mjs';
 import { musicLine, capabilityTable } from './aurora-diagnostics.mjs';
+import { helpLink } from './aurora-terminal-tools.mjs';
 
-const {values}=parseArgs({options:{format:{type:'string',default:'aurora'},scenario:{type:'string',default:'all'},snapshot:{type:'boolean',default:false},inspector:{type:'boolean',default:false}}});
+const {values}=parseArgs({options:{format:{type:'string',default:'aurora'},scenario:{type:'string',default:'all'},snapshot:{type:'boolean',default:false},inspector:{type:'boolean',default:false},help:{type:'boolean',default:false}}});
+if(values.help){process.stdout.write('nyxlink-aurora --format <silent|json|pretty|aurora> --scenario <name> --inspector --snapshot\n'+helpLink()+'\n');process.exit(0);}
 const scenarios=['startup','music','failover','degraded','recovery-failed','burst','all'];
 if(!scenarios.includes(values.scenario)||!['silent','json','pretty','aurora'].includes(values.format))throw new Error('Unsupported demo option');
 const scenario=name=>values.scenario==='all'||values.scenario===name;
@@ -15,7 +18,7 @@ const inspectorTarget=Object.fromEntries(['trace','debug','info','warn','error',
 const pipeline=values.inspector
     ? createAuroraPipeline({format:'custom',level:'debug',target:inspectorTarget})
     : createAuroraPipeline({format:values.format,level:values.format==='silent'?'silent':'debug',color:!values.snapshot,onEvent:event=>store?.recordEvent(event)});
-const manager=new Manager({nodes:[{identifier:'fixture',host:'localhost',port:2333,password:'fixture',secure:false}],options:{node:{autoMovePlayers:true},aurora:{target:pipeline.target,level:pipeline.level}}});
+const manager=new Manager({nodes:[{identifier:'fixture',host:'localhost',port:2333,password:'fixture',secure:false}],options:{node:{autoMovePlayers:true},logging:{target:pipeline.target,level:pipeline.level}}});
 store=new AuroraInspectorStore(manager,200);
 const nodeA={backend:{kind:'lavalink'}},nodeB={backend:{kind:'nodelink'}};
 const player={node:nodeA};

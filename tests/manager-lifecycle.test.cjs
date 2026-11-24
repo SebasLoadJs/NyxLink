@@ -112,7 +112,7 @@ test('shutdown waits for pending initialization and leaves no late startup work'
 
 test('shutdown detaches owned logger and connector listeners and stops idle monitoring', async t => {
   t.mock.timers.enable({ apis: ['setInterval'] });
-  const { manager } = fixture(t, { options: { logging: { level: 'silent' }, playerDestruction: { autoDestroyOnIdle: true } } });
+  const { manager } = fixture(t, { options: { logging: { level: 'info', target: Object.fromEntries(['trace','debug','info','warn','error','fatal'].map(level=>[level,()=>{}])) }, playerDestruction: { autoDestroyOnIdle: true } } });
   const gateway = client();
   const unrelatedRaw = () => {};
   const unrelatedDebug = () => {};
@@ -121,7 +121,8 @@ test('shutdown detaches owned logger and connector listeners and stops idle moni
   manager.use(new Connectors.DiscordJs(), gateway);
   assert.equal(gateway.listenerCount('raw'), 2);
   assert.equal(gateway.listenerCount('clientReady'), 1);
-  assert.ok(manager.listenerCount('debug') > 1);
+  assert.equal(manager.listenerCount('debug'), 1);
+  assert.ok(manager.listenerCount('nodeReady') > 0);
   let idleReads = 0;
   Object.defineProperty(manager.players, 'all', { configurable: true, get() { idleReads++; return []; } });
   await manager.init(clientId);
@@ -130,6 +131,7 @@ test('shutdown detaches owned logger and connector listeners and stops idle moni
   assert.equal(gateway.listeners('raw')[0], unrelatedRaw);
   assert.equal(gateway.listenerCount('clientReady'), 0);
   assert.equal(manager.listenerCount('debug'), 1);
+  assert.equal(manager.listenerCount('nodeReady'), 0);
   const afterShutdown = idleReads;
   t.mock.timers.tick(120000);
   assert.equal(idleReads, afterShutdown);

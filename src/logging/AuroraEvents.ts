@@ -2,18 +2,54 @@ import type { FailoverReasonCode } from '../typings/Interfaces';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import type { Manager } from '../core/Manager';
+import { claimManagerLogRoute } from './ManagerLogRoute';
+import { createPinoRecordEngine, type PinoOutputMeta } from './PinoEngine';
 import type { Player } from '../entities/Player';
+import type { MigrationStage, MigrationStageObservation } from '../players/PlayerMigration';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { HttpError } from '../errors/HttpError';
+import { observedFields } from './ObservedFields';
 
 export type AuroraLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 export type AuroraCategory = 'CORE' | 'MANAGER' | 'NODE' | 'LAVALINK' | 'NODELINK' | 'WEBSOCKET' | 'REST' | 'PLAYER' | 'QUEUE' | 'TRACK' | 'SEARCH' | 'FILTERS' | 'AUTOPLAY' | 'CROSSFADE' | 'FAILOVER' | 'HEALTH' | 'PLUGIN' | 'TELEMETRY';
 export type AuroraOutcome = 'observed' | 'started' | 'confirmed' | 'failed' | 'cancelled';
 type Definition = { category: AuroraCategory; level: AuroraLevel; outcome: AuroraOutcome; message: string };
 export const auroraCatalog = {
+    DASHBOARD_SNAPSHOT: { category: 'TELEMETRY', level: 'info', outcome: 'observed', message: 'Cluster dashboard observed' },
+    MANAGER_INITIALIZED: { category: 'CORE', level: 'info', outcome: 'observed', message: 'Manager initialized' },
+    EXTENSION_FAILED: { category: 'PLUGIN', level: 'error', outcome: 'failed', message: 'Extension lifecycle failed' },
+    MIGRATION_STAGE_STARTED: { category: 'FAILOVER', level: 'debug', outcome: 'started', message: 'Migration stage started' },
+    MIGRATION_STAGE_ACKNOWLEDGED: { category: 'FAILOVER', level: 'debug', outcome: 'confirmed', message: 'Migration stage acknowledged' },
+    MIGRATION_STAGE_FAILED: { category: 'FAILOVER', level: 'error', outcome: 'failed', message: 'Migration stage failed' },
+    MIGRATION_STAGE_CANCELLED: { category: 'FAILOVER', level: 'debug', outcome: 'cancelled', message: 'Migration stage cancelled' },
+    MIGRATION_STAGE_PARTIAL: { category: 'FAILOVER', level: 'warn', outcome: 'observed', message: 'Migration stage partially completed' },
     NODE_READY: { category: 'NODE', level: 'info', outcome: 'confirmed', message: 'Backend session ready' },
     NODE_ERROR: { category: 'NODE', level: 'error', outcome: 'failed', message: 'Backend reported an error' },
     NODE_DISCONNECTED: { category: 'WEBSOCKET', level: 'warn', outcome: 'observed', message: 'Backend disconnected' },
     NODE_RECONNECTING: { category: 'WEBSOCKET', level: 'info', outcome: 'started', message: 'Backend reconnect attempt' },
     NODE_RESUMED: { category: 'NODE', level: 'info', outcome: 'confirmed', message: 'Backend session resumed' },
+    SEARCH_COMPLETED: { category: 'SEARCH', level: 'debug', outcome: 'observed', message: 'Search returned results' },
+    SEARCH_EMPTY: { category: 'SEARCH', level: 'debug', outcome: 'observed', message: 'Search returned no results' },
+    SEARCH_FAILED: { category: 'SEARCH', level: 'error', outcome: 'failed', message: 'Search failed' },
+    SEARCH_CANCELLED: { category: 'SEARCH', level: 'debug', outcome: 'cancelled', message: 'Search cancelled' },
+    REST_COMPLETED: { category: 'REST', level: 'debug', outcome: 'observed', message: 'Backend request completed' },
+    REST_FAILED: { category: 'REST', level: 'error', outcome: 'failed', message: 'Backend request failed' },
+    REST_CANCELLED: { category: 'REST', level: 'debug', outcome: 'cancelled', message: 'Backend request cancelled' },
+    STREAM_OPENED: { category: 'REST', level: 'debug', outcome: 'observed', message: 'Backend stream opened' },
+    STREAM_OPEN_FAILED: { category: 'REST', level: 'error', outcome: 'failed', message: 'Backend stream opening failed' },
+    STREAM_OPEN_CANCELLED: { category: 'REST', level: 'debug', outcome: 'cancelled', message: 'Backend stream opening cancelled' },
+    TRACK_ENDED: { category: 'TRACK', level: 'debug', outcome: 'observed', message: 'Backend reported track end' },
+    PLAYER_PAUSED: { category: 'PLAYER', level: 'debug', outcome: 'observed', message: 'Player paused' },
+    PLAYER_UNPAUSED: { category: 'PLAYER', level: 'debug', outcome: 'observed', message: 'Player unpaused' },
+    PLAYER_SEEKED: { category: 'PLAYER', level: 'debug', outcome: 'observed', message: 'Player seek reported' },
+    PLAYER_STOPPED: { category: 'PLAYER', level: 'info', outcome: 'observed', message: 'Player stopped' },
+    VOICE_CONNECTED: { category: 'PLAYER', level: 'info', outcome: 'observed', message: 'Voice connection reported' },
+    VOICE_DISCONNECTED: { category: 'PLAYER', level: 'warn', outcome: 'observed', message: 'Voice disconnected' },
+    FILTERS_UPDATED: { category: 'FILTERS', level: 'debug', outcome: 'observed', message: 'Player filters updated' },
+    SOURCE_HEALTH_CHANGED: { category: 'HEALTH', level: 'debug', outcome: 'observed', message: 'Source health changed' },
+    RECOVERY_STARTED: { category: 'PLAYER', level: 'debug', outcome: 'started', message: 'Player recovery started' },
+    RECOVERY_SUCCEEDED: { category: 'PLAYER', level: 'info', outcome: 'observed', message: 'Player recovery success reported' },
+    RECOVERY_FAILED: { category: 'PLAYER', level: 'error', outcome: 'failed', message: 'Player recovery failed' },
     TRACK_STARTED: { category: 'TRACK', level: 'info', outcome: 'observed', message: 'Backend reported track start' },
     TRACK_CROSSFADING: { category: 'CROSSFADE', level: 'info', outcome: 'observed', message: 'Backend reported crossfade transition' },
     TRACK_GAPLESS: { category: 'CROSSFADE', level: 'info', outcome: 'observed', message: 'Backend reported gapless transition' },
@@ -33,6 +69,14 @@ export type AuroraContext = {
     attempt?: number;
     trackCount?: number;
     reasonCode?: FailoverReasonCode;
+    stage?: MigrationStage;
+    stageStatus?: MigrationStageObservation['status'];
+    httpStatus?: number;
+    nodeCount?: number;
+    playerCount?: number;
+    playingCount?: number;
+    queuedTracks?: number;
+    sourceCount?: number;
 };
 export type AuroraEvent = {
     eventCode: AuroraEventCode;
@@ -42,16 +86,31 @@ export type AuroraEvent = {
     timestamp: string;
     durationMs?: number;
     operationId?: string;
+    parentOperationId?: string;
     sanitizedContext: AuroraContext;
     traceId?: string;
     spanId?: string;
 };
 export type AuroraPinoTarget = Record<AuroraLevel, (event: AuroraEvent, message: string) => unknown>;
+/** Host presentation consumes the detached record only after Pino serialization. */
+export function createAuroraPinoEngine(level: AuroraLevel, consume: (record: AuroraEvent, meta: PinoOutputMeta) => void, onError?: () => void): { target: AuroraPinoTarget; close(): void } {
+    const engine = createPinoRecordEngine<AuroraEvent>(level, (record, meta) => {
+        const safe = normalizeAuroraEvent({ ...record, traceId: record.traceId ?? meta.traceId, spanId: record.spanId ?? meta.spanId });
+        if (safe) consume(safe, meta);
+    }, onError);
+    const write = (severity: AuroraLevel) => (event: AuroraEvent, _message: string) => {
+        try {
+            const safe = normalizeAuroraEvent(event);
+            if (safe && safe.severity === severity) engine.write(severity, safe, auroraCatalog[safe.eventCode].message);
+        } catch { try { onError?.(); } catch {} }
+    };
+    return { target: { trace: write('trace'), debug: write('debug'), info: write('info'), warn: write('warn'), error: write('error'), fatal: write('fatal') }, close: () => engine.close() };
+}
 export interface AuroraEventOptions {
     level?: AuroraLevel | 'silent';
     categories?: readonly AuroraCategory[];
     /** Host-provided Pino instance; configure one destination in the host. */
-    target: AuroraPinoTarget;
+    target?: AuroraPinoTarget;
     /** Optional host-owned active trace context provider. */
     traceContext?: () => { traceId: string; spanId: string } | undefined;
 }
@@ -67,54 +126,128 @@ export function safeFailoverReason(value: unknown): FailoverReasonCode | undefin
 }
 const validHex = (value: unknown, length: number): value is string =>
     typeof value === 'string' && value.length === length && /^[a-f0-9]+$/.test(value) && !/^0+$/.test(value);
-type Operation = { id: string; started: number };
+type Operation = { id: string; started: number; parentId?: string };
+const migrationStages = new Set<unknown>(['select-target','resolve-track','restore-player','persist-snapshot','cleanup-source','rollback','cleanup-target']);
+const migrationStatuses = new Set<unknown>(['started','acknowledged','failed','cancelled','partial']);
+function safeContext(value: unknown = {}): AuroraContext {
+    const input = observedFields(value, ['backend','attempt','trackCount','reasonCode','stage','stageStatus','httpStatus','nodeCount','playerCount','playingCount','queuedTracks','sourceCount']) as AuroraContext;
+    const context: AuroraContext = {};
+    if (input.backend !== undefined) context.backend = backend(input.backend);
+    for (const field of ['nodeCount','playerCount','playingCount','queuedTracks','sourceCount'] as const) {
+        const value = count(input[field]);
+        if (value !== undefined) context[field] = value;
+    }
+    const attempt = count(input.attempt), trackCount = count(input.trackCount);
+    if (attempt !== undefined) context.attempt = attempt;
+    if (trackCount !== undefined) context.trackCount = trackCount;
+    const reasonCode = safeFailoverReason(input.reasonCode);
+    if (reasonCode) context.reasonCode = reasonCode;
+    if (migrationStages.has(input.stage)) context.stage = input.stage;
+    if (migrationStatuses.has(input.stageStatus)) context.stageStatus = input.stageStatus;
+    if (typeof input.httpStatus === 'number' && Number.isSafeInteger(input.httpStatus) && input.httpStatus >= 100 && input.httpStatus <= 599) context.httpStatus = input.httpStatus;
+    return context;
+}
+const operationId = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(value);
+/** Canonicalize before the native Pino engine, including records submitted by a host. */
+export function normalizeAuroraEvent(input: unknown): AuroraEvent | undefined {
+    if (!input || typeof input !== 'object') return;
+    const record = observedFields(input, ['eventCode','timestamp','sanitizedContext','durationMs','operationId','parentOperationId','traceId','spanId']) as Partial<AuroraEvent>;
+    if (typeof record.eventCode !== 'string' || !Object.hasOwn(auroraCatalog, record.eventCode)) return;
+    const definition = auroraCatalog[record.eventCode];
+    const context = safeContext(record.sanitizedContext ?? {});
+    const event: AuroraEvent = {
+        eventCode: record.eventCode, category: definition.category, severity: definition.level, outcome: definition.outcome,
+        timestamp: typeof record.timestamp === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(record.timestamp) ? record.timestamp : new Date().toISOString(),
+        sanitizedContext: { backend: 'unknown', ...context },
+    };
+    if (typeof record.durationMs === 'number' && Number.isFinite(record.durationMs) && record.durationMs >= 0) event.durationMs = record.durationMs;
+    if (operationId(record.operationId)) event.operationId = record.operationId;
+    if (operationId(record.parentOperationId) && record.parentOperationId !== event.operationId) event.parentOperationId = record.parentOperationId;
+    if (validHex(record.traceId, 32) && validHex(record.spanId, 16)) { event.traceId = record.traceId; event.spanId = record.spanId; }
+    return event;
+}
 
 /** Single opt-in, allowlisted event route. No raw debug or backend payloads. */
 export class AuroraEvents {
     private readonly minimum: number;
     private readonly categories?: Set<AuroraCategory>;
     private readonly operations = new WeakMap<Player, Operation>();
+    private readonly correlation = new AsyncLocalStorage<Operation>();
     private disposers: Array<() => void> = [];
     private closed = false;
+    private readonly counters = { accepted: 0, filtered: 0, targetErrors: 0, criticalTargetErrors: 0 };
+
+    /** Accepted means the host target returned, not that a stream was flushed. */
+    getStats() { return { ...this.counters, closed: this.closed }; }
 
     constructor(private readonly options: AuroraEventOptions) {
-        this.minimum = ranks[options.level ?? 'silent'];
-        if (this.minimum === undefined) throw new TypeError('Invalid Aurora log level');
+        const level = options.level ?? 'silent';
+        if (!Object.hasOwn(ranks, level)) throw new TypeError('Invalid Aurora log level');
+        this.minimum = ranks[level];
         this.categories = options.categories ? new Set(options.categories) : undefined;
-        if (!options.target || Object.keys(ranks).filter(level => level !== 'silent').some(level =>
-            typeof options.target[level as AuroraLevel] !== 'function')) throw new TypeError('Aurora requires a Pino-compatible target');
+        if (this.minimum !== Infinity && (!options.target || Object.keys(ranks).filter(level => level !== 'silent').some(level =>
+            typeof options.target?.[level as AuroraLevel] !== 'function'))) throw new TypeError('Aurora requires a Pino-compatible target');
     }
 
     private emit(code: AuroraEventCode, input: AuroraContext = {}, operation?: Operation, finished = false): void {
         const definition = auroraCatalog[code];
-        if (this.closed || ranks[definition.level] < this.minimum ||
-            (this.categories && !this.categories.has(definition.category))) return;
-        const context: AuroraContext = {};
-        if (input.backend !== undefined) context.backend = backend(input.backend);
-        const attempt = count(input.attempt), trackCount = count(input.trackCount);
-        if (attempt !== undefined) context.attempt = attempt;
-        if (trackCount !== undefined) context.trackCount = trackCount;
-        const reasonCode = safeFailoverReason(input.reasonCode);
-        if (reasonCode) context.reasonCode = reasonCode;
+        if (this.closed) return;
+        if (ranks[definition.level] < this.minimum || (this.categories && !this.categories.has(definition.category))) { this.counters.filtered++; return; }
+        const context = safeContext(input);
         const event: AuroraEvent = {
             eventCode: code, category: definition.category, severity: definition.level, outcome: definition.outcome,
             timestamp: new Date().toISOString(), sanitizedContext: context,
             ...(operation ? { operationId: operation.id } : {}),
+            ...(operation?.parentId ? { parentOperationId: operation.parentId } : {}),
             ...(operation && finished ? { durationMs: performance.now() - operation.started } : {}),
         };
         try {
-            const trace = this.options.traceContext?.();
+            const trace = observedFields(this.options.traceContext?.(), ['traceId','spanId']);
             if (trace && validHex(trace.traceId, 32) && validHex(trace.spanId, 16)) {
                 event.traceId = trace.traceId;
                 event.spanId = trace.spanId;
             }
         } catch { /* tracing is optional */ }
-        try { this.options.target[definition.level](event, definition.message); }
-        catch { /* diagnostics never break audio */ }
+        try { this.options.target?.[definition.level](event, definition.message); this.counters.accepted++; }
+        catch { this.counters.targetErrors++; if (ranks[definition.level] >= ranks.error) this.counters.criticalTargetErrors++; }
+    }
+
+    /** Exactly one terminal event per operation. Never forward request payloads or thrown errors. */
+    async observe<T>(kind: 'search' | 'rest' | 'stream', run: () => Promise<T>, input: AuroraContext = {}, classify?: (result: T) => 'completed' | 'empty' | 'failed'): Promise<T> {
+        const codes = kind === 'search'
+            ? { completed: 'SEARCH_COMPLETED', empty: 'SEARCH_EMPTY', failed: 'SEARCH_FAILED', cancelled: 'SEARCH_CANCELLED' } as const
+            : kind === 'stream'
+                ? { completed: 'STREAM_OPENED', empty: 'STREAM_OPENED', failed: 'STREAM_OPEN_FAILED', cancelled: 'STREAM_OPEN_CANCELLED' } as const
+                : { completed: 'REST_COMPLETED', empty: 'REST_COMPLETED', failed: 'REST_FAILED', cancelled: 'REST_CANCELLED' } as const;
+        if (this.closed || this.minimum === Infinity || (this.categories && !this.categories.has(auroraCatalog[codes.completed].category))) return run();
+        const operation: Operation = { id: randomUUID(), started: performance.now(), parentId: this.correlation.getStore()?.id };
+        let result: T;
+        try { result = await this.correlation.run(operation, run); }
+        catch (error) {
+            this.emit(error instanceof Error && error.name === 'AbortError' ? codes.cancelled : codes.failed,
+                { ...input, ...(error instanceof HttpError ? { httpStatus: error.statusCode } : {}) }, operation, true);
+            throw error;
+        }
+        let outcome: 'completed' | 'empty' | 'failed' = 'completed';
+        try { outcome = classify?.(result) ?? 'completed'; } catch { /* diagnostics cannot change the result */ }
+        this.emit(codes[outcome] ?? codes.completed, input, operation, true);
+        return result;
+    }
+
+    recordDashboard(input: Pick<AuroraContext, 'nodeCount' | 'playerCount' | 'playingCount' | 'queuedTracks' | 'sourceCount'>): void { this.emit('DASHBOARD_SNAPSHOT', input); }
+    recordInitialized(): void { this.emit('MANAGER_INITIALIZED'); }
+    recordExtensionFailure(): void { this.emit('EXTENSION_FAILED'); }
+    recordMigrationStage(player: Player, stage: MigrationStage, status: MigrationStageObservation['status']): void {
+        const operation = this.operations.get(player);
+        if (!operation || !migrationStages.has(stage) || !migrationStatuses.has(status)) return;
+        const codes = { started: 'MIGRATION_STAGE_STARTED', acknowledged: 'MIGRATION_STAGE_ACKNOWLEDGED',
+            failed: 'MIGRATION_STAGE_FAILED', cancelled: 'MIGRATION_STAGE_CANCELLED', partial: 'MIGRATION_STAGE_PARTIAL' } as const;
+        this.emit(codes[status], { backend: backend(player.node.backend?.kind), stage, stageStatus: status }, operation, true);
     }
 
     attach(manager: Manager): void {
         if (this.closed || this.disposers.length) throw new Error('Aurora event route is already attached or closed');
+        this.disposers.push(claimManagerLogRoute(manager, this));
         if (this.minimum === Infinity) return;
         this.disposers.push(
             manager.on('nodeReady', node => this.emit('NODE_READY', { backend: backend(node.backend?.kind) })),
@@ -124,8 +257,18 @@ export class AuroraEvents {
             manager.on('nodeResume', node => this.emit('NODE_RESUMED', { backend: backend(node.backend?.kind) })),
             manager.on('trackStart', player => this.emit('TRACK_STARTED', { backend: backend(player.node.backend?.kind) })),
             manager.on('trackEnd', (player, _track, reason) => {
-                if (reason === 'crossfading' || reason === 'gapless') this.emit(reason === 'crossfading' ? 'TRACK_CROSSFADING' : 'TRACK_GAPLESS', { backend: backend(player.node.backend?.kind) });
+                this.emit(reason === 'crossfading' ? 'TRACK_CROSSFADING' : reason === 'gapless' ? 'TRACK_GAPLESS' : 'TRACK_ENDED', { backend: backend(player.node.backend?.kind) });
             }),
+            manager.on('playerPause', (player, paused) => this.emit(paused ? 'PLAYER_PAUSED' : 'PLAYER_UNPAUSED', { backend: backend(player.node.backend?.kind) })),
+            manager.on('playerSeek', player => this.emit('PLAYER_SEEKED', { backend: backend(player.node.backend?.kind) })),
+            manager.on('playerStop', player => this.emit('PLAYER_STOPPED', { backend: backend(player.node.backend?.kind) })),
+            manager.on('playerConnected', player => this.emit('VOICE_CONNECTED', { backend: backend(player.node.backend?.kind) })),
+            manager.on('playerDisconnected', player => this.emit('VOICE_DISCONNECTED', { backend: backend(player.node.backend?.kind) })),
+            manager.on('filtersUpdate', player => this.emit('FILTERS_UPDATED', { backend: backend(player.node.backend?.kind) })),
+            manager.on('sourceHealthChange', node => this.emit('SOURCE_HEALTH_CHANGED', { backend: backend(node.backend?.kind) })),
+            manager.on('playerRecoveryStarted', player => this.emit('RECOVERY_STARTED', { backend: backend(player.node.backend?.kind) })),
+            manager.on('playerRecoverySuccess', player => this.emit('RECOVERY_SUCCEEDED', { backend: backend(player.node.backend?.kind) })),
+            manager.on('playerRecoveryFailed', player => this.emit('RECOVERY_FAILED', { backend: backend(player.node.backend?.kind) })),
             manager.on('playerResumed', player => this.emit('PLAYER_RESUMED', { backend: backend(player.node.backend?.kind) })),
             manager.on('trackException', player => this.emit('TRACK_FAILED', { backend: backend(player.node.backend?.kind) })),
             manager.on('queueAdd', (player, tracks) => this.emit('QUEUE_ADDED', { backend: backend(player.node.backend?.kind), trackCount: Array.isArray(tracks) ? tracks.length : 1 })),
@@ -152,6 +295,7 @@ export class AuroraEvents {
     close(): void {
         if (this.closed) return;
         this.closed = true;
+        this.correlation.disable();
         for (const dispose of this.disposers.splice(0)) {
             try { dispose(); } catch { /* independent cleanup */ }
         }

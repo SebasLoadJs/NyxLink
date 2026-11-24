@@ -30,6 +30,15 @@ jobs:
       - run: node --check scripts/test-live-voice.cjs
       - run: pnpm run test:coverage
       - run: pnpm run test:types
+      - name: Generate candidate API reference for inspection
+        run: |
+          mkdir -p .runtime/generated-api
+          node scripts/generate-api-reference.cjs --output .runtime/generated-api/api-generated.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: generated-public-api-node-${{ matrix.node }}
+          path: .runtime/generated-api/api-generated.md
+          retention-days: 14
       - run: pnpm run test:package
       - uses: actions/upload-artifact@v4
         if: always()
@@ -41,6 +50,8 @@ jobs:
           retention-days: 14
       - run: pnpm run pack:check
       - run: pnpm audit --prod --audit-level=high
+      - name: Verify generated public API reference
+        run: node scripts/generate-api-reference.cjs --check
 
   backend-integration:
     name: Backend integration (Node 22)

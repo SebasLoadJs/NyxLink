@@ -17,7 +17,7 @@ test('NodeLink endpoint support is learned from responses without confusing a mi
       res.writeHead(404); res.end(gzipSync(JSON.stringify({ message: 'The requested route was not found.' })));
     } else if (missingPlayer) {
       res.writeHead(404); res.end(JSON.stringify({ message: 'Player not found' }));
-    } else { res.end('[]'); }
+    } else { res.end('{"mixes":[]}'); }
   });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -34,7 +34,7 @@ test('NodeLink endpoint support is learned from responses without confusing a mi
   });
   assert.equal(node.backend.featureStatus('mix:list'), 'unknown');
   missingPlayer = false;
-  assert.deepEqual(await node.rest.getMixLayers('123456789012345678'), []);
+  assert.deepEqual(await node.rest.getMixLayers('123456789012345678'), { mixes: [] });
   assert.equal(node.backend.featureStatus('mix:list'), 'available');
   await assert.rejects(node.rest.trackStream('encoded'), { code: 'FEATURE_UNAVAILABLE' });
   assert.equal(node.backend.featureStatus('trackstream'), 'unavailable');

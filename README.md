@@ -39,7 +39,7 @@
 | **Búsqueda** | Fuentes configurables, cancelación, timeout y caché TTL/LRU opcional. |
 | **Almacenamiento** | Memoria, persistencia local y Redis 7 opcional con snapshots atómicos. |
 | **Integración** | Conector Discord.js, eventos y declaraciones de tipos incluidas. |
-| **Consola** | Logger opcional con Consola, banner de terminal y estado de nodos. |
+| **Aurora** | Pino como motor único, Consola para presentación, Inspector y telemetría opcional. |
 
 NyxLink es el cliente de tu bot. **Necesitas un servidor Lavalink v4 o NodeLink disponible** para cargar y reproducir audio. Las fuentes y extensiones disponibles dependen de la configuración y los plugins de ese servidor.
 
@@ -292,6 +292,8 @@ Los requisitos se copian y se conservan durante failover y `transferNode()`. Un 
 
 `manager.nodes.findNode()` acepta las mismas restricciones, además de `exclude` y `allowUnhealthyFallback`; devuelve `undefined` si no hay candidato. Al crear un reproductor, ese caso lanza `NoEligibleNodeError` con código `NO_ELIGIBLE_NODE` y `rejections` por identificador, motivo y capacidades faltantes. También puedes consultar `NodeSelector.rejections(nodes, options, selection)` para obtener el diagnóstico.
 
+La [selección ponderada e histéresis](docs/node-selection.md) es opt-in por llamada, usa métricas observadas y conserva las restricciones de elegibilidad. El [cierre técnico](docs/implementation-closure.md) separa implementación de los [pendientes de aceptación real](docs/pending-real-world-acceptance.md), que ejecutará el operador.
+
 Para apartar temporalmente un nodo con fallos repetidos, configura `options.node.circuitBreaker`:
 
 ```js
@@ -382,27 +384,20 @@ originales. Los spans no establecen un contexto activo para solicitudes internas
 no equivalen a tracing distribuido de extremo a extremo. Los listeners se
 retiran durante `manager.shutdown()`; el SDK pertenece al bot.
 
-El logger está desactivado por defecto. `logging` activa la salida de Consola y `banner: true` muestra el banner de terminal. Los eventos `debug` originales pueden contener credenciales y deben mantenerse privados. La salida del logger aplica redacción de patrones conocidos, no una garantía de anonimización.
-
-Para usar Pino con tu propia configuración, instala `pino` en el bot y proporciona su instancia mediante el adaptador opcional:
+Aurora está desactivado por defecto. Instalá los peers visuales indicados en [la guía de instalación](docs/aurora-installation.md).
 
 ```js
-const pino = require('pino');
-const { Manager, createPinoSink } = require('nyxlink');
-
-const manager = new Manager({
-  nodes,
-  options: {
-    logging: {
-      level: 'info',
-      console: false,
-      sink: createPinoSink(pino()),
-    },
-  },
-});
+const { Manager } = require('nyxlink');
+async function createClient(nodes) {
+  const { createAuroraPipeline } = await import('nyxlink/aurora');
+  const pipeline = createAuroraPipeline({ format: 'aurora', level: 'info' });
+  const manager = new Manager({nodes, options: {logging: {level: pipeline.level, target: pipeline.target}}});
+  pipeline.banner(manager);
+  return {manager, async close(){await manager.shutdown();await pipeline.close();}};
+}
 ```
 
-El bot puede configurar `pino-pretty` en su propio transporte para desarrollo, o reenviar los registros a su infraestructura de observabilidad. NyxLink no instala ni inicia un transporte externo. El sink recibe nivel, tipo, módulo, timestamp y mensaje redactado, incluidos los paneles de estado. Su contrato es síncrono; las excepciones del sink se aíslan y no deben detener la reproducción. Para evitar duplicar la salida, utiliza `console: false`. No envíes datos privados ni secretos arbitrarios como etiquetas o mensajes.
+Usá un único destino. El Inspector recibe eventos canónicos y no debe competir por la misma terminal con otro renderer. Los eventos `debug` originales no se incorporan automáticamente a Aurora. Consultá [logging y observabilidad](docs/logging-guide.md).
 
 </details>
 
@@ -465,10 +460,17 @@ Llama a esta función desde el cierre de tu aplicación. `manager.shutdown()` es
 
 ## Guías para migración y versiones
 
+- [Guía de API](docs/api-reference.md) — contratos, lifecycle, recuperación y funciones opcionales
+- [Referencia completa de declaraciones](docs/api-generated.md) — todos los exports públicos, generada desde los tipos y verificada en CI
+- [Logging y observabilidad](docs/logging-guide.md) — perfiles, JSON, trazas, destinos y dashboard opt-in
+- [Mixer NodeLink](docs/mixer.md) — respuestas tipadas, volumen y concurrencia
+- [Extensiones opcionales](docs/extensions.md) — registro, hooks tipados, errores y cierre
+- [Estado de modernización](docs/modernization-status.md) — implementación, evidencia y puertas pendientes
 - [Migrar de Moonlink a NyxLink](docs/migrating-from-moonlink.md) — imports, cambios de comportamiento, sesiones, backends y rollback
 - [Cambios previstos para v5.3](CHANGELOG.md) — funcionalidades implementadas y limitaciones aún pendientes de verificar
 - [Plan de aceptación de v5.3](docs/release-5.3-plan.md) — fases, pruebas y condiciones necesarias antes de la publicación estable
 - [Prueba de voz real](docs/live-voice-verification.md) — validación manual de reproducción audible y crossfade
+- [Ejecutar las cinco pruebas de voz](docs/run-live-tests-es.md) — plantilla privada, revisión sin red y runner para el operador
 
 La rama `dev` es de desarrollo. Una versión estable no debe anunciarse hasta aprobar la suite completa, el paquete instalable y las comprobaciones de audio real.
 
@@ -532,3 +534,23 @@ or a telemetry SDK. The host-side visual examples and integration tests
 live in the repository; see [Aurora status and commands](docs/aurora-v4-status.md)
 and [host deployment guidance](docs/aurora-observability.md). These are
 development-line features, not a published stable-release promise.
+
+
+### Aurora — official optional terminal runtime
+
+The next development version exposes Aurora directly through package exports, not copied examples. The old Manager logging options and the `aurora` configuration alias are intentionally removed. Only `options.logging` is accepted. Pino is loaded on demand by the shared engine; the root SDK is silent unless a target is explicitly configured.
+
+Install the optional peer packages listed in [Aurora installation](docs/aurora-installation.md) for the visual runtime. Use ESM (or dynamic import from CommonJS):
+
+```ts
+import { Manager } from 'nyxlink';
+import { createAuroraPipeline } from 'nyxlink/aurora';
+
+const aurora = createAuroraPipeline({ format: 'aurora', level: 'info' });
+const manager = new Manager({ nodes, options: { logging: { level: aurora.level, target: aurora.target } } });
+aurora.banner(manager);
+// Host configures its connector, then initializes with the Discord client ID.
+// On host shutdown: await manager.shutdown(); await aurora.close();
+```
+
+The optional demo command `nyxlink-aurora --scenario all --snapshot` uses explicitly simulated events; it is not a Discord audio verification. Inspector has a separate `nyxlink/aurora/inspector` entry and must own its terminal exclusively.

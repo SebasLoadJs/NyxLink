@@ -1,4 +1,5 @@
 import { observeOperation } from '../observability/OpenTelemetry';
+import { getManagerLogRoute } from '../logging/ManagerLogRoute';
 import { requireGroupId, requireGuildId, groupCreateBody, groupPatchBody, validateGroup, validateGroups, validateGroupPatch, sponsorOptionsBody, sponsorSegmentsBody, validateSponsorState, type PlayerGroup, type GroupCreate, type GroupPatch, type GroupPatchResult, type SponsorBlockOptions, type SponsorBlockSegment, type SponsorBlockState } from '../backends/NodeLinkOrchestration';
 import { lyricsParameters, validateSourceHealth, validateNodeLinkStreamFormats, type LyricsRequestOptions, type SourceHealthResponse, type NodeLinkStreamFormats } from '../backends/NodeLinkContracts';
 import { hasLavaLyricsPlugin, lavaLyricsParameters, validateLavaLyrics, type LavaLyricsData, type LavaLyricsOptions } from '../backends/LavaLyricsContracts';
@@ -18,6 +19,7 @@ import { IRESTLoadTracks, IRESTGetLyrics, IRESTGetPlayers, ITrack, INodeStats, I
 import { playbackGuard } from '../players/PlaybackGuard';
 import { validateNodeLinkStreamResponse } from '../backends/NodeLinkStreamResponse';
 import { assertClientPcmSeekPosition, createClientPcmSeekStream } from '../backends/ClientPCMSeek';
+import { mixCreateBody, requireMixId, requireMixVolume, validateMixCreated, validateMixLayers, type MixLayerCreated, type MixLayersResponse } from '../backends/NodeLinkMixContracts';
 
 export class RestError extends Error {
     public statusCode: number;
@@ -37,9 +39,13 @@ export class Rest {
     private readonly jsonHeaders: Record<string, string>;
     private readonly userAgentHeaders: Record<string, string>;
     private readonly sessionRecoveries = new WeakSet<Player>();
+    private readonly request: typeof makeRequest;
+    private readonly streamRequest: typeof makeStreamRequest;
 
     constructor(node: Node) {
         this.node = node;
+        this.request = this.observeTransport(makeRequest, 'REST.http');
+        this.streamRequest = this.observeTransport(makeStreamRequest, 'REST.stream.open');
         this.authHeaders = {
             "Authorization": this.node.password,
             "User-Agent": this.node.manager.options?.userAgent ?? "NyxLink"
@@ -53,28 +59,36 @@ export class Rest {
         };
     }
 
-    private observedRequest<T = any>(url: string,
-        options: http.RequestOptions & { body?: any; returnHeaders: true; throwOnError?: boolean; allowedOrigins?: readonly string[]; noContentAsNull?: boolean },
-        timeout?: number, retries?: number, retryDelay?: number, maxRedirects?: number): Promise<ResponseWithHeaders<T> | undefined>;
-    private observedRequest<T = any>(url: string,
-        options: http.RequestOptions & { body?: any; returnHeaders?: false; throwOnError?: boolean; allowedOrigins?: readonly string[]; noContentAsNull?: boolean },
-        timeout?: number, retries?: number, retryDelay?: number, maxRedirects?: number): Promise<T | undefined>;
-    private observedRequest<T = any>(url: string,
-        options: http.RequestOptions & { body?: any; returnHeaders?: boolean; throwOnError?: boolean; allowedOrigins?: readonly string[]; noContentAsNull?: boolean },
-        timeout?: number, retries?: number, retryDelay?: number, maxRedirects?: number): Promise<T | ResponseWithHeaders<T> | undefined> {
-        return observeOperation<T | ResponseWithHeaders<T> | undefined>(this.node.manager, 'nyxlink.rest', () => options.returnHeaders
-            ? makeRequest<T>(url, { ...options, returnHeaders: true }, timeout, retries, retryDelay, maxRedirects)
-            : makeRequest<T>(url, { ...options, returnHeaders: false }, timeout, retries, retryDelay, maxRedirects),
-            result => result == null ? 'empty' : 'resolved');
-    }
-
-    // Measures the response headers, not stream consumption or audio delivery.
-    private observedStream(...args: Parameters<typeof makeStreamRequest>): ReturnType<typeof makeStreamRequest> {
-        return observeOperation(this.node.manager, 'nyxlink.rest', () => makeStreamRequest(...args));
-    }
-
     public get url(): string {
         return `http${this.node.secure ? "s" : ""}://${this.node.host}:${this.node.port}`;
+    }
+
+    /** Preserve the transport's overloads/arguments while observing only safe metadata. */
+    private observeTransport<F extends Function>(transport: F, operation: string): F {
+        return new Proxy(transport, { apply: (target, receiver, args) => {
+            const monitor = this.node.manager.performanceMonitor;
+            const execute = () => monitor ? monitor.measure(operation === 'REST.http' ? 'rest' : 'streamOpen', () => Reflect.apply(target, receiver, args)) : Reflect.apply(target, receiver, args);
+            const run = () => observeOperation(this.node.manager, 'nyxlink.rest', async () => {
+                const aurora = getManagerLogRoute(this.node.manager);
+                return aurora ? aurora.observe(operation === 'REST.http' ? 'rest' : 'stream', async () => execute(), { backend: this.node.backend?.kind }, result => {
+                    if (operation === 'REST.http' && typeof result === 'object' && result !== null && (result as { loadType?: unknown }).loadType === 'error') {
+                        try { if (new URL(args[0]).pathname === '/v4/loadtracks') return 'failed'; } catch {}
+                    }
+                    return 'completed';
+                }) : execute();
+            }, result => {
+                if (result == null) return 'empty';
+                // Classify the load response only for the actual loadtracks endpoint.
+                let pathname = '';
+                try { pathname = new URL(args[0]).pathname; } catch {}
+                if (pathname === '/v4/loadtracks' && typeof result === 'object') {
+                    const type = (result as { loadType?: unknown }).loadType;
+                    if (type === 'error' || type === 'empty') return type;
+                }
+                return 'resolved';
+            });
+            return run();
+        } });
     }
 
     private async triggerPlayerRecovery(player: Player): Promise<void> {
@@ -111,6 +125,10 @@ export class Rest {
     }
 
     private async featureRequest<T = any>(operation: ExtensionOperation, params: ExtensionRouteParameters, options: http.RequestOptions & { body?: any }, validate?: (response: unknown) => void): Promise<T> {
+        return this.runFeatureRequest<T>(operation, params, options, validate);
+    }
+
+    private async runFeatureRequest<T>(operation: ExtensionOperation, params: ExtensionRouteParameters, options: http.RequestOptions & { body?: any }, validate?: (response: unknown) => void): Promise<T> {
         const route = this.extensionRoute(operation, params);
         // NodeLink extension commands must obey the same guild lease as
         // ordinary playback PATCH/DELETE, including mix and subscription APIs.
@@ -126,7 +144,7 @@ export class Rest {
         const current = () => !this.node.destroyed && this.node.backend === backend &&
             this.node.socket === socket && this.node.sessionId === session;
         const result = await this.node.circuit.run(async () => {
-            try { return await this.observedRequest<T>(this.url + route.path, { ...options, method: route.method, throwOnError: true }, 10000, 0); }
+            try { return await this.request<T>(this.url + route.path, { ...options, method: route.method, throwOnError: true }, 10000, 0); }
             catch (error) { this.featureError(feature, error, backend, current); }
         });
         if (result === undefined) throw new Error('Backend did not acknowledge feature request');
@@ -191,7 +209,7 @@ export class Rest {
             this.node.socket === socket && this.node.sessionId === session;
         const result = await this.node.circuit.run(async () => {
             try {
-                return await this.observedRequest<unknown>(this.url + path, {
+                return await this.request<unknown>(this.url + path, {
                     method, headers: method === 'PUT' ? this.jsonHeaders : this.authHeaders,
                     ...(method === 'PUT' ? { body } : {}), throwOnError: true
                 }, 10000, 0);
@@ -233,7 +251,7 @@ export class Rest {
     }
 
     public async getPlayers(): Promise<IRESTGetPlayers[] | null> {
-        const res = await this.observedRequest<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}/players`, {
+        const res = await this.request<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}/players`, {
             method: "GET",
             headers: this.authHeaders
         });
@@ -248,7 +266,7 @@ export class Rest {
     }
 
     public async getPlayer(guildId: string): Promise<IRESTGetPlayers | null> {
-        const res = await this.observedRequest<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}`, {
+        const res = await this.request<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}`, {
             method: "GET",
             headers: this.authHeaders
         });
@@ -258,6 +276,10 @@ export class Rest {
     }
 
     public async updatePlayer(guildId: string, data: PlayerUpdatePayload, noReplace: boolean = false): Promise<PlayerUpdateAcknowledgement | null> {
+        return this.updatePlayerRequest(guildId, data, noReplace);
+    }
+
+    private async updatePlayerRequest(guildId: string, data: PlayerUpdatePayload, noReplace: boolean): Promise<PlayerUpdateAcknowledgement | null> {
         await this.node.manager.guildOwnership?.assertCurrent(guildId);
         const payload = this.node.backend ? this.node.backend.preparePlayerUpdate(data) : preparePlayerUpdate(this.node.isNodeLink ? 'nodelink' : 'unknown', data);
         const params = new URLSearchParams();
@@ -269,12 +291,12 @@ export class Rest {
         const session = this.node.sessionId;
 
         try {
-            const res = await observeOperation(this.node.manager, 'nyxlink.rest', () => this.node.circuit.run(() => makeRequest<unknown>(`${this.url}/v4/sessions/${session}/players/${guildId}?${params.toString()}`, {
+            const res = await this.node.circuit.run(() => this.request<unknown>(`${this.url}/v4/sessions/${session}/players/${guildId}?${params.toString()}`, {
                 method: "PATCH",
                 headers: this.jsonHeaders,
                 body: payload,
                 throwOnError: true
-            }, undefined, 0)), result => result == null ? 'empty' : 'resolved');
+            }, undefined, 0));
             if (res === undefined || res === null) return null;
             validatePlayerAcknowledgement(res, guildId);
             return res;
@@ -297,7 +319,7 @@ export class Rest {
         const timeout = options?.timeoutMs ?? 10000;
         if (options && (!Number.isFinite(timeout) || timeout <= 0 || timeout > 60000)) throw new TypeError('Cleanup timeout must be within 1..60000 ms');
         try {
-            await this.observedRequest(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}`, {
+            await this.request(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}`, {
                 method: "DELETE",
                 headers: this.authHeaders,
                 signal: options?.signal,
@@ -316,8 +338,8 @@ export class Rest {
         params.append("identifier", identifier);
 
         const protectedRequest = this.node.circuit.enabled;
-        return observeOperation(this.node.manager, 'nyxlink.rest', () => this.node.circuit.run(async () => {
-            const res = await makeRequest<unknown>(`${this.url}/v4/loadtracks?${params}`, {
+        return this.node.circuit.run(async () => {
+            const res = await this.request<unknown>(`${this.url}/v4/loadtracks?${params}`, {
                 method: "GET",
                 headers: this.authHeaders,
                 throwOnError: protectedRequest || options !== undefined,
@@ -326,14 +348,14 @@ export class Rest {
             if (res === undefined || res === null) return { loadType: "empty", data: {} };
             validateLoadResponse(res);
             return res;
-        }), result => result.loadType === 'error' ? 'error' : result.loadType === 'empty' ? 'empty' : 'resolved');
+        });
     }
 
     public async decodeTrack(encodedTrack: string): Promise<ITrack | null> {
         const params = new URLSearchParams();
         params.append("encodedTrack", encodedTrack);
 
-        const res = await this.observedRequest<unknown>(`${this.url}/v4/decodetrack?${params}`, {
+        const res = await this.request<unknown>(`${this.url}/v4/decodetrack?${params}`, {
             method: "GET",
             headers: this.authHeaders
         });
@@ -343,7 +365,7 @@ export class Rest {
     }
 
     public async decodeTracks(encodedTracks: string[]): Promise<ITrack[] | null> {
-        const res = await this.observedRequest<unknown>(`${this.url}/v4/decodetracks`, {
+        const res = await this.request<unknown>(`${this.url}/v4/decodetracks`, {
             method: "POST",
             headers: this.jsonHeaders,
             body: encodedTracks
@@ -355,7 +377,7 @@ export class Rest {
     }
 
     public async getInfo(): Promise<any | null> {
-        const res = await this.observedRequest<any>(`${this.url}/v4/info`, {
+        const res = await this.request<any>(`${this.url}/v4/info`, {
             method: "GET",
             headers: this.authHeaders
         });
@@ -363,7 +385,7 @@ export class Rest {
     }
 
     public async getInfoWithHeaders(): Promise<ResponseWithHeaders<any> | null> {
-        const res = await this.observedRequest<any>(`${this.url}/v4/info`, {
+        const res = await this.request<any>(`${this.url}/v4/info`, {
             method: "GET",
             headers: this.authHeaders,
             returnHeaders: true,
@@ -373,7 +395,7 @@ export class Rest {
     }
 
     public async getVersion(timeout?: number, retries?: number): Promise<string | null> {
-        const res = await this.observedRequest<string>(`${this.url}/version`, {
+        const res = await this.request<string>(`${this.url}/version`, {
             method: "GET",
             headers: this.authHeaders
         }, timeout, retries);
@@ -383,7 +405,7 @@ export class Rest {
     public async getStats(): Promise<INodeStats | null> {
         const protectedRequest = this.node.circuit.enabled;
         const res = await this.node.circuit.run(async () => {
-            const stats = await this.observedRequest<INodeStats>(`${this.url}/v4/stats`, {
+            const stats = await this.request<INodeStats>(`${this.url}/v4/stats`, {
                 method: "GET", headers: this.authHeaders, throwOnError: protectedRequest
             }, protectedRequest ? 10000 : undefined, protectedRequest ? 0 : undefined);
             if (protectedRequest) {
@@ -398,7 +420,7 @@ export class Rest {
     }
 
     public async getRoutePlannerStatus(): Promise<IRoutePlannerStatus | null> {
-        const res = await this.observedRequest<IRoutePlannerStatus>(`${this.url}/v4/routeplanner/status`, {
+        const res = await this.request<IRoutePlannerStatus>(`${this.url}/v4/routeplanner/status`, {
             method: "GET",
             headers: this.authHeaders
         });
@@ -406,7 +428,7 @@ export class Rest {
     }
 
     public async freeFailedAddress(address: string): Promise<void> {
-        await this.observedRequest(`${this.url}/v4/routeplanner/free/address`, {
+        await this.request(`${this.url}/v4/routeplanner/free/address`, {
             method: "POST",
             headers: this.jsonHeaders,
             body: { address }
@@ -414,14 +436,14 @@ export class Rest {
     }
 
     public async freeAllFailedAddresses(): Promise<void> {
-        await this.observedRequest(`${this.url}/v4/routeplanner/free/all`, {
+        await this.request(`${this.url}/v4/routeplanner/free/all`, {
             method: "POST",
             headers: this.authHeaders
         });
     }
 
     public async updateSession(resuming: boolean, timeout: number): Promise<SessionUpdateResponse | null> {
-        const res = await this.observedRequest<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}`, {
+        const res = await this.request<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}`, {
             method: "PATCH",
             headers: this.jsonHeaders,
             body: {
@@ -438,31 +460,33 @@ export class Rest {
     public async addMixLayer(
         guildId: string,
         data: { track: { encoded: string; userData?: Record<string, any> }; volume?: number }
-    ): Promise<any | null> {
+    ): Promise<MixLayerCreated | null> {
         this.node.assertFeature("mix:add");
-
-        const res = await this.featureRequest<any>("mix:add", { guildId }, {
+        requireGuildId(guildId);
+        const body = mixCreateBody(data);
+        const res = await this.featureRequest<unknown>("mix:add", { guildId }, {
             headers: this.jsonHeaders,
-            body: data
-        });
-
-        return res || null;
+            body
+        }, validateMixCreated);
+        return res == null ? null : res as MixLayerCreated;
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
-    public async getMixLayers(guildId: string): Promise<any | null> {
+    public async getMixLayers(guildId: string): Promise<MixLayersResponse | null> {
         this.node.assertFeature("mix:list");
-
-        const res = await this.featureRequest<any>("mix:list", { guildId }, {
+        requireGuildId(guildId);
+        const res = await this.featureRequest<unknown>("mix:list", { guildId }, {
             headers: this.authHeaders
-        });
-
-        return res || null;
+        }, validateMixLayers);
+        return res == null ? null : res as MixLayersResponse;
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
     public async updateMixLayerVolume(guildId: string, mixId: string, volume: number): Promise<void> {
         this.node.assertFeature("mix:update");
+        requireGuildId(guildId);
+        requireMixId(mixId);
+        requireMixVolume(volume);
 
         await this.featureRequest("mix:update", { guildId, mixId }, {
             headers: this.jsonHeaders,
@@ -473,6 +497,8 @@ export class Rest {
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
     public async removeMixLayer(guildId: string, mixId: string): Promise<void> {
         this.node.assertFeature("mix:remove");
+        requireGuildId(guildId);
+        requireMixId(mixId);
 
         await this.featureRequest("mix:remove", { guildId, mixId }, {
             headers: this.authHeaders
@@ -498,7 +524,7 @@ export class Rest {
             this.node.socket === socket && this.node.sessionId === session;
         const result = await this.node.circuit.run(async () => {
             try {
-                return await this.observedRequest<unknown>(this.url + '/v4/lyrics?' + params.toString(), {
+                return await this.request<unknown>(this.url + '/v4/lyrics?' + params.toString(), {
                     method: 'GET', headers: this.authHeaders, throwOnError: true,
                     noContentAsNull: true
                 }, 10000, 0);
@@ -707,7 +733,7 @@ export class Rest {
         const current = () => !this.node.destroyed && this.node.backend === backend &&
             this.node.socket === socket && this.node.sessionId === session;
         try {
-            const response = await this.observedRequest<unknown>(this.url + route.path, {
+            const response = await this.request<unknown>(this.url + route.path, {
                 method: route.method, headers: this.jsonHeaders,
                 body: { encodedTrack, format: 'formats', ...(options.itag !== undefined ? { itag: options.itag } : {}) },
                 signal: options.signal, throwOnError: true,
@@ -767,7 +793,7 @@ export class Rest {
         const current = () => !this.node.destroyed && this.node.backend === backend &&
             this.node.socket === socket && this.node.sessionId === session;
         try {
-            const res = await this.observedStream(this.url + route.path, {
+            const res = await this.streamRequest(this.url + route.path, {
                 method: route.method,
                 headers: options.range ? { ...this.jsonHeaders, Range: options.range } : this.jsonHeaders,
                 body: requestPayload, signal: options.signal,

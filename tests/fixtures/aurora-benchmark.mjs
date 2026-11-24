@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
 import { Writable } from 'node:stream';
 import { writeFileSync } from 'node:fs';
-import { Manager } from 'nyxlink';
+import { Manager, normalizeAuroraEvent } from 'nyxlink';
+import { Bench } from 'tinybench';
 import { createAuroraPipeline } from './aurora-pipeline.mjs';
 
 const count=2000;
@@ -16,7 +17,7 @@ for(const format of ['disabled','silent','json','pretty','aurora']){
             done();
         }});
         const pipeline=format==='disabled'?undefined:createAuroraPipeline({format,level:format==='silent'?'silent':'debug',stream,onEvent(){received++;},onRenderError(){renderErrors++;}});
-        const manager=new Manager({nodes:[{host:'localhost',port:2333,password:'fixture',secure:false}],options:pipeline?{aurora:{level:pipeline.level,target:pipeline.target}}:{}});
+        const manager=new Manager({nodes:[{host:'localhost',port:2333,password:'fixture',secure:false}],options:pipeline?{logging:{level:pipeline.level,target:pipeline.target}}:{}});
         const player={node:{backend:{kind:'nodelink'}}};
         try{
             for(let i=0;i<100;i++)manager.emit('queueAdd',player,[{}]);
@@ -33,4 +34,10 @@ for(const format of ['disabled','silent','json','pretty','aurora']){
         }finally{await manager.shutdown();await pipeline?.close();}
     }
 }
-writeFileSync(process.argv[2],JSON.stringify({node:process.version,platform:process.platform,scope:'synthetic synchronous writable; no Discord or real backend',samples},null,2)+'\n');
+const canonical={eventCode:'NODE_READY',timestamp:new Date().toISOString(),sanitizedContext:{backend:'nodelink'}};
+const bench=new Bench({name:'Aurora canonical normalization',time:100,iterations:100});
+bench.add('normalize canonical event',()=>{normalizeAuroraEvent(canonical);});
+await bench.run();
+const microbench=bench.table();
+assert.equal(microbench.length,1);
+writeFileSync(process.argv[2],JSON.stringify({node:process.version,platform:process.platform,scope:'synthetic synchronous writable; no Discord or real backend',samples,microbench},null,2)+'\n');

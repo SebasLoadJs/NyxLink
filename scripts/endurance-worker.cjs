@@ -6,31 +6,30 @@ const os = require('node:os');
 const { performance, monitorEventLoopDelay } = require('node:perf_hooks');
 const { setTimeout: delay } = require('node:timers/promises');
 const { Manager, Track } = require('../dist');
+const { EnduranceLatency } = require('./endurance-statistics.cjs');
 const { event } = require('../tests/helpers/v4-server.cjs');
 
 const lab = JSON.parse(process.env.NYXLINK_BACKENDS_JSON || 'null');
 if (!lab) throw new Error('Run test:endurance to create the isolated server lab');
 const durationSeconds = Number(process.argv[2]);
-// A dirty local checkout may still run diagnostic tests, but cannot certify a release.
 let revision = null;
 try { revision = sourceRevision(); } catch { /* unverified source */ }
-if (!Number.isInteger(durationSeconds) || durationSeconds < 10 || durationSeconds > 7200) throw new Error('Invalid endurance duration');
+const maximumDuration = process.env.NYXLINK_ENDURANCE_SOAK === '1' ? 72 * 3600 : 7200;
+if (!Number.isInteger(durationSeconds) || durationSeconds < 10 || durationSeconds > maximumDuration) throw new Error('Invalid endurance duration');
 const contexts = [];
 const samples = [];
 const failures = [];
 const loop = monitorEventLoopDelay({ resolution: 10 });
-const latency = {};
+const latency = Object.create(null);
+const samplingEverySeconds = durationSeconds > 7200 ? 60 : 10;
 
-function summary(values) {
-  const sorted = [...values].sort((a, b) => a - b);
-  const percentile = rank => sorted.length ? sorted[Math.max(0, Math.ceil(sorted.length * rank) - 1)] : null;
-  return { count: sorted.length, p50Ms: percentile(0.5), p95Ms: percentile(0.95), maxMs: sorted.at(-1) ?? null };
+function recordLatency(name,ms){
+  (latency[name] ??= new EnduranceLatency()).record(ms);
 }
-
 async function measured(name, operation) {
   const start = performance.now();
   try { return await operation(); }
-  finally { (latency[name] ??= []).push(performance.now() - start); }
+  finally { recordLatency(name,performance.now()-start); }
 }
 
 async function cycle(context) {
@@ -100,7 +99,7 @@ async function main() {
       const connectedAt = performance.now();
       await manager.init(String(823456789012345670n + BigInt(index)));
       const [node] = await ready;
-      (latency[`${backend.kind}.ready`] ??= []).push(performance.now() - connectedAt);
+      recordLatency(`${backend.kind}.ready`,performance.now()-connectedAt);
       context.node = node;
       const loaded = await node.rest.loadTracks(lab.mediaUrl, { timeoutMs: 10000 });
       assert.equal(loaded.loadType, 'track');
@@ -112,11 +111,16 @@ async function main() {
     for (const context of contexts) context.nextResume = start + 15000;
     loop.enable(); sample();
     let tick = 0;
+    let nextSample = start + samplingEverySeconds*1000;
     while (performance.now() - start < durationSeconds * 1000) {
       const iteration = performance.now();
       await Promise.all(contexts.map(cycle));
       assert.deepEqual(failures, []);
-      if (tick++ % 10 === 0) sample();
+      ++tick;
+      if (performance.now() >= nextSample) {
+        sample();
+        nextSample = performance.now() + samplingEverySeconds*1000;
+      }
       if (tick % 30 === 0) console.log(`Endurance ${Math.round((performance.now() - start) / 1000)}s: ${contexts.map(c => `${c.backend.kind} cycles=${c.cycles} resumes=${c.resumes}`).join(', ')}`);
       await delay(Math.max(0, 1000 - (performance.now() - iteration)));
     }
@@ -138,7 +142,6 @@ async function main() {
       assert.deepEqual(failures, []);
       assert.equal(process.getActiveResourcesInfo().filter(name => name === 'Timeout').length, 0);
     } catch (error) { passed = false; errorMessage ??= error.message; }
-    // The exact source must remain unchanged throughout the run.
     try { if (sourceRevision() !== revision) revision = null; } catch { revision = null; }
     const report = {
       sourceRevision: revision, timestamp: new Date().toISOString(), scope: 'local backend endurance; no Discord voice or audible playback', durationSeconds,
@@ -147,11 +150,12 @@ async function main() {
       backends: contexts.map(({ backend, cycles, resumes, pings }) => ({ backend: backend.kind, version: backend.version, image: backend.image, cycles, resumes, pings })),
       cpuMicros: process.cpuUsage(cpuStart), samples,
       eventLoopDelay: { p50Ms: loop.percentile(50) / 1e6, p95Ms: loop.percentile(95) / 1e6, maxMs: loop.max / 1e6 },
-      operations: Object.fromEntries(Object.entries(latency).map(([name, values]) => [name, summary(values)])),
+      operations: Object.fromEntries(Object.entries(latency).map(([name, values]) => [name, values.summary()])),
+      latencyMethod: 'bounded HDR histogram (3 significant figures)', samplingEverySeconds,
       cleanup: { players: contexts.reduce((sum, c) => sum + c.manager.players.size, 0), nodes: contexts.reduce((sum, c) => sum + c.manager.nodes.nodes.size, 0), activeResources: process.getActiveResourcesInfo() },
       ...(errorMessage ? { error: errorMessage } : {}),
     };
-    await fs.writeFile(path.resolve(lab.directory, '../endurance-report.json'), JSON.stringify(report, null, 2) + '\n');
+    await fs.writeFile(process.env.NYXLINK_ENDURANCE_REPORT || path.resolve(lab.directory, '../endurance-report.json'), JSON.stringify(report, null, 2) + '\n');
     console.log(`Endurance report: passed=${report.passed}, elapsed=${report.elapsedSeconds.toFixed(1)}s`);
     if (!report.passed) process.exitCode = 1;
   }

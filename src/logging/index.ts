@@ -1,10 +1,7 @@
-export { Logger } from './Logger';
-export type { LoggerOptions, DebugSource } from './Logger';
-export type { StructuredLogRecord, StructuredLogSink, PinoLogTarget } from './ConsoleReporter';
-export { ConsoleReporter, createPinoSink } from './ConsoleReporter';
+// Pure diagnostic helpers; no alternate logger or runtime route.
+export { diagnoseError } from './ErrorDiagnostics';
+export type { ErrorDiagnostic } from './ErrorDiagnostics';
+export type { DiagnosticContext } from './SafeDiagnostics';
 export { createBanner } from './Banner';
-export { formatEntry, formatBox } from './LogFormatter';
-export type { NyxLogLevel } from './LogLevels';
-
-export { formatSystemStatus, formatFailover } from './LogFormatter';
+export { formatEntry, formatBox, formatSystemStatus, formatFailover } from './LogFormatter';
 export type { AudioNodeStatus, FailoverReport } from './LogFormatter';

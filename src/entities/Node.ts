@@ -11,6 +11,7 @@ import { RecommendationResolver } from "../autoplay/RecommendationResolver";
 import { AutoPlayManager } from "../autoplay/AutoPlayManager";
 import { playbackGuard } from "../players/PlaybackGuard";
 import { playbackAttempt } from "../players/PlaybackAttempt";
+import { recoverVoicePlayer } from '../players/VoiceRecovery';
 import { TrackCodec } from "../tracks/TrackCodec";
 import { NodeCircuitBreaker } from '../nodes/NodeCircuitBreaker';
 import { resumeSessionPlayers } from '../nodes/SessionRecovery';
@@ -1233,36 +1234,9 @@ export class Node {
         continue;
       }
 
-      player.set("voiceCloseRecoveryInProgress", true);
-      try {
-        if (!active()) continue;
-        await player.disconnect();
-        if (!active()) continue;
-        try {
-          await this.rest.destroyPlayer(guildId);
-        } catch {
-          // A remote session may already be gone. Do not touch another node.
-        }
-        if (!active()) continue;
-        await new Promise(resolve => setTimeout(resolve, 750));
-        if (!active()) continue;
-        await player.connect();
-        if (!active()) continue;
-        const restarted = await player.restart();
-        if (!active()) continue;
-        if (!restarted) {
-          this.manager.emit("debug", `NyxLink > Worker recovery did not restore ${guildId}.`);
-        }
-      } catch {
-        // Delayed worker errors must not destroy a user-stopped, migrated,
-        // replaced, or otherwise newer player.
-        if (active()) {
-          this.manager.emit("debug", `NyxLink > Worker recovery failed for ${guildId}; destroying unchanged player.`);
-          await player.destroy("Worker failed recovery failed");
-        }
-      } finally {
-        player.set("voiceCloseRecoveryInProgress", false);
-      }
+      await recoverVoicePlayer(this, player, active, {
+        label: 'Worker', destroyReason: 'Worker failed recovery failed',
+      });
     }
   }
 
@@ -1707,39 +1681,10 @@ export class Node {
       this.manager.players.get(player.guildId) === player &&
       this.sessionId === session && this.socket === socket && this.backendGeneration === generation &&
       guard.isCurrent(ticket);
-    if (!active() || player.get("voiceCloseRecoveryInProgress")) return;
-
-    player.set("voiceCloseRecoveryInProgress", true);
-    try {
-      if (!active()) return;
-      await player.disconnect();
-      if (!active()) return;
-      try {
-        await this.rest.destroyPlayer(player.guildId);
-      } catch {
-        // The old remote voice player may already be gone.
-      }
-      if (!active()) return;
-      await new Promise(resolve => setTimeout(resolve, 750));
-      if (!active()) return;
-      await player.connect();
-      if (!active()) return;
-      // Never let an unsuccessful old restart destroy the current player:
-      // the guarded recovery owns the error policy, not restart().
-      const restarted = await player.restart({ destroyOnFailure: false });
-      if (!active()) return;
-      if (!restarted) {
-        this.manager.emit("debug", `NyxLink > Voice close ${code} recovery was not acknowledged for ${player.guildId}.`);
-      }
-      player.set("wsReconnectAttempts", 0);
-    } catch {
-      if (active()) {
-        this.manager.emit("debug", `NyxLink > Voice close ${code} recovery failed for ${player.guildId}.`);
-        await player.destroy(code === 4022 ? "Voice close 4022 recovery failed" : "Worker failed (5001) recovery failed");
-      }
-    } finally {
-      player.set("voiceCloseRecoveryInProgress", false);
-    }
+    await recoverVoicePlayer(this, player, active, {
+      label: `Voice close ${code}`, resetReconnectAttempts: true,
+      destroyReason: code === 4022 ? 'Voice close 4022 recovery failed' : 'Worker failed (5001) recovery failed',
+    });
   }
 
   private async handleWebSocketClosed(player: any, payload: WebSocketClosedEvent): Promise<void> {

@@ -187,3 +187,209 @@ test('partial tracks retain source URI and complete duration during cross-backen
   assert.equal(resolved.encoded,'target-partial');
   assert.equal(resolved.getInfo().length,180000);
 });
+
+test('stop aborts an in-flight destination track lookup instead of waiting for its timeout', async t => {
+  const { manager, player } = createPlayer(t);
+  const destination = target(manager);
+  player.node = destination;
+  const queued = createTrack('cancelled-network-lookup');
+  queued.backend = 'lavalink';
+  player.queue.add(queued);
+  const entered = deferred();
+  let signal;
+  destination.rest.loadTracks = async (_uri, options) => {
+    signal = options.signal;
+    entered.resolve();
+    return new Promise((_resolve, reject) => {
+      const abort = () => reject(signal.reason);
+      signal.addEventListener('abort', abort, { once: true });
+      if (signal.aborted) abort();
+    });
+  };
+  const playing = player.play();
+  await entered.promise;
+  const stopping = player.stop();
+  assert.equal(signal.aborted, true, 'stop must immediately cancel the active HTTP request');
+  assert.equal(await playing, false);
+  await stopping;
+  assert.deepEqual(player.queue.tracks, [queued]);
+  assert.equal(player.current, null);
+});
+
+test('PlaybackGuard invalidates the previous network signal but not the next intent', () => {
+  const { PlaybackGuard } = require('../dist/src/players/PlaybackGuard');
+  const guard = new PlaybackGuard();
+  const initialSignal = guard.signal;
+  const initialTicket = guard.ticket;
+  const currentTicket = guard.invalidate();
+  assert.equal(initialSignal.aborted, true);
+  assert.equal(guard.isCurrent(initialTicket), false);
+  assert.equal(guard.isCurrent(currentTicket), true);
+  assert.equal(guard.signal.aborted, false);
+  guard.invalidate();
+  assert.equal(guard.signal.aborted, false);
+  assert.equal(initialSignal.aborted, true);
+});
+
+test('stop aborts a pending cross-backend migration lookup before source cleanup', async t => {
+  const { manager, node: source, player } = createPlayer(t);
+  source.backend = BackendDetector.detect({ version: { semver: '4.2.2' } });
+  const destination = target(manager);
+  const current = createTrack('migration-lookup-abort');
+  current.backend = 'lavalink';
+  player.current = current;
+  const entered = deferred();
+  let signal;
+  destination.rest.loadTracks = async (_uri, options) => {
+    signal = options.signal;
+    entered.resolve();
+    return new Promise((_resolve, reject) => {
+      const abort = () => reject(signal.reason);
+      signal.addEventListener('abort', abort, { once: true });
+      if (signal.aborted) abort();
+    });
+  };
+  let sourceDestroyed = false;
+  source.rest.destroyPlayer = async () => { sourceDestroyed = true; };
+  const moving = player.transferNode(destination);
+  await entered.promise;
+  const stopping = player.stop();
+  assert.equal(signal.aborted, true);
+  assert.equal(await moving, false);
+  await stopping;
+  assert.equal(sourceDestroyed, false, 'cancelled migration must never delete the source player');
+  assert.equal(player.node, source);
+});
+
+test('destination resolution discards an encoding returned after its session rotates', async t => {
+  const { manager, node: source } = createPlayer(t);
+  const destination = target(manager);
+  const original = createTrack('session-rotated');
+  original.backend = 'lavalink';
+  const entered = deferred(), pending = deferred();
+  destination.rest.loadTracks = async () => { entered.resolve(); return pending.promise; };
+  const { TrackResolver } = require('../dist');
+  const resolving = TrackResolver.resolve(original, destination, source);
+  const rejected = assert.rejects(resolving, /Destination node changed/i);
+  await entered.promise;
+  destination.sessionId = 'replacement-session';
+  pending.resolve({ loadType: 'track', data: migrated(original) });
+  await rejected;
+  assert.equal(original.encoded, 'encoded-session-rotated');
+  assert.equal(original.backend, 'lavalink');
+});
+
+test('destination resolution discards an encoding after the registered node is replaced', async t => {
+  const { manager, node: source } = createPlayer(t);
+  const destination = target(manager);
+  const original = createTrack('node-replaced');
+  original.backend = 'lavalink';
+  const entered = deferred(), pending = deferred();
+  destination.rest.loadTracks = async () => { entered.resolve(); return pending.promise; };
+  const { TrackResolver } = require('../dist');
+  const resolving = TrackResolver.resolve(original, destination, source);
+  const rejected = assert.rejects(resolving, /Destination node changed/i);
+  await entered.promise;
+  const replacement = target(manager);
+  assert.notEqual(replacement, destination);
+  pending.resolve({ loadType: 'track', data: migrated(original) });
+  await rejected;
+  assert.equal(original.encoded, 'encoded-node-replaced');
+});
+
+test('stop releases a pending direct URL lookup even when the REST adapter ignores abort', async t => {
+  const { manager, player } = createPlayer(t);
+  const destination = target(manager);
+  player.node = destination;
+  const queued = createTrack('direct-abort-ignored');
+  queued.backend = 'lavalink';
+  player.queue.add(queued);
+  const entered = deferred();
+  let activeSignal;
+  destination.rest.loadTracks = async (_uri, { signal }) => {
+    activeSignal = signal;
+    entered.resolve();
+    return new Promise(() => {});
+  };
+  const playing = player.play();
+  await entered.promise;
+  const stopping = player.stop();
+  assert.equal(activeSignal.aborted, true);
+  assert.equal(await playing, false, 'a cancelled lookup must unblock the player command queue');
+  await stopping;
+  assert.deepEqual(player.queue.tracks, [queued]);
+  assert.equal(player.current, null);
+});
+
+test('direct URL lookup consumes late backend rejection after user cancellation', async t => {
+  const { manager, player } = createPlayer(t);
+  const destination = target(manager);
+  player.node = destination;
+  const queued = createTrack('late-direct-reject');
+  queued.backend = 'lavalink';
+  player.queue.add(queued);
+  const entered = deferred(), pending = deferred();
+  destination.rest.loadTracks = async () => { entered.resolve(); return pending.promise; };
+  const playing = player.play();
+  await entered.promise;
+  const stopping = player.stop();
+  assert.equal(await playing, false);
+  await stopping;
+  pending.reject(new Error('late backend failure after stop'));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(player.queue.tracks, [queued]);
+});
+
+test('destination URI errors cannot be bypassed with metadata source fallback', async t => {
+  const { manager, node: source } = createPlayer(t);
+  const destination = target(manager);
+  manager.options.search = { trackResolution: { sources: ['youtube'] } };
+  const song = createTrack('provider-rejection');
+  song.backend = 'lavalink';
+  const { TrackResolver } = require('../dist');
+  let calls = 0;
+  destination.rest.loadTracks = async () => {
+    calls++;
+    return { loadType: 'error', data: { message: 'HTTP 429: provider rate limit' } };
+  };
+  await assert.rejects(TrackResolver.resolve(song, destination, source), /Destination rejected/i);
+  assert.equal(calls, 1, 'a backend error must not trigger the metadata fallback');
+  destination.rest.loadTracks = async () => {
+    calls++;
+    throw new Error('HTTP 401');
+  };
+  await assert.rejects(TrackResolver.resolve(song, destination, source), /HTTP 401/);
+  assert.equal(calls, 2, 'authorization errors must not be retried across fallback sources');
+});
+
+test('invalid direct URI protocol responses fail before metadata fallback', async t => {
+  const { manager, node: source } = createPlayer(t);
+  const destination = target(manager);
+  manager.options.search = { trackResolution: { sources: ['youtube'] } };
+  const song = createTrack('invalid-direct-data');
+  song.backend = 'lavalink';
+  const { TrackResolver } = require('../dist');
+  let calls = 0;
+  destination.rest.loadTracks = async () => {
+    calls++;
+    return { loadType: 'search', data: { incorrect: true } };
+  };
+  await assert.rejects(TrackResolver.resolve(song, destination, source), /Invalid search response/i);
+  assert.equal(calls, 1, 'malformed direct response must not be treated as empty');
+});
+
+test('destination track decoding respects explicitly disabled source policy', async t => {
+  const { manager, node: source } = createPlayer(t);
+  const destination = target(manager);
+  manager.options.sources.disabledSources = ['youtube'];
+  const song = createTrack('blocked-on-destination');
+  song.backend = 'lavalink';
+  const { TrackResolver } = require('../dist');
+  destination.rest.loadTracks = async () => ({ loadType: 'track', data: migrated(song) });
+  await assert.rejects(
+    TrackResolver.resolve(song, destination, source),
+    /disabled track source/i,
+  );
+  assert.equal(song.backend, 'lavalink');
+  assert.equal(song.encoded, 'encoded-blocked-on-destination');
+});

@@ -97,11 +97,16 @@ test('real search HTTP timeouts abort the socket and HTTP 429 preserves status w
   const server = http.createServer((_req, res) => { requests++; if (mode === '429') { res.writeHead(429, { 'content-type': 'application/json' }); res.end(JSON.stringify({ message: 'local rate limit' })); } });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
-  const { manager, node } = fixture(t, { timeoutMs: 40, fallbackPlatforms: ['soundcloud'] });
+  const { manager, node } = fixture(t, { timeoutMs: 1000, fallbackPlatforms: ['soundcloud'] });
   node.port = server.address().port;
   await assert.rejects(manager.search({ query: 'rate limited' }), error => error instanceof HttpError && error.statusCode === 429 && error.body.message === 'local rate limit');
   assert.equal(requests, 1);
+  // Receiving an actual 429 must not race a tiny connection deadline on loaded
+  // Windows runners. The stalled-server case still has its own short budget.
+  manager.options.search.timeoutMs = 250;
+  const timeoutStarted = Date.now();
   mode = 'hang'; await assert.rejects(manager.search({ query: 'timeout' }), /timeout|timed out/i); assert.equal(requests, 2);
+  assert.ok(Date.now() - timeoutStarted < 2000, 'a stalled request must remain bounded');
   const controller = new AbortController(); const search = manager.search({ query: 'cancel', signal: controller.signal });
   const rejected = assert.rejects(search, /abort/i); setTimeout(() => controller.abort(), 10); await rejected;
 });
@@ -224,4 +229,57 @@ test('node replacement never inherits the previous instance search cache', async
   assert.equal(result.tracks[0].encoded, 'replacement-record');
   assert.equal(oldCalls, 1);
   assert.equal(newCalls, 1);
+});
+
+test('opt-in shared search preserves independent requesters when one subscriber aborts', async t => {
+  const { manager, node } = fixture(t, { deduplicate: true });
+  const entered = deferred(); const pending = deferred();
+  let calls = 0;
+  node.rest.loadTracks = async () => { calls++; entered.resolve(); return pending.promise; };
+  const abort = new AbortController();
+  const cancelled = manager.search({ query: 'coalesced', requester: 'cancelled', signal: abort.signal });
+  const surviving = manager.search({ query: 'coalesced', requester: 'surviving' });
+  const rejected = assert.rejects(cancelled, /abort/i);
+  await entered.promise;
+  abort.abort();
+  await rejected;
+  pending.resolve({ loadType: 'track', data: record() });
+  const result = await surviving;
+  assert.equal(calls, 1);
+  assert.equal(result.tracks[0].requester, 'surviving');
+});
+
+test('pending search refuses stale results from rotated node sessions', async t => {
+  const { manager, node } = fixture(t, { deduplicate: true, cache: { ttlMs: 60000 } });
+  const entered = deferred(); const pending = deferred();
+  node.rest.loadTracks = async () => { entered.resolve(); return pending.promise; };
+  const search = manager.search({ query: 'stale session' });
+  const rejected = assert.rejects(search, /node changed/i);
+  await entered.promise;
+  node.sessionId = 'session-two';
+  pending.resolve({ loadType: 'track', data: record() });
+  await rejected;
+  let calls = 0;
+  node.rest.loadTracks = async () => { calls++; return { loadType: 'track', data: { ...record(), encoded: 'new-session-track' } }; };
+  assert.equal((await manager.search({ query: 'stale session' })).tracks[0].encoded, 'new-session-track');
+  assert.equal(calls, 1, 'the stale response must not populate the cache');
+});
+
+test('pending search refuses responses from a replaced node with the same identifier', async t => {
+  const { manager, node } = fixture(t, { deduplicate: true });
+  const entered = deferred(); const pending = deferred();
+  node.rest.loadTracks = async () => { entered.resolve(); return pending.promise; };
+  const search = manager.search({ query: 'stale node', node: node.identifier });
+  const rejected = assert.rejects(search, /node changed/i);
+  await entered.promise;
+  const replacement = new Node(manager, {
+    identifier: node.identifier, host: node.host, port: node.port, password: 'fixture',
+  });
+  replacement.connected = true; replacement.state = NodeState.READY;
+  replacement.sessionId = node.sessionId;
+  manager.nodes.nodes.set(replacement.identifier, replacement);
+  pending.resolve({ loadType: 'track', data: record() });
+  await rejected;
+  replacement.rest.loadTracks = async () => ({ loadType: 'track', data: { ...record(), encoded: 'replacement-track' } });
+  assert.equal((await manager.search({ query: 'stale node', node: node.identifier })).tracks[0].encoded, 'replacement-track');
 });

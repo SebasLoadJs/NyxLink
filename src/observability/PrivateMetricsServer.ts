@@ -1,3 +1,4 @@
+import { getManagerLogRoute } from '../logging/ManagerLogRoute';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -181,6 +182,12 @@ export class PrivateMetricsServer {
             case '/players/summary':
                 this.send(response, 200, JSON.stringify(this.snapshot().players));
                 return;
+            case '/logging':
+                this.send(response, 200, JSON.stringify({ configured: Boolean(getManagerLogRoute(this.manager)), ...getManagerLogRoute(this.manager)?.getStats() }));
+                return;
+            case '/performance':
+                this.send(response, 200, JSON.stringify({ configured: Boolean(this.manager.performanceMonitor), snapshot: this.manager.performanceMonitor?.snapshot() }));
+                return;
             case '/versions':
                 this.send(response, 200, JSON.stringify({
                     nyxlink: version,
@@ -208,9 +215,29 @@ export class PrivateMetricsServer {
                     nyxlink_players_playing: players.playing,
                     nyxlink_players_paused: players.paused,
                 };
+                const logging = getManagerLogRoute(this.manager)?.getStats();
+                const counters = logging ? {
+                    nyxlink_log_target_accepted_total: logging.accepted,
+                    nyxlink_log_filtered_total: logging.filtered,
+                    nyxlink_log_target_errors_total: logging.targetErrors,
+                    nyxlink_log_critical_target_errors_total: logging.criticalTargetErrors,
+                } : {};
+                const observed = this.manager.performanceMonitor?.snapshot();
+                if (observed) {
+                    values.nyxlink_pending_requests = observed.resources.pendingRequests;
+                    values.nyxlink_pending_player_commands = observed.resources.pendingPlayerCommands;
+                    values.nyxlink_manager_listeners = observed.resources.managerListeners;
+                    if (observed.runtime.eventLoopP95Ms !== undefined) values.nyxlink_event_loop_delay_p95_ms = observed.runtime.eventLoopP95Ms;
+                    for (const [metric, summary] of Object.entries(observed.durations)) {
+                        if (summary.p50Ms !== undefined) values['nyxlink_' + metric + '_p50_ms'] = summary.p50Ms;
+                        if (summary.p95Ms !== undefined) values['nyxlink_' + metric + '_p95_ms'] = summary.p95Ms;
+                    }
+                }
                 const body = Object.entries(values).map(([name, value]) =>
                     '# TYPE ' + name + ' gauge\n' + name + ' ' + value + '\n').join('');
-                this.send(response, 200, body, 'text/plain; version=0.0.4; charset=utf-8');
+                const counterBody = Object.entries(counters).map(([name, value]) =>
+                    '# TYPE ' + name + ' counter\n' + name + ' ' + value + '\n').join('');
+                this.send(response, 200, body + counterBody, 'text/plain; version=0.0.4; charset=utf-8');
                 return;
             }
             default:

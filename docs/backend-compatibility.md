@@ -1,5 +1,20 @@
 # Backend compatibility matrix — verified baseline
 
+## Latest verified development checkpoint — 2026-11-24
+
+At NyxLink `770053d892939650cd0e44f5603ed8af49727409`, [validation](https://github.com/SebasLoadJs/NyxLink/actions/runs/45318101584), [baseline/modern protocols and plugins](https://github.com/SebasLoadJs/NyxLink/actions/runs/45318101522), [Redis](https://github.com/SebasLoadJs/NyxLink/actions/runs/45318101657) and [600-second endurance](https://github.com/SebasLoadJs/NyxLink/actions/runs/45318101691) passed. The image and plugin pins remain those in `tests/integration/backend-servers.json`. This supersedes the transient download failure recorded in the historical resume checkpoint below. New commits require their own checks in [PR #32](https://github.com/SebasLoadJs/NyxLink/pull/32).
+
+| Fixed profile | Scope accepted by automated checks | Scope still pending |
+| --- | --- | --- |
+| Lavalink 4.2.2 | v4 REST/WS/authentication/session recovery/empty-player migration | Audible commands, track-active filters, voice recovery and production sources |
+| NodeLink baseline 804e0d6 | Common v4 protocol plus enabled/disabled extension route scenarios | Live voice, populated providers and active mixer audio |
+| NodeLink modern 97bbce1 | Common protocol, Source Health, groups CRUD, SponsorBlock, crossfade control, lyrics/captions request contracts and direct PCM | Actual synchronization, crossfade/AutoMix, audible skipping, populated providers |
+| LavaLyrics 1.1.0 / SponsorBlock 3.0.1 | Pinned plugin detection and enabled/disabled HTTP/WS contracts | Provider permissions/content/rate limits and actual audio effects |
+
+NodeLink seek patch acceptance is tracked separately; it does not certify unpatched images. [Operator acceptance](pending-real-world-acceptance.md) remains pending. The sections below retain historical observations rather than claiming all versions behave identically.
+
+## Earlier baseline
+
 Evidence: commit [4c0f60e](https://github.com/SebasLoadJs/NyxLink/commit/4c0f60eb467cc2fb451b7eb27746280ee44f9db6), [554 unit/contract tests](https://github.com/SebasLoadJs/NyxLink/actions/runs/44990871520), [26 integration tests and extension scenarios](https://github.com/SebasLoadJs/NyxLink/actions/runs/44990871485), [endurance](https://github.com/SebasLoadJs/NyxLink/actions/runs/44990871556). This records the tested baseline, not the result of subsequent unverified changes.
 
 | Contract | Lavalink 4.2.2 | NodeLink 3.10.0-dev.2026-10-20.1 |
@@ -40,3 +55,11 @@ NodeLink 97bbce1 serializes its filter state as `player.filters.filters.timescal
 All four NyxLink CI workflows passed at [b9c451e](https://github.com/SebasLoadJs/NyxLink/commit/b9c451eedc1da1c07dd230a73840ddfe3e2fc951): [protocol tests including the pinned modern NodeLink profile](https://github.com/SebasLoadJs/NyxLink/actions/runs/45038936275), [587/587 automated tests and strict Node.js 22/24 compilation](https://github.com/SebasLoadJs/NyxLink/actions/runs/45038936280), [CodeQL](https://github.com/SebasLoadJs/NyxLink/actions/runs/45038936273) and [endurance](https://github.com/SebasLoadJs/NyxLink/actions/runs/45038936360). Modern NodeLink image version string: 3.10.0-dev.2026-11-15.8; immutable source revision 97bbce1.
 
 Modern results are authoritative for **tested REST and WebSocket operations only**. Group music synchronization, crossfaded audio, AutoMix results and Discord voice remain unverified. The previous baseline image and protocol checks are still retained for regression detection.
+
+## Resume checkpoint — 2026-11-23
+
+At `03546fd49faffdaaf9e0ad45e1e9c7439ec749a6`, [backend integration job 138107478444](https://github.com/SebasLoadJs/NyxLink/actions/runs/45293359304/job/138107478444) passed all 26 baseline protocol tests, then failed during the implicit download of the pinned modern NodeLink image in `docker run`. The complete log contains the start of the pull, but no registry error or completed pull. The failure timing is consistent with the harness's 120-second command deadline; the log alone does not establish why the registry download stalled.
+
+The local follow-up separates image availability from container startup. For example, `NYXLINK_NODELINK_PROFILE=modern pnpm run test:backends` still selects the same immutable modern digest. An available local image is reused; a missing pinned image is pulled with a 180-second deadline and at most one retry for recognized transient failures. Authentication, missing manifests, disk exhaustion and unknown errors fail immediately. Locally patched images must already exist. Startup uses `--pull=never`, retains the existing 120-second command deadline, and does not retry backend execution or assertions. Failure reports include the operation, exit/signal or timeout, and bounded output with generated lab credentials redacted.
+
+This follow-up is **implemented and unit tested locally, not verified against Docker or remote CI**. The development machine runs Windows without Docker; the lab also explicitly requires a Linux container host. Re-run baseline and modern protocol suites plus extension and endurance checks on a capable host before accepting a new candidate. See [local verification](resumption-verification.md).

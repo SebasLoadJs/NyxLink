@@ -1,4 +1,4 @@
-import { Manager, Player, Node, Track, Queue, Rest, Filters, SearchResult, NodeManager, PlayerManager, WebSocket, Connectors, VoiceReceiver, YouTubeLiveChat, SpotifySource, DeezerSource, Logger, NodeSelector, NodeHealthMonitor, NodeFailover, BackendDetector, HttpError, FeatureUnavailableError, NoEligibleNodeError, NodeCircuitBreaker, CircuitOpenError, type CircuitState, type CircuitBreakerOptions, type NodeRequirements, type NodeSelectionOptions, type NodeRejection, type FailoverResult, type StorageAdapter, type TrackSnapshot, TrackCodec, TrackResolver, TrackResolutionError, VoicePacketHandler, Memory, Local, version, PlayerSnapshotCodec, SnapshotConflictError, SnapshotValidationError, type PlayerSnapshot } from '../../dist';
+import { Manager, Player, Node, Track, Queue, Rest, Filters, SearchResult, NodeManager, PlayerManager, WebSocket, Connectors, VoiceReceiver, YouTubeLiveChat, SpotifySource, DeezerSource, AuroraEvents, createAuroraPinoEngine, TerminalDashboard, diagnoseError, NodeSelector, NodeHealthMonitor, NodeFailover, BackendDetector, HttpError, FeatureUnavailableError, NoEligibleNodeError, NodeCircuitBreaker, CircuitOpenError, type CircuitState, type CircuitBreakerOptions, type NodeRequirements, type NodeSelectionOptions, type NodeRejection, type FailoverResult, type StorageAdapter, type TrackSnapshot, TrackCodec, TrackResolver, TrackResolutionError, VoicePacketHandler, Memory, Local, version, PlayerSnapshotCodec, SnapshotConflictError, SnapshotValidationError, type PlayerSnapshot } from '../../dist';
 
 declare const manager: Manager;
 declare const player: Player;
@@ -9,9 +9,10 @@ const playing: Promise<boolean> = player.play({ track, position: 10 });
 const stopping: Promise<Player> = player.stop();
 const volume: Player = player.setVolume(75);
 const asyncVolume: Promise<Player> = player.setVolumeAsync(75);
-const logger = new Logger({ level: "debug", color: false });
-const detach: () => void = logger.attachManager(manager);
-manager.logger?.managerStatus(manager);
+const route = new (require('../../dist').AuroraEvents as typeof import('../../dist').AuroraEvents)({level:'silent'});
+route.attach(manager);
+const detach: () => void = () => route.close();
+manager.aurora?.recordInitialized();
 manager.detachLogger();
 const autoplay: Player = player.setAutoPlay(false);
 const transfer: Promise<boolean> = player.transferNode(node);
@@ -19,15 +20,17 @@ const search = manager.search({ query: 'test' });
 const queue: Queue = player.queue;
 const health = NodeHealthMonitor.inspect(node);
 const selected = NodeSelector.select([node]);
+NodeSelector.select([node], {}, { scoreWeights: { players: 1, cpu: 100, memory: 20, latency: 0.1, priority: 1 }, preferredNode: node.identifier, minimumScoreImprovement: 2 });
 const failover: Promise<FailoverResult> = NodeFailover.move(player, node, { maxAttempts: 2 });
 const backend = BackendDetector.detect({ version: { semver: '4.2.2' } });
 const configuredNode: Parameters<NodeManager['add']>[0] = { host: 'localhost', port: 2333, password: 'test', secure: false, retryAmount: 0, readyTimeoutMs: 10000 };
 void [health, selected, failover, backend, HttpError, FeatureUnavailableError, configuredNode];
-void [asyncVolume, detach, playing, stopping, volume, autoplay, transfer, search, queue, Rest, Filters, SearchResult, NodeManager, PlayerManager, WebSocket, Connectors, VoiceReceiver, YouTubeLiveChat, SpotifySource, DeezerSource, Logger, version];
+void [asyncVolume, detach, playing, stopping, volume, autoplay, transfer, search, queue, Rest, Filters, SearchResult, NodeManager, PlayerManager, WebSocket, Connectors, VoiceReceiver, YouTubeLiveChat, SpotifySource, DeezerSource, AuroraEvents, version];
 
 const snapshot: TrackSnapshot = TrackCodec.serialize(track);
 const restored: Track = TrackCodec.restore(snapshot);
 const resolved: Promise<Track> = TrackResolver.resolve(track, node);
+const abortableResolved: Promise<Track> = TrackResolver.resolve(track, node, undefined, AbortSignal.timeout(1000));
 const adapter: StorageAdapter = new Memory();
 const local: StorageAdapter = new Local();
 const configured = new Manager({ nodes: [configuredNode], options: { database: { type: 'memory', adapter } } });
@@ -42,9 +45,12 @@ const disposed: void = connector.dispose();
 void [shuttingDown, isClosed, disposed];
 
 const searchConfig = new Manager({ nodes: [configuredNode], options: { search: { timeoutMs: 1000, fallbackPlatforms: ['soundcloud'], cache: { ttlMs: 5000, maxEntries: 10 }, resolver: async (_query, _node) => null } } });
+const metadataResolutionConfig = new Manager({ nodes: [configuredNode], options: { search: {
+  trackResolution: { sources: ['youtube', 'soundcloud'], minimumScore: 0.85, durationToleranceMs: 9000, maxCandidates: 20, timeoutMs: 2500 },
+} } });
 const cancellable = manager.search({ query: 'local fixture', signal: AbortSignal.timeout(1000) });
 const streaming = node.rest.loadStream({ encodedTrack: track.encoded, format: 'wav' }, { signal: AbortSignal.timeout(1000), timeoutMs: 1000 });
-void [searchConfig, cancellable, streaming];
+void [searchConfig, metadataResolutionConfig, abortableResolved, cancellable, streaming];
 
 const requirements: NodeRequirements = { backend: 'nodelink', requiredCapabilities: ['source:http'] as const, region: 'eu', regionPolicy: 'require' };
 const selection: NodeSelectionOptions = { ...requirements, exclude: ['maintenance'] as const, allowUnhealthyFallback: false };
@@ -262,3 +268,31 @@ const badGatewayOpcode: import('../../dist').GuildVoiceGatewayPacket = { op: 5, 
 // @ts-expect-error Fenced voice IPC requires a boolean Discord self_mute flag.
 const invalidGatewayMute: import('../../dist').GuildVoiceGatewayPacket = { op: 4, d: { ...voiceGatewayPacket.d, self_mute: 'no' } };
 void [outboundEnvelope, routedPacket, badGatewayOpcode, invalidGatewayMute];
+
+const canonicalEvents: import('../../dist').AuroraEvent[] = [];
+const engine = createAuroraPinoEngine('debug', event => canonicalEvents.push(event));
+const logging: import('../../dist').AuroraEventOptions = {level:'debug', target:engine.target};
+const dashboard = new TerminalDashboard(manager, {mode:'static'});
+const diagnostic: import('../../dist').ErrorDiagnostic = diagnoseError(new Error('fixture'));
+const observed: import('../../dist').TerminalDashboardSnapshot = dashboard.render();
+// @ts-expect-error The standalone Logger has been removed.
+type RemovedLogger = import('../../dist').Logger;
+// @ts-expect-error Invalid severity is not accepted.
+const invalidLogging: import('../../dist').AuroraEventOptions = {level:'invalid'};
+void [logging, observed, diagnostic, invalidLogging];
+const mixCreated: Promise<import('../../dist').MixLayerCreated | null> = player.addMix('encoded', { volume: 0.5 });
+const mixList: Promise<import('../../dist').MixLayersResponse | null> = player.getMixes();
+// @ts-expect-error Mixer volume is numeric.
+player.updateMixVolume('mix-id', 'loud');
+void [mixCreated, mixList];
+
+const optionalExtension: import('../../dist').NyxExtension = { name: 'typed-observer', setup(context) {
+    context.on('trackStart', (playingPlayer, track) => { const ids: [string, string | undefined] = [playingPlayer.guildId, track.identifier]; void ids; });
+    // @ts-expect-error Event names must be from the manager contract.
+    context.on('inventedEvent', () => {});
+    void context.signal;
+} };
+const extensionDisposer: Promise<() => Promise<void>> = manager.useExtension(optionalExtension);
+void extensionDisposer;
+const migrationStage: import('../../dist').MigrationStage = 'persist-snapshot';
+void migrationStage;

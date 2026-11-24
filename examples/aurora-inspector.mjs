@@ -1,6 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, render, useApp, useInput } from 'ink';
 import { writeFile } from 'node:fs/promises';
+import TextInput from 'ink-text-input';
+import SelectInput from 'ink-select-input';
+import Spinner from 'ink-spinner';
+import prettyBytes from 'pretty-bytes';
+import Fuse from 'fuse.js';
+import Link from 'ink-link';
+import { latencyChart, readinessChart, fitLabel, viewport, terminalUnicode, stateMarker, canLink, documentationUrl } from './aurora-terminal-tools.mjs';
 
 /** Retained spans only; absent parents are not fabricated. Iterative traversal avoids cycles. */
 export function traceRows(spans, traceId, limit=30){
@@ -41,8 +48,19 @@ const backends = ['all','lavalink','nodelink','unknown'];
 const cycle = (values, value) => values[(values.indexOf(value) + 1) % values.length];
 const ms = value => value === undefined ? 'N/A' : Math.round(value) + 'ms';
 const short = id => id?.slice(0, 8) ?? '-';
+// Prefer literal matches. Fuzzy search is a fallback on sanitized Inspector data only.
+function matchRecords(records, query) {
+    const term = query.trim().toLowerCase();
+    if (!term) return records;
+    const indexed = records.map((item, index) => ({ index, text: JSON.stringify(item).toLowerCase() }));
+    const exact = indexed.filter(item => item.text.includes(term));
+    if (exact.length) return exact.map(item => records[item.index]);
+    if (term.length < 3) return [];
+    const matched = new Fuse(indexed, { keys: ['text'], threshold: 0.25, ignoreLocation: true, shouldSort: false }).search(term);
+    return matched.map(result => records[result.item.index]);
+}
 
-export function Inspector({ source, initialTab = 'Overview', interactive = true, reportPath }) {
+export function Inspector({ source, initialTab = 'Overview', interactive = true, reportPath, columns=80, unicode=terminalUnicode(), hyperlinks=false }) {
     const { exit } = useApp();
     const [snapshot, setSnapshot] = useState(() => source.snapshot());
     const [tab, setTab] = useState(Math.max(0, tabs.indexOf(initialTab)));
@@ -51,6 +69,14 @@ export function Inspector({ source, initialTab = 'Overview', interactive = true,
     const [backend, setBackend] = useState('all');
     const [query, setQuery] = useState('');
     const [searching, setSearching] = useState(false);
+    const [choosing,setChoosing]=useState(false);
+    const inputMode = useRef('navigation');
+    const changeMode = mode => {
+        inputMode.current = mode;
+        setSearching(mode === 'search');
+        setChoosing(mode === 'jump');
+    };
+    const [exporting,setExporting]=useState(false);
     const [paused, setPaused] = useState(false);
     const [cursor, setCursor] = useState(0);
     const [detail, setDetail] = useState(false);
@@ -60,21 +86,15 @@ export function Inspector({ source, initialTab = 'Overview', interactive = true,
         const timer = setInterval(() => { try { source.sampleLatencies?.(); setSnapshot(source.snapshot()); } catch {} }, 500);
         return () => clearInterval(timer);
     }, [source, paused, interactive]);
-    const matches = item => JSON.stringify(item).toLowerCase().includes(query.toLowerCase());
-    const nodes = snapshot.nodes.filter(n => (backend === 'all' || n.backend === backend) && matches(n));
-    const players = snapshot.players.filter(p => (backend === 'all' || p.backend === backend) && matches(p));
-    const events = snapshot.events.filter(e => (level === 'all' || e.level === level) &&
-        (category === 'all' || e.category === category) && (backend === 'all' || e.backend === backend) && matches(e)).slice().reverse();
-    const spans = snapshot.spans.filter(matches).slice().reverse();
+    const nodes = useMemo(() => matchRecords(snapshot.nodes.filter(n => backend === 'all' || n.backend === backend), query), [snapshot,backend,query]);
+    const players = useMemo(() => matchRecords(snapshot.players.filter(p => backend === 'all' || p.backend === backend), query), [snapshot,backend,query]);
+    const events = useMemo(() => matchRecords(snapshot.events.filter(e => (level === 'all' || e.level === level) &&
+        (category === 'all' || e.category === category) && (backend === 'all' || e.backend === backend)), query).slice().reverse(), [snapshot,level,category,backend,query]);
+    const spans = useMemo(() => matchRecords(snapshot.spans, query).slice().reverse(), [snapshot,query]);
     const items = [[], nodes, players, events, spans][tab];
     const selected = Math.min(cursor, Math.max(0, items.length - 1));
     useInput((input, key) => {
-        if (searching) {
-            if (key.escape || key.return) setSearching(false);
-            else if (key.backspace || key.delete) setQuery(q => q.slice(0,-1));
-            else if (!key.ctrl && !key.meta && /^[ -~]+$/.test(input)) setQuery(q => (q + input).slice(0,80));
-            setCursor(0); return;
-        }
+        if (inputMode.current !== 'navigation' || ((searching || choosing) && key.return)) { if (key.escape) changeMode('navigation'); return; }
         if (input === 'q' || (key.ctrl && input === 'c')) { exit(); return; }
         if (key.tab || key.rightArrow || key.leftArrow) {
             const delta = key.leftArrow || key.shift ? -1 : 1;
@@ -87,10 +107,12 @@ export function Inspector({ source, initialTab = 'Overview', interactive = true,
         else if (input === 'f') { setLevel(v => cycle(levels,v)); setCursor(0); }
         else if (input === 'c') { setCategory(v => cycle(categories,v)); setCursor(0); }
         else if (input === 'b') { setBackend(v => cycle(backends,v)); setCursor(0); }
-        else if (input === '/') setSearching(true);
-        else if (input === 'e' && reportPath) {
+        else if (input === '/') { setDetail(false); changeMode('search'); }
+        else if (input === 'g') { setDetail(false); changeMode('jump'); }
+        else if (input === 'e' && reportPath && !exporting) {
+            setExporting(true);
             setExportStatus('Exporting...');
-            exportInspectorReport(source,reportPath).then(()=>setExportStatus('Report saved'),()=>setExportStatus('Report export failed (file may already exist)'));
+            exportInspectorReport(source,reportPath).then(()=>setExportStatus('Report saved'),()=>setExportStatus('Report export failed (file may already exist)')).finally(()=>setExporting(false));
         }
     }, { isActive: interactive });
     const rows = [];
@@ -98,6 +120,8 @@ export function Inspector({ source, initialTab = 'Overview', interactive = true,
         rows.push('Nodes: ' + snapshot.nodes.filter(n=>n.ready).length + '/' + snapshot.nodes.length + ' ready',
             'Players: ' + snapshot.players.length, 'Events retained: ' + snapshot.events.length,
             'Completed spans retained: ' + snapshot.spans.length);
+        rows.push('Network readiness: '+readinessChart(snapshot.nodes.filter(n=>n.ready).length,snapshot.nodes.length,{unicode}));
+        for(const node of snapshot.nodes.slice(0,6))rows.push(stateMarker(node.ready,unicode)+' '+node.alias+' '+latencyChart(source.latencyHistory?.(node.alias)??[],{width:Math.min(24,Math.max(6,columns-20)),unicode}));
     } else {
         const from = Math.max(0, selected - 5);
         for (const [i, item] of items.slice(from,from+10).entries()) {
@@ -116,21 +140,23 @@ export function Inspector({ source, initialTab = 'Overview', interactive = true,
                     'Parent: ' + (item.parentSpanId ?? 'root or unknown'));
                 rows.push(...traceRows(snapshot.spans,item.traceId,8));
             } else if (tab === 1) {
-                rows.push('Memory bytes: ' + (item.memoryUsedBytes ?? 'N/A'));
+                rows.push('Memory: ' + (Number.isFinite(item.memoryUsedBytes)&&item.memoryUsedBytes>=0?prettyBytes(item.memoryUsedBytes):'N/A'));
                 const history=source.latencyHistory?.(item.alias)??[];
-                if(history.length)rows.push('Latency samples: '+history.slice(-8).map(x=>ms(x.latencyMs)).join(' / '));
+                if(history.length)rows.push('Latency samples: '+latencyChart(history,{width:Math.min(24,Math.max(6,columns-20)),unicode}));
                 for (const feature of item.capabilities.slice(0,8)) rows.push(feature.feature + ': ' + feature.state + ' (' + feature.evidence + ')');
             } else if (tab === 3) rows.push(item.message, 'Trace: ' + (item.traceId ?? 'N/A'), 'Duration: ' + ms(item.durationMs));
         }
     }
     return h(Box,{flexDirection:'column'},
-        h(Text,{bold:true}, 'NYXLINK INSPECTOR | ' + snapshot.source.toUpperCase() + (paused?' | PAUSED':'')),
-        h(Text,{},tabs.map((name,i)=>i===tab?'['+name+']':name).join('  ')),
+        h(Text,{bold:true,color:'#A78BFA'}, 'NYXLINK INSPECTOR | ' + snapshot.source.toUpperCase() + (paused?' | PAUSED':'')),
+        h(Text,{color:'#36E7F2'},tabs.map((name,i)=>i===tab?'['+name+']':name).join('  ')),
         h(Text,{},'Level: '+level+'  Category: '+category+'  Backend: '+backend),
-        h(Text,{},'Search: '+query+(searching?'_':'')),
-        ...rows.map((line,i)=>h(Text,{key:i},line)),
-        ...(exportStatus?[h(Text,{key:'export'},exportStatus)]:[]),
-        h(Text,{dimColor:true},'Tab/arrows: navigate | Enter: detail | p: pause | f/c/b: filters | /: search | q: quit'+(reportPath?' | e: export':''))
+        searching?h(Box,{},h(Text,{},'Search (editing): '),h(TextInput,{focus:interactive,placeholder:'Type to filter',value:query,onChange:value=>{if(inputMode.current==='search'){setQuery(value.replace(/[^ -~]/g,'').slice(0,80));setCursor(0);}},onSubmit:()=>{if(inputMode.current==='search')changeMode('navigation');}})):h(Text,{},'Search: '+viewport(query,0,Math.max(1,columns-9))),
+        ...(choosing?[h(Text,{key:'jump-label'},'Jump to view:'),h(SelectInput,{key:'jump',items:tabs.map((label,value)=>({label,value})),onSelect:item=>{if(inputMode.current==='jump'){setTab(item.value);setCursor(0);setDetail(false);changeMode('navigation');}}})]:[]),
+        ...rows.map((line,i)=>h(Text,{key:i,color:line.startsWith('> ')?'#55E9B6':undefined},fitLabel(line,Math.max(10,columns-1)))),
+        ...(exportStatus?[h(Text,{key:'export'},exporting&&interactive?h(Spinner,{type:'dots'}):null,exportStatus)]:[]),
+        ...(hyperlinks?[h(Link,{key:'docs',url:documentationUrl,fallback:false},'Aurora documentation')]:[]),
+        h(Text,{dimColor:true},'Tab/arrows: navigate | g: jump | Enter: detail | p: pause | f/c/b: filters | /: search | q: quit'+(reportPath?' | e: export':''))
     );
 }
 export function startInspector(source, options = {}) {
@@ -143,5 +169,5 @@ export function startInspector(source, options = {}) {
         return undefined;
     }
     // Explicit standalone mode. Do not run other stdout renderers beside Ink.
-    return render(h(Inspector,{source,reportPath:options.reportPath}),{stdout,stdin,patchConsole:false});
+    return render(h(Inspector,{source,reportPath:options.reportPath,columns:stdout.columns??80,hyperlinks:canLink(stdout)}),{stdout,stdin,patchConsole:false});
 }

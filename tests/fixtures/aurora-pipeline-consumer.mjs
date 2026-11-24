@@ -6,7 +6,7 @@ for(const format of ['silent','json','pretty','aurora']){
     const chunks=[],events=[];
     const stream=new Writable({write(chunk,_encoding,done){chunks.push(chunk.toString());done();}});
     const pipeline=createAuroraPipeline({format,level:format==='silent'?'silent':'debug',stream,onEvent:e=>events.push(e)});
-    const manager=new Manager({nodes:[{host:'localhost',port:2333,password:'private-password',secure:false}],options:{aurora:{level:pipeline.level,target:pipeline.target}}});
+    const manager=new Manager({nodes:[{host:'localhost',port:2333,password:'private-password',secure:false}],options:{logging:{level:pipeline.level,target:pipeline.target}}});
     try{
         pipeline.banner(manager);pipeline.banner(manager);
         manager.emit('nodeReady',{backend:{kind:'nodelink'}},{token:'private-token'});
@@ -31,7 +31,7 @@ for(const format of ['silent','json','pretty','aurora']){
 const customEvents=[];
 const customTarget=Object.fromEntries(['trace','debug','info','warn','error','fatal'].map(l=>[l,(record)=>customEvents.push(record)]));
 const custom=createAuroraPipeline({format:'custom',target:customTarget});
-const manager=new Manager({nodes:[{host:'localhost',port:2333,password:'fixture',secure:false}],options:{aurora:{target:custom.target,level:custom.level}}});
+const manager=new Manager({nodes:[{host:'localhost',port:2333,password:'fixture',secure:false}],options:{logging:{target:custom.target,level:custom.level}}});
 try{manager.emit('nodeReady',{backend:{kind:'lavalink'}},{});assert.equal(customEvents.length,1);}finally{await manager.shutdown();await custom.close();}
 
 const staticChunks=[];
@@ -39,3 +39,13 @@ const musicPipeline=createAuroraPipeline({format:'aurora',stream:new Writable({w
 const endMusic=musicPipeline.startMusic({snapshot:()=>({state:'playing',positionMs:500,durationMs:1000})});
 endMusic();await musicPipeline.close();
 assert.match(staticChunks.join(''),/MUSIC PLAYING/);
+
+const privateRecords=[];
+const filtered=createAuroraPipeline({format:'custom',level:'warn',target:Object.fromEntries(['trace','debug','info','warn','error','fatal'].map(l=>[l,e=>privateRecords.push(e)]))});
+const safe={eventCode:'NODE_ERROR',severity:'error',timestamp:new Date().toISOString(),sanitizedContext:{backend:'nodelink',token:'private-token'},password:'private-password'};
+filtered.target.info({...safe,eventCode:'NODE_READY',severity:'info'});
+filtered.target.error(safe);
+await filtered.close();
+filtered.target.error(safe);
+assert.equal(privateRecords.length,1);
+assert.doesNotMatch(JSON.stringify(privateRecords),/private-/);

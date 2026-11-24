@@ -32,7 +32,12 @@
     "release:check-tag": "node scripts/check-release-tag.cjs",
     "release:check-voice-evidence": "node scripts/check-live-voice-evidence.cjs",
     "release:check-registry": "node scripts/check-npm-registry.cjs",
-    "release:check-endurance-evidence": "node scripts/check-endurance-evidence.cjs"
+    "release:check-endurance-evidence": "node scripts/check-endurance-evidence.cjs",
+    "bench:logging": "pnpm run build && node --expose-gc scripts/benchmark-logging.cjs",
+    "test:live": "node scripts/test-live-suite.cjs",
+    "test:soak": "node scripts/test-soak.cjs",
+    "fixtures:live": "node scripts/create-live-fixtures.cjs",
+    "docs:api": "pnpm run build && node scripts/generate-api-reference.cjs"
   },
   "homepage": "https://github.com/SebasLoadJs/NyxLink#readme",
   "bugs": {
@@ -52,7 +57,8 @@
   "devDependencies": {
     "@types/node": "^24.10.0",
     "discord.js": "^14.25.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "tinybench": "6.2.1"
   },
   "private": false,
   "packageManager": "pnpm@10.34.5",
@@ -60,14 +66,230 @@
     "dist",
     "assets/nyxlink_banner.png",
     "LICENSE",
-    "NOTICE.md"
+    "NOTICE.md",
+    "examples/aurora-*.mjs",
+    "examples/aurora-*.d.mts",
+    "examples/aurora-sdk.cjs",
+    "examples/aurora-sdk.d.cts"
   ],
   "dependencies": {
-    "consola": "3.4.2"
+    "consola": "3.4.2",
+    "pino": "10.4.0"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
     "access": "public",
     "tag": "dev"
+  },
+  "peerDependencies": {
+    "pino-pretty": "13.2.0",
+    "figlet": "1.11.3",
+    "gradient-string": "3.0.0",
+    "chalk": "5.6.2",
+    "boxen": "8.0.1",
+    "string-width": "7.2.0",
+    "strip-ansi": "7.1.2",
+    "pretty-ms": "9.2.0",
+    "log-symbols": "7.0.1",
+    "listr2": "8.3.3",
+    "ora": "8.2.0",
+    "cli-progress": "3.12.0",
+    "cli-table3": "0.6.5",
+    "pretty-bytes": "6.1.1",
+    "log-update": "6.1.0",
+    "ink": "5.2.1",
+    "react": "18.3.1",
+    "cli-truncate": "4.0.0",
+    "wrap-ansi": "9.0.0",
+    "slice-ansi": "7.1.0",
+    "is-unicode-supported": "2.1.0",
+    "figures": "6.1.0",
+    "ink-text-input": "6.0.0",
+    "ink-select-input": "6.2.0",
+    "ink-spinner": "5.0.0",
+    "@opentelemetry/api": "1.9.0",
+    "@opentelemetry/sdk-node": "0.220.0",
+    "@opentelemetry/instrumentation-pino": "0.55.1",
+    "@opentelemetry/sdk-trace-base": "2.9.0",
+    "@opentelemetry/sdk-metrics": "2.9.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.220.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "0.220.0",
+    "fuse.js": "7.5.0",
+    "@opentelemetry/api-logs": "0.220.0",
+    "@opentelemetry/sdk-logs": "0.220.0",
+    "@opentelemetry/exporter-logs-otlp-http": "0.220.0",
+    "ansi-escapes": "7.3.0",
+    "terminal-link": "3.0.0",
+    "supports-hyperlinks": "2.3.0",
+    "ink-link": "4.1.0",
+    "pino-abstract-transport": "3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "pino-pretty": {
+      "optional": true
+    },
+    "figlet": {
+      "optional": true
+    },
+    "gradient-string": {
+      "optional": true
+    },
+    "chalk": {
+      "optional": true
+    },
+    "boxen": {
+      "optional": true
+    },
+    "string-width": {
+      "optional": true
+    },
+    "strip-ansi": {
+      "optional": true
+    },
+    "pretty-ms": {
+      "optional": true
+    },
+    "log-symbols": {
+      "optional": true
+    },
+    "listr2": {
+      "optional": true
+    },
+    "ora": {
+      "optional": true
+    },
+    "cli-progress": {
+      "optional": true
+    },
+    "cli-table3": {
+      "optional": true
+    },
+    "pretty-bytes": {
+      "optional": true
+    },
+    "log-update": {
+      "optional": true
+    },
+    "ink": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "cli-truncate": {
+      "optional": true
+    },
+    "wrap-ansi": {
+      "optional": true
+    },
+    "slice-ansi": {
+      "optional": true
+    },
+    "is-unicode-supported": {
+      "optional": true
+    },
+    "figures": {
+      "optional": true
+    },
+    "ink-text-input": {
+      "optional": true
+    },
+    "ink-select-input": {
+      "optional": true
+    },
+    "ink-spinner": {
+      "optional": true
+    },
+    "@opentelemetry/api": {
+      "optional": true
+    },
+    "@opentelemetry/sdk-node": {
+      "optional": true
+    },
+    "@opentelemetry/instrumentation-pino": {
+      "optional": true
+    },
+    "@opentelemetry/sdk-trace-base": {
+      "optional": true
+    },
+    "@opentelemetry/sdk-metrics": {
+      "optional": true
+    },
+    "@opentelemetry/exporter-trace-otlp-http": {
+      "optional": true
+    },
+    "@opentelemetry/exporter-metrics-otlp-http": {
+      "optional": true
+    },
+    "fuse.js": {
+      "optional": true
+    },
+    "@opentelemetry/api-logs": {
+      "optional": true
+    },
+    "@opentelemetry/sdk-logs": {
+      "optional": true
+    },
+    "@opentelemetry/exporter-logs-otlp-http": {
+      "optional": true
+    },
+    "ansi-escapes": {
+      "optional": true
+    },
+    "terminal-link": {
+      "optional": true
+    },
+    "supports-hyperlinks": {
+      "optional": true
+    },
+    "ink-link": {
+      "optional": true
+    },
+    "pino-abstract-transport": {
+      "optional": true
+    }
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json",
+    "./aurora": {
+      "types": "./examples/aurora-pipeline.d.mts",
+      "import": "./examples/aurora-pipeline.mjs"
+    },
+    "./aurora/bootstrap": {
+      "types": "./examples/aurora-bootstrap.d.mts",
+      "import": "./examples/aurora-bootstrap.mjs"
+    },
+    "./aurora/inspector": {
+      "types": "./examples/aurora-inspector.d.mts",
+      "import": "./examples/aurora-inspector.mjs"
+    },
+    "./aurora/diagnostics": {
+      "types": "./examples/aurora-diagnostics.d.mts",
+      "import": "./examples/aurora-diagnostics.mjs"
+    },
+    "./aurora/otel": {
+      "types": "./examples/aurora-otel.d.mts",
+      "import": "./examples/aurora-otel.mjs"
+    },
+    "./aurora/sdk": {
+      "types": "./examples/aurora-sdk.d.cts",
+      "default": "./examples/aurora-sdk.cjs"
+    },
+    "./aurora/file": {
+      "types": "./examples/aurora-file.d.mts",
+      "import": "./examples/aurora-file.mjs"
+    }
+  },
+  "bin": {
+    "nyxlink-aurora": "./examples/aurora-demo.mjs"
+  },
+  "pnpm": {
+    "overrides": {
+      "ws@>=8.0.0 <8.21.0": "8.21.0"
+    }
   }
 }

@@ -4,7 +4,6 @@ import { Player } from "../entities/Player";
 import { Track } from "../entities/Track";
 import { Filters } from "../entities/Filters";
 import { NodeState, PlayerLoop, TrackEndReason, NodeSortStrategy, TPartialTrackProperties } from "./types";
-import type { LoggerOptions } from '../logging/Logger';
 import type { AuroraEventOptions } from '../logging/AuroraEvents';
 import type { OpenTelemetryOptions } from '../observability/OpenTelemetry';
 import type { FailoverOptions } from '../nodes/NodeFailover';
@@ -15,6 +14,7 @@ import type { NodeRequirements } from '../nodes/NodeSelector';
 import type { CircuitBreakerOptions } from '../nodes/NodeCircuitBreaker';
 
 export interface IManagerEvents {
+    extensionError: (name: string, error: import('../extensions/ExtensionHost').ExtensionLifecycleError) => void;
     debug: (message: string) => void;
 
     // Node Events
@@ -139,8 +139,9 @@ export interface IManagerNodeConfig {
 }
 
 export interface IManagerOptionsConfig {
-    logging?: LoggerOptions & { banner?: boolean };
-    aurora?: AuroraEventOptions;
+    recommendations?: import('../autoplay/RecommendationPreference').RecommendationPreferences;
+    /** Canonical Aurora logging; absent or silent means no output. */
+    logging?: AuroraEventOptions;
     telemetry?: OpenTelemetryOptions;
     clientName?: string;
     userAgent?: string;
@@ -202,6 +203,10 @@ export interface INodeOptions {
 }
 
 export interface ISearchOptions {
+    /** Share simultaneous backend requests; cancellation remains per caller. Default false. */
+    deduplicate?: boolean;
+    /** Explicit opt-in metadata fallback after direct destination resolution fails. */
+    trackResolution?: import('../tracks/MetadataTrackResolver').MetadataResolutionOptions;
     /** Prefer nodes with fresh, healthy telemetry for recognized text-search sources. */
     sourceHealth?: boolean;
     timeoutMs?: number;

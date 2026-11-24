@@ -3,7 +3,7 @@ import pino from 'pino';
 import { prettyFactory } from 'pino-pretty';
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { InMemoryMetricExporter, MeterProvider, PeriodicExportingMetricReader, AggregationTemporality } from '@opentelemetry/sdk-metrics';
-import { Manager, SearchResult, createPinoSink } from 'nyxlink';
+import { Manager, SearchResult } from 'nyxlink';
 
 async function main(): Promise<void> {
     const lines: string[] = [];
@@ -11,7 +11,7 @@ async function main(): Promise<void> {
     const auroraTarget = pino({ level: 'debug' }, { write(line: string) { auroraLines.push(line); } });
     const auroraManager = new Manager({
         nodes: [{ host: '127.0.0.1', port: 2333, password: 'fixture', secure: false }],
-        options: { aurora: { target: auroraTarget, level: 'info' } },
+        options: { logging: { target: auroraTarget, level: 'info' } },
     });
     try {
         auroraManager.emit('nodeReady', { backend: { kind: 'nodelink' } } as import('nyxlink').Node, { token: 'private-token' });
@@ -32,22 +32,23 @@ async function main(): Promise<void> {
     const manager = new Manager({
         nodes: [{ host: '127.0.0.1', port: 2333, password: 'fixture', secure: false }],
         options: {
-            logging: { level: 'info', console: false, sink: createPinoSink(logger) },
+            logging: { level: 'info', target: logger },
             telemetry: { meter: meters.getMeter('nyxlink-test'), tracer: traces.getTracer('nyxlink-test') },
         },
     });
     try {
-        manager.logger!.info('Node', 'connected', { token: 'secret-canary-987' });
-        manager.logger!.warn('Node', 'warning');
+        const node = { backend: { kind: 'nodelink' } } as import('nyxlink').Node;
+        manager.emit('nodeReady', node, { token: 'secret-canary-987' });
+        manager.emit('nodeDisconnect', node, 1006, 'private-disconnect');
         assert.equal(lines.length, 2);
         const records = lines.map(line => JSON.parse(line));
         assert.deepEqual(records.map(record => record.level), [30, 40]);
-        assert.equal(records[0].nyxlinkLevel, 3);
-        assert.equal(records[0].module, 'Node');
-        assert.match(records[0].msg, /connected/);
+        assert.equal(records[0].eventCode, 'NODE_READY');
+        assert.equal(records[0].category, 'NODE');
+        assert.match(records[0].msg, /Backend session ready/);
         assert.doesNotMatch(lines.join(''), /secret-canary-987/);
         const pretty = prettyFactory({ colorize: false });
-        assert.match(String(pretty(lines[0])), /INFO.*connected/);
+        assert.match(String(pretty(lines[0])), /INFO.*Backend session ready/);
         // Stub only the upstream search response, not telemetry.
         const searcher = manager as unknown as { searches: { search: () => Promise<SearchResult> } };
         searcher.searches.search = async () => new SearchResult({ loadType: 'empty', data: {} });

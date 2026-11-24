@@ -48,3 +48,14 @@ test('latency samples are bounded and detached, missing measurements are not syn
    m.nodes.nodes.clear();store.sampleLatencies(101);assert.deepEqual(store.latencyHistory('NODE-01'),[]);
  }finally{m.nodes.nodes.clear();await m.shutdown();}
 });
+
+test('inspector treats accessor and proxy records as untrusted without synthesizing observations',async()=>{
+ const m=new Manager({nodes:[{host:'localhost',port:2333,password:'fixture'}]});const store=new AuroraInspectorStore(m);
+ let touched=0;const trap=()=>{touched++;throw Error('must not run');};const proxy=new Proxy({},{get:trap,getOwnPropertyDescriptor:trap});
+ try{
+  assert.equal(store.recordEvent(proxy),false);assert.equal(store.recordSpan(proxy),false);
+  assert.equal(store.recordEvent({eventCode:'NODE_READY',get timestamp(){return trap();},sanitizedContext:proxy}),true);
+  assert.equal(store.recordSpan({name:'nyxlink.search',traceId:'a'.repeat(32),spanId:'b'.repeat(16),get durationMs(){return trap();},outcome:'ok'}),false);
+  const event=store.snapshot().events[0];assert.equal(event.timestamp,undefined);assert.equal(event.backend,'unknown');assert.equal(touched,0);
+ }finally{await m.shutdown();}
+});

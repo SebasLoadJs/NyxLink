@@ -6,12 +6,12 @@ const { trace, metrics } = require('@opentelemetry/api');
 async function main() {
     const requests = [];
     const server = http.createServer((req,res)=>{
-        let bytes=0;
-        req.on('data',chunk=>bytes+=chunk.length);
-        req.on('end',()=>{requests.push({path:req.url,bytes});res.writeHead(200,{'content-type':'application/json'});res.end('{}');});
+        let bytes=0;const chunks=[];
+        req.on('data',chunk=>{bytes+=chunk.length;chunks.push(chunk);});
+        req.on('end',()=>{requests.push({path:req.url,bytes,body:Buffer.concat(chunks)});res.writeHead(200,{'content-type':'application/json'});res.end('{}');});
     });
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
-    const sdk = createHostSDK({endpoint:'http://127.0.0.1:'+server.address().port,automaticCorrelation:true});
+    const sdk = createHostSDK({endpoint:'http://127.0.0.1:'+server.address().port,automaticCorrelation:true,exportLogs:true});
     try {
         sdk.start();
         // Require only after registration so instrumentation can patch the module.
@@ -21,6 +21,8 @@ async function main() {
         const tracer=trace.getTracer('aurora-fixture');
         tracer.startActiveSpan('nyxlink.search',span=>{
             logger.info('fixture');
+            assert.equal(sdk.emitAuroraEvent({eventCode:'NODE_READY',sanitizedContext:{backend:'nodelink',token:'PRIVATE_CANARY'}}),true);
+            assert.equal(sdk.emitAuroraEvent({eventCode:'INVALID'}),false);
             span.end();
         });
         metrics.getMeter('aurora-fixture').createCounter('nyxlink.fixture').add(1);
@@ -30,7 +32,9 @@ async function main() {
         await sdk.close();
         assert.ok(requests.some(r=>r.path==='/v1/traces'&&r.bytes>0));
         assert.ok(requests.some(r=>r.path==='/v1/metrics'&&r.bytes>0));
-        assert.ok(requests.every(r=>r.path!=='/v1/logs'));
+        const sent=requests.filter(r=>r.path==='/v1/logs');
+        assert.equal(sent.length,1);assert.ok(sent[0].bytes>0);
+        assert.doesNotMatch(sent[0].body.toString(),/PRIVATE_CANARY|fixture/);
     } finally {
         try{await sdk.close();}finally{await new Promise(resolve=>server.close(resolve));}
     }

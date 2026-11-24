@@ -7,7 +7,7 @@ import { Writable } from 'node:stream';
 const source = { snapshot: () => ({
     source:'simulated',nodes:[{alias:'NODE-01',backend:'nodelink',ready:true,capabilities:[]}],
     players:[{alias:'PLAYER-01',backend:'nodelink',state:'paused'}],
-    events:[{code:'NODE_READY',level:'info',category:'NODE',backend:'nodelink',message:'Backend session ready'}],
+    events:[{code:'NODE_READY',level:'info',category:'NODE',backend:'nodelink',message:'Backend session ready'},{code:'QUEUE_ADDED',level:'info',category:'QUEUE',backend:'lavalink',message:'Track queued'}],
     spans:[{name:'nyxlink.search',traceId:'a'.repeat(32),spanId:'b'.repeat(16),durationMs:12,outcome:'ok'}],
 }) };
 for (const [tab, pattern] of [['Overview',/Nodes: 1\/1 ready/],['Nodes',/NODE-01/],['Players',/PLAYER-01/],['Events',/NODE_READY/],['Traces',/nyxlink.search/]]) {
@@ -33,3 +33,37 @@ try{
  assert.equal(data.schemaVersion,1);assert.equal(data.source,'simulated');
  await assert.rejects(exportInspectorReport(source,report),{code:'EEXIST'});
 }finally{await fs.rm(dir,{recursive:true,force:true});}
+
+const measuredSource={...source,latencyHistory:()=>[10,25,12,40].map(latencyMs=>({latencyMs}))};
+for(const columns of [40,80,120]){
+ const app=render(React.createElement(Inspector,{source:measuredSource,initialTab:'Overview',interactive:false,columns,unicode:true}));
+ try{assert.match(app.lastFrame(),/Network readiness:/);assert.match(app.lastFrame(),/40ms/);}
+ finally{app.unmount();app.cleanup();}
+}
+const app=render(React.createElement(Inspector,{source,initialTab:'Events',interactive:true,columns:80}));
+try{
+ const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+ const frame=async pattern=>{
+   const deadline=Date.now()+3000;
+   do {if(pattern.test(app.lastFrame()??''))return;await delay(25);}while(Date.now()<deadline);
+   assert.match(app.lastFrame()??'',pattern);
+ };
+ // Ink registers input listeners in effects after the initial render.
+ await frame(/\[Events\]/);await delay(100);
+ app.stdin.write('/');await frame(/Search \(editing\):/);await delay(50);
+ app.stdin.write('NODE_READY');await frame(/Search \(editing\): NODE_READY/);
+ assert.doesNotMatch(app.lastFrame(),/QUEUE_ADDED/);
+ app.stdin.write('\r');await frame(/Search: NODE_READY/);
+ assert.doesNotMatch(app.lastFrame(),/Search \(editing\)/);
+ await delay(100); // allow Ink to dispose the old focused child listener
+ app.stdin.write('g');await frame(/Jump to view:/);await delay(50);
+ app.stdin.write('\r');await frame(/\[Overview\]/);
+ await delay(100);
+ app.stdin.write('/');await frame(/Search \(editing\):/);await delay(50);
+ for(let i=0;i<'NODE_READY'.length;i++){app.stdin.write('\x7f');await delay(35);}
+ app.stdin.write('NODE_REDY');await frame(/Search \(editing\): NODE_REDY/);
+ app.stdin.write('\r');await frame(/Search: NODE_REDY/);
+ await delay(100);
+ for(let i=0;i<3;i++){app.stdin.write('\t');await delay(100);}
+ await frame(/\[Events\]/);assert.match(app.lastFrame(),/NODE_READY/);assert.doesNotMatch(app.lastFrame(),/QUEUE_ADDED/);
+}finally{app.unmount();app.cleanup();}

@@ -74,6 +74,18 @@ If a defect requires changing code, prepare **`rc.2`** on a new commit and repea
 
 Keep `v5.2` untouched. Preserve the previous known-good deployment for rollback; npm packages are immutable and a published `latest` tag change must be managed explicitly rather than assumed reversible.
 
+## Post-release branch policy (agreed completion order)
+
+Only after **every accepted item in the original 38-task backlog and modernization extensions is implemented or explicitly scoped out**, all final same-SHA CI and real-world gates are passed, and separate approvals are recorded:
+
+1. Merge the completed and reviewed implementation pull requests into `dev`. Do not merge draft PRs, bypass required status checks, or rewrite `dev` history.
+2. Freeze and approve an immutable RC source/version, tag `v5.3.0-rc.1`, and publish `nyxlink@5.3.0-rc.1` to npm `next` **only with explicit approval**. Run an external clean consumer install plus the accepted audible/real-server matrix. If changes are needed, publish `rc.2` from a fresh commit and tag, not an overwritten RC.
+3. After RC acceptance, bump to stable `5.3.0`, re-run all gates on that commit, create protected branch `v5.3` and immutable tag `v5.3.0` from it, and create the GitHub Release and npm `latest` package **only with separate explicit approval**.
+4. Verify GitHub Release/tag SHA, `npm view nyxlink@5.3.0`, `npm dist-tag ls nyxlink`, a clean install, and preserve rollback evidence. Do not conflate the successful publication with continuous audio acceptance.
+5. **Only after stable release is verified**, inventory *all* branches and open PRs. Retain `dev`, `v5.2`, `v5.3`, any still-supported version branches, release/maintenance branches with documented purpose, and any branches backing active PRs or containing unmerged commits. Produce a deletion proposal listing exact branch names, unique commits, open PRs, tags and remote protection. Ask the owner to explicitly approve the exact deletion list before removing any remote branches. Never delete protected branches, tags, `dev`, `v5.2` or a branch with unmerged work merely because a release succeeded.
+
+There is **no automatic cleanup**, forced branch deletion, npm publish or GitHub Release creation in this plan. Current PR `#32` targets `dev` and remains a development checkpoint; neither its existence nor a passing CI job authorizes merge or release.
+
 ## Stop conditions
 
 No candidate or stable publication if **any** required job is failing/unverified on its SHA, live audio remains unobserved, ownership/license clearance is missing, the package includes private data, registry or tag identity differs, or release approval has not been recorded. Avoid tagging from a partially validated development commit.

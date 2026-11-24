@@ -4,6 +4,8 @@ node_modules
 .git
 package-lock.json
 .env
+.env.*
+!.env.live-voice.example
 desktop.ini
 moonlink.log
 dist/src/datastore
