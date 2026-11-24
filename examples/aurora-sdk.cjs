@@ -21,7 +21,7 @@ function createHostSDK(options = {}) {
     const metricReaders = [];
     const logRecordProcessors = [];
     if (options.exportLogs === true && !options.endpoint) throw new TypeError('Log export requires an explicit OTLP endpoint');
-    if (options.exportLogs === true) logRecordProcessors.push(new BatchLogRecordProcessor(new OTLPLogExporter({url:endpoint(options.endpoint,'logs'),timeoutMillis:5000}),{maxQueueSize:512,maxExportBatchSize:128,scheduledDelayMillis:1000,exportTimeoutMillis:5000}));
+    if (options.exportLogs === true) logRecordProcessors.push(new BatchLogRecordProcessor({exporter:new OTLPLogExporter({url:endpoint(options.endpoint,'logs'),timeoutMillis:5000}),maxQueueSize:512,maxExportBatchSize:128,scheduledDelayMillis:1000,exportTimeoutMillis:5000}));
     if (options.endpoint) {
         spanProcessors.push(new SimpleSpanProcessor(new OTLPTraceExporter({
             url: endpoint(options.endpoint, 'traces'), timeoutMillis: 5000,

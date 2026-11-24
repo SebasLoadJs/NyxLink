@@ -5,13 +5,13 @@ The root SDK uses native Pino 10.4.0 loaded on demand. The optional runtime is s
 Install the pinned runtime peers for the complete terminal, bootstrap and Inspector:
 
 ```sh
-pnpm add pino-pretty@13.2.0 figlet@1.9.4 gradient-string@3.0.0 chalk@5.6.2 boxen@8.0.1 string-width@7.2.0 strip-ansi@7.1.2 pretty-ms@9.2.0 log-symbols@7.0.1 listr2@8.3.3 ora@8.2.0 cli-progress@3.12.0 cli-table3@0.6.5 pretty-bytes@6.1.1 log-update@6.1.0 ink@5.2.1 react@18.3.1 cli-truncate@4.0.0 wrap-ansi@9.0.0 slice-ansi@7.1.0 is-unicode-supported@2.1.0 figures@6.1.0 fuse.js@7.5.0 ink-text-input@6.0.0 ink-select-input@6.2.0 ink-spinner@5.0.0
+pnpm add pino-pretty@13.2.0 figlet@1.11.3 gradient-string@3.0.0 chalk@5.6.2 boxen@8.0.1 string-width@7.2.0 strip-ansi@7.1.2 pretty-ms@9.2.0 log-symbols@7.0.1 listr2@8.3.3 ora@8.2.0 cli-progress@3.12.0 cli-table3@0.6.5 pretty-bytes@6.1.1 log-update@6.1.0 ink@5.2.1 react@18.3.1 cli-truncate@4.0.0 wrap-ansi@9.0.0 slice-ansi@7.1.0 is-unicode-supported@2.1.0 figures@6.1.0 fuse.js@7.5.0 ink-text-input@6.0.0 ink-select-input@6.2.0 ink-spinner@5.0.0
 ```
 
 Optional OpenTelemetry host SDK and OTLP integration:
 
 ```sh
-pnpm add @opentelemetry/api@1.9.0 @opentelemetry/sdk-node@0.208.0 @opentelemetry/instrumentation-pino@0.55.1 @opentelemetry/sdk-trace-base@2.2.0 @opentelemetry/sdk-metrics@2.2.0 @opentelemetry/exporter-trace-otlp-http@0.208.0 @opentelemetry/exporter-metrics-otlp-http@0.208.0
+pnpm add @opentelemetry/api@1.9.0 @opentelemetry/sdk-node@0.220.0 @opentelemetry/instrumentation-pino@0.55.1 @opentelemetry/sdk-trace-base@2.9.0 @opentelemetry/sdk-metrics@2.9.0 @opentelemetry/exporter-trace-otlp-http@0.220.0 @opentelemetry/exporter-metrics-otlp-http@0.220.0
 ```
 
 | Entry | Responsibility |
@@ -34,6 +34,6 @@ Inspector search prefers literal matches and falls back to Fuse.js fuzzy matchin
 
 ## Advanced destinations and links
 
-Install `ansi-escapes@7.3.0 terminal-link@3.0.0 supports-hyperlinks@2.3.0 ink-link@4.1.0 pino-abstract-transport@3.0.0` for Inspector documentation links and exclusive native file output. `nyxlink/aurora/file` provides `await createAuroraFilePipeline(path, {level:'info'})`; configure its target on Manager and await close after shutdown. Creates a new private file, refuses overwrite. The destination uses Pino's existing Sonic Boom implementation, not a separate log engine. Optional OTLP logging requires `@opentelemetry/api-logs@0.208.0 @opentelemetry/sdk-logs@0.208.0 @opentelemetry/exporter-logs-otlp-http@0.208.0`, explicit `createHostSDK({endpoint,exportLogs:true})`, and `onEvent:event=>sdk.emitAuroraEvent(event)` on the selected pipeline. Disabled by default. Never enable Pino automatic log sending; only normalized canonical events are exported. Tinybench is development-only.
+Install `ansi-escapes@7.3.0 terminal-link@3.0.0 supports-hyperlinks@2.3.0 ink-link@4.1.0 pino-abstract-transport@3.0.0` for Inspector documentation links and exclusive native file output. `nyxlink/aurora/file` provides `await createAuroraFilePipeline(path, {level:'info'})`; configure its target on Manager and await close after shutdown. Creates a new private file, refuses overwrite. The destination uses Pino's existing Sonic Boom implementation, not a separate log engine. Optional OTLP logging requires `@opentelemetry/api-logs@0.220.0 @opentelemetry/sdk-logs@0.220.0 @opentelemetry/exporter-logs-otlp-http@0.220.0`, explicit `createHostSDK({endpoint,exportLogs:true})`, and `onEvent:event=>sdk.emitAuroraEvent(event)` on the selected pipeline. Disabled by default. Never enable Pino automatic log sending; only normalized canonical events are exported. Tinybench is development-only.
 
 File destination accepts `maxQueued` (1–10000, default 256); a saturated destination stops admission and rejects its close promise after draining accepted records. Cross-platform terminal acceptance uses Node PTY in the isolated `tests/pty` development project, never a NyxLink consumer runtime requirement. Run `npm ci --prefix tests/pty` then `node tests/pty/aurora-smoke.cjs` after building; Linux and Windows CI verify actual simulated PTY interactions. `nyxlink-aurora --help` exposes the fixed documentation link with a plain fallback.
