@@ -29,12 +29,21 @@ function inspectEndurance(revision, report) {
     cleanup: report?.cleanup?.players === 0 && report?.cleanup?.nodes === 0 &&
       Array.isArray(report?.cleanup?.activeResources) && !report.cleanup.activeResources.includes('Timeout'),
     samples: Array.isArray(report?.samples) && report.samples.length >= 2 &&
-      report.samples.every(s => s && Number.isFinite(s.elapsedSeconds) && s.elapsedSeconds >= 0 &&
+      report.samples[0]?.elapsedSeconds <= 5 && report.samples.at(-1)?.elapsedSeconds >= report.durationSeconds &&
+      report.samples.every((s,index) => s && Number.isFinite(s.elapsedSeconds) && s.elapsedSeconds >= 0 &&
+        s.elapsedSeconds <= report.elapsedSeconds && (index===0 || s.elapsedSeconds >= report.samples[index-1]?.elapsedSeconds) &&
         Number.isFinite(s.heapUsedBytes) && s.heapUsedBytes >= 0 &&
         Number.isFinite(s.rssBytes) && s.rssBytes >= 0),
   };
   return { revision, checks, enduranceEvidenceComplete: Object.values(checks).every(Boolean),
     humanListeningRequired: true, releaseApproved: false };
+}
+function inspectSoak(revision,report,hours){
+  if(!Number.isSafeInteger(hours)||hours<24||hours>72)throw new TypeError('Invalid soak duration');
+  const base=inspectEndurance(revision,report);
+  const checks={...base.checks,exactDuration:report?.durationSeconds===hours*3600,
+    boundedSampling:Number.isSafeInteger(report?.samplingEverySeconds)&&report.samplingEverySeconds===60&&Array.isArray(report?.samples)&&report.samples.length<=Math.ceil(hours*3600/60)+2};
+  return {revision,checks,soakEvidenceComplete:Object.values(checks).every(Boolean),audioVerified:false,releaseApproved:false};
 }
 if (require.main === module) {
   try {
@@ -48,4 +57,4 @@ if (require.main === module) {
     process.exitCode = 1;
   }
 }
-module.exports = { sourceRevision, inspectEndurance };
+module.exports = { sourceRevision, inspectEndurance, inspectSoak };

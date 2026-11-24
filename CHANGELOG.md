@@ -6,6 +6,8 @@ This changelog describes the unreleased NyxLink 5.3 development line and its ver
 
 ### Observability and terminal
 
+- **Breaking development API:** retired the standalone Logger and legacy transports in favor of one Aurora/Pino route; migrated dashboard aggregates, consumer checks and typed diagnostics. Added Fuse.js search, terminal hyperlinks, native exclusive bounded NDJSON output, opt-in OTLP logs, Tinybench and cross-platform Node PTY checks. Updated Figlet, ws and OpenTelemetry to resolve observed production audit failures.
+
 - Added opt-in Aurora V4 structured events, a bounded terminal coordinator, and an optional host pipeline for Silent, JSON, Pretty, Aurora and Custom logging.
 - Added adaptive branded banners, startup readiness observation, selected-player music snapshots, correlated failover incidents, capability diagnostics and a standalone read-only Ink Inspector.
 - Added optional host OpenTelemetry spans, Pino correlation and explicit OTLP HTTP trace/metric exporters. No SDK or visual dependency is required by the audio core.
@@ -13,13 +15,15 @@ This changelog describes the unreleased NyxLink 5.3 development line and its ver
 
 ### Test infrastructure
 
+- Long-duration backend endurance now uses bounded HDR histograms instead of retaining every latency observation; 24–72h soak uses one-minute memory sampling and validates exact duration, same revision, cleanup and ordered sample coverage before claiming a pass.
+
 - Separated digest-pinned backend image downloads from container startup. Cached images need no download; transient pull failures get at most one retry with a dedicated 180-second deadline per attempt. Container starts and protocol assertions are never retried by this helper; missing locally patched images fail without registry fallback.
 - Added bounded container failure diagnostics with timeout classification and redaction of generated lab passwords, instead of printing credential-bearing command arguments.
 - Fixed Windows package checks to execute installed npm/pnpm JavaScript CLIs through Node without a shell, avoiding `spawnSync npm.cmd EINVAL` while preserving argument boundaries.
 
 ### Architecture and public API
 
-- Checkpoint in progress: optional Pino/OpenTelemetry transports, bounded performance observations, caller preference scoring for autoplay, observed startup layouts and truecolor controls. Added opt-in backend search coalescing and metadata fallback; final acceptance and full requirement reconciliation remain in `docs/CONTINUAR-AQUI.md`.
+- Added canonical native Pino/OpenTelemetry observability, bounded performance observations, caller preference scoring for autoplay, observed startup and truecolor controls. Added opt-in backend search coalescing and metadata fallback; final acceptance and full requirement reconciliation remain in `docs/CONTINUAR-AQUI.md`.
 
 - Added opt-in weighted node costs from observed latency, fresh CPU/memory/player statistics and configured priority, with caller-scoped hysteresis that cannot bypass eligibility or source/region preferences. Existing strategies retain their defaults.
 - Extracted queue-preload eligibility and coalescing/backoff from Player; player commands retain ownership of reservations, serialized updates and backend acknowledgments.

@@ -49,7 +49,7 @@ Consult `examples/discordjs.cjs` and `examples/discordjs.ts` for full applicatio
 | Failover | `manager.nodes.drain(identifier)`, `eject(identifier)` and `player.transferNode(...)` return results that must be checked. A cancelled transfer is **not** successful recovery. |
 | Features | Read `node.backend`, `node.capabilities` and `manager.nodes.getBackendInventory()`. Do not assume a NodeLink feature or Lavalink plugin is enabled simply because the server family supports it. |
 | Storage and resume | New node-session records are scoped by node identifier as well as endpoint; a legacy endpoint-only record is read only when the endpoint is unambiguous. Test upgrades with persistent storage. |
-| Events and logging | Logging is opt-in (`Logger` or manager logging options), silent by default. Subscribe to events such as `playerNodeFailover` and `playersOrphaned` for diagnostic handling. |
+| Events and logging | Aurora logging is opt-in through manager logging options, silent by default. Subscribe to events such as `playerNodeFailover` and `playersOrphaned` for diagnostic handling. |
 
 ## Backend-specific additions (opt-in)
 
@@ -80,7 +80,7 @@ For Discord voice and audible transition checks, follow `docs/live-voice-verific
 
 ## Local modernization additions
 
-Existing Logger methods and silent defaults remain. Custom structured destinations receive redacted immutable records; provide `LogTransport` rather than depending on an internal Consola reporter. Await `flush`/`close` when output must finish; Manager shutdown now closes its owned logger. A saturated queue is bounded and exposes drops through diagnostics instead of growing indefinitely. See [logging-guide.md](logging-guide.md).
+Aurora replaces the previous standalone Logger and legacy transports. Configure `options.logging: {level, target}` with a native Pino target or the `nyxlink/aurora` pipeline; use `AuroraInspectorStore` for retained sanitized events and traces, and `diagnoseError` for explicit error advice. Close the host-owned pipeline after Manager shutdown. No legacy compatibility adapter is supplied. See [logging-guide.md](logging-guide.md).
 
 Mixer responses now have explicit types and runtime validation. `getMixes()` returns `{ mixes: [...] }`, not an unchecked bare array; mix volume is 0..1. Player mixer commands are serialized, and lifecycle changes may reject with `PLAYER_OPERATION_CANCELLED` after a mutation has already reached the old server. Catch that separately from a current-session backend failure. See [mixer.md](mixer.md).
 

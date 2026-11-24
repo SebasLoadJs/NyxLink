@@ -4,6 +4,7 @@ const { spawn } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const { withBackendLab } = require('../tests/helpers/backend-lab.cjs');
 const { sourceRevision, writePrivateReport } = require('./test-live-voice.cjs');
+const {inspectSoak}=require('./check-endurance-evidence.cjs');
 const root = path.resolve(__dirname, '..');
 
 function parseArguments(args) {
@@ -54,11 +55,13 @@ async function run(options) {
   } catch { completed = false; }
   let measured = {};
   try { measured = JSON.parse(await fs.readFile(original, 'utf8')); } catch { /* Aborted runs may have no worker report. */ }
+  const validation=inspectSoak(before,measured,options.hours);
   delete measured.error; // Never copy arbitrary backend error text into a summary.
   const after = sourceRevision(root);
   const report = { ...measured, timestamp: new Date().toISOString(), scope: 'isolated backend protocol soak; no Discord voice or audible playback',
     requestedHours: options.hours, sourceRevision: before === after ? before : null, interrupted,
-    passed: Boolean(completed && measured.passed && measured.durationSeconds === options.seconds && measured.elapsedSeconds >= options.seconds && before === after), audioVerified: false, releaseApproved: false };
+    validation:validation.checks,
+    passed: Boolean(completed && validation.soakEvidenceComplete && before === after), audioVerified: false, releaseApproved: false };
   const target = path.join(directory, runId + '.json');
   await writePrivateReport(target, report);
   await fs.rm(original, { force: true });

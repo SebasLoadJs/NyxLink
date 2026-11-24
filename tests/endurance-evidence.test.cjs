@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { inspectEndurance, sourceRevision } = require('../scripts/check-endurance-evidence.cjs');
+const { inspectEndurance, inspectSoak, sourceRevision } = require('../scripts/check-endurance-evidence.cjs');
 const revision = 'a'.repeat(40);
 const sample = () => ({sourceRevision:revision,scope:'local backend endurance; no Discord voice or audible playback',passed:true,
  durationSeconds:600,elapsedSeconds:601,backends:['lavalink','nodelink'].map(backend=>({backend,version:'fixture',image:'fixture',cycles:300,resumes:1,pings:1})),
@@ -39,4 +39,23 @@ test('source revision permits regenerated dist only, rejects dirty or untracked 
   fs.writeFileSync(path.join(dir,'extra.ts'),'untracked');
   assert.throws(()=>sourceRevision(dir),/clean checkout/);
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('endurance evidence rejects truncated, reversed and out-of-range sampling',()=>{
+ for(const samples of [
+ [{elapsedSeconds:0,heapUsedBytes:100,rssBytes:1000},{elapsedSeconds:1,heapUsedBytes:100,rssBytes:1000}],
+ [{elapsedSeconds:0,heapUsedBytes:100,rssBytes:1000},{elapsedSeconds:599,heapUsedBytes:100,rssBytes:1000},{elapsedSeconds:5,heapUsedBytes:100,rssBytes:1000},{elapsedSeconds:600,heapUsedBytes:100,rssBytes:1000}],
+ [{elapsedSeconds:0,heapUsedBytes:100,rssBytes:1000},{elapsedSeconds:900,heapUsedBytes:100,rssBytes:1000}]
+ ])assert.equal(inspectEndurance(revision,{...sample(),samples}).enduranceEvidenceComplete,false);
+});
+test('600 seconds cannot certify a 24-hour soak, complete synthetic schema can',()=>{
+ assert.equal(inspectSoak(revision,sample(),24).soakEvidenceComplete,false);
+ const report={...sample(),durationSeconds:86400,elapsedSeconds:86401,samplingEverySeconds:60,
+ backends:sample().backends.map(b=>({...b,cycles:43200})),
+ samples:[sample().samples[0],{elapsedSeconds:86400,heapUsedBytes:101,rssBytes:1000}]};
+ assert.equal(inspectSoak(revision,report,24).soakEvidenceComplete,true);
+ assert.equal(inspectSoak(revision,report,48).soakEvidenceComplete,false);
+ assert.equal(inspectSoak(revision,{...report,samplingEverySeconds:10},24).soakEvidenceComplete,false);
+ assert.equal(inspectSoak(revision,{...report,error:'failure'},24).soakEvidenceComplete,false);
+ assert.equal(inspectSoak(revision,report,24).releaseApproved,false);
 });
