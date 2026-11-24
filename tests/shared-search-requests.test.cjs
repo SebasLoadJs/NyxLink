@@ -82,3 +82,27 @@ test('aborting every subscriber releases the shared key without waiting for tran
   assert.equal(calls, 2);
   requests.close();
 });
+
+test('shared search coalescing stays within its 128-operation capacity and drains on close', async () => {
+  const requests = new SharedSearchRequests();
+  const pending = [];
+  let started = 0;
+  for (let i = 0; i < 128; i++) {
+    const operation = requests.run('entry-' + i, new AbortController().signal, async () => {
+      started++;
+      return new Promise(() => {});
+    });
+    pending.push(operation.then(() => 'unexpected-success', () => 'cancelled'));
+  }
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(started, 128);
+  let overflowCalls = 0;
+  const overflow = await requests.run('overflow', new AbortController().signal, async () => {
+    overflowCalls++;
+    return 'unshared-overflow';
+  });
+  assert.equal(overflow, 'unshared-overflow');
+  assert.equal(overflowCalls, 1);
+  requests.close();
+  assert.deepEqual(new Set(await Promise.all(pending)), new Set(['cancelled']));
+});
