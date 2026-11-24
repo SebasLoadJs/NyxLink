@@ -12,7 +12,6 @@ import { formatDashboardObservation, formatErrorDiagnostic } from './TerminalFor
 import { formatPlayerTrace, type PlayerTraceOptions } from './PlayerTrace';
 import { LogPipeline, safeLogValue, type LogContext, type LogTransport, type StructuredLogRecord } from './StructuredLog';
 import type { Manager } from '../core/Manager';
-import { AuroraEvents, type AuroraPinoTarget, type AuroraEvent } from './AuroraEvents';
 import { NodeState } from '../typings/types';
 import { terminalColor, terminalDepth, trueColor } from './TerminalCapabilities';
 import { formatStartupObservation } from './TerminalFormatter';
@@ -75,7 +74,6 @@ export class Logger {
   private pipeline: LogPipeline;
   private ownsPipeline = true;
   private readonly disposers = new Set<() => void>();
-  private readonly managers = new WeakMap<Manager, () => void>();
   private closed = false;
   private currentLevel: NyxLogLevel;
 
@@ -327,43 +325,4 @@ export class Logger {
     })));
   }
 
-  /** Returns an idempotent disposer; it never re-emits debug messages. */
-  attachManager(manager: Manager): () => void {
-    if (this.closed || this.pipeline.stats().closed) return () => {};
-    const existing = this.managers.get(manager);
-    if (existing) return existing;
-    // The former listener collection is replaced by the canonical event route.
-    // The deprecated transport API receives a projection, not raw Manager debug.
-    const legacyNames: Partial<Record<AuroraEvent['eventCode'], string>> = {
-      TRACK_STARTED: 'track.started', TRACK_ENDED: 'track.ended',
-      NODE_ERROR: 'node.error', NODE_DISCONNECTED: 'node.disconnected',
-      QUEUE_ADDED: 'queue.added', QUEUE_ENDED: 'queue.ended',
-      PLAYER_RESUMED: 'player.resumed', PLAYER_SEEKED: 'player.seek',
-      PLAYER_STOPPED: 'player.stopped', FILTERS_UPDATED: 'filters.updated',
-    };
-    const deliver = (record: AuroraEvent, message: string): void => {
-      const level = record.severity === 'fatal' ? 'error' : record.severity;
-      const context = { ...record.sanitizedContext,
-        ...(record.operationId ? { operationId: record.operationId } : {}),
-        ...(record.durationMs !== undefined ? { durationMs: record.durationMs } : {}),
-        ...(record.traceId ? { traceId: record.traceId, spanId: record.spanId } : {}),
-      };
-      this.event(level, record.category, legacyNames[record.eventCode] ?? record.eventCode, context, message);
-    };
-    const target: AuroraPinoTarget = { trace: deliver, debug: deliver, info: deliver, warn: deliver, error: deliver, fatal: deliver };
-    // The compatibility logger's own level is mutable; the bridge filters at delivery.
-    const route = new AuroraEvents({ level: 'trace', target });
-    route.attach(manager);
-    let detached = false;
-    const dispose = () => {
-      if (detached) return;
-      detached = true;
-      route.close();
-      this.disposers.delete(dispose);
-      this.managers.delete(manager);
-    };
-    this.disposers.add(dispose);
-    this.managers.set(manager, dispose);
-    return dispose;
-  }
 }

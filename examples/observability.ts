@@ -1,25 +1,15 @@
-import { Logger, JsonLogTransport, TerminalDashboard, type Manager, type LogTransport, type Player, type NyxExtension } from 'nyxlink';
+import { AuroraEvents, AuroraInspectorStore, createAuroraPinoEngine, type Manager, type Player, type NyxExtension } from 'nyxlink';
 
-/** The application owns the destination; a sink can forward to an existing logger. */
-export function attachObservability(manager: Manager, transport?: LogTransport) {
-    const logger = new Logger({
-        profile: 'debug', mode: 'json',
-        transports: [transport ?? new JsonLogTransport(process.stdout)],
-        context: { application: 'music-bot' },
-        maxQueue: 512, timelineLimit: 200, transportTimeoutMs: 1000,
-        onTransportError(error) {
-            // Application-owned fallback. Do not send this back into the same logger.
-            process.stderr.write(error.message + '\n');
-        },
+/** A single native Pino destination. Attach only when Manager has no configured route. */
+export function attachObservability(manager: Manager) {
+    const store = new AuroraInspectorStore(manager);
+    const engine = createAuroraPinoEngine('debug', (event, meta) => {
+        store.recordEvent(event);
+        process.stdout.write(JSON.stringify({...event, level: meta.level, msg: meta.msg})+'\n');
     });
-    const detach = logger.attachManager(manager);
-    const dashboard = new TerminalDashboard(manager, logger, { mode: 'static' });
-    const stop = dashboard.start();
-    return {
-        logger,
-        showPlayerTrace(guildId: string) { return logger.playerTrace(guildId, { limit: 20 }); },
-        async close() { stop(); detach(); await logger.close(); },
-    };
+    const route = new AuroraEvents({level:'debug',target:engine.target});
+    route.attach(manager);
+    return {store, close(){route.close();engine.close();}};
 }
 
 /** Volumes for mix layers use 0..1; ordinary player volume uses a different scale. */

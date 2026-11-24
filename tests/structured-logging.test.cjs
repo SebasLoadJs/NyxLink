@@ -256,30 +256,26 @@ test('async correlation follows root log calls and remains isolated between over
   assert.equal(records.find(record => record.message === 'outside').context.traceId, undefined);
 });
 
-test('manager attachment is deduplicated and close removes every installed event listener', async t => {
-  const { createPlayer } = require('./helpers/player.cjs');
-  const { manager, node, player } = createPlayer(t);
-  const { logger, records } = capture();
-  const detach = logger.attachManager(manager);
-  assert.equal(logger.attachManager(manager), detach);
-  manager.emit('trackStart', player, null);
-  await logger.close();
-  manager.emit('trackStart', player, null);
-  manager.emit('nodeError', node, new Error('after close'));
-  assert.equal(records.filter(record => record.event === 'track.started').length, 1);
-});
-
-test('manager shutdown flushes its owned logger and closes destinations once', async t => {
-  const { createPlayer } = require('./helpers/player.cjs');
-  const { manager } = createPlayer(t);
-  const calls = [];
-  manager.logger = new Logger({ level: 'info', transports: [{ write(record) { calls.push(record.message); }, close() { calls.push('closed'); } }] });
-  manager.logger.info('Node', 'queued before shutdown');
-  await Promise.all([manager.shutdown(), manager.shutdown()]);
+test('canonical route is exclusive, manager shutdown removes subscriptions and explicit application log lifecycle stays independent', async t => {
+  const {createPlayer}=require('./helpers/player.cjs');
+  const {AuroraEvents}=require('../dist');
+  const {manager,player}=createPlayer(t);
+  const records=[], target=Object.fromEntries(['trace','debug','info','warn','error','fatal'].map(l=>[l,event=>records.push(event)]));
+  const route=new AuroraEvents({level:'debug',target});route.attach(manager);
+  const duplicate=new AuroraEvents({level:'debug',target});
+  assert.throws(()=>duplicate.attach(manager),/already has a logging route/);
+  manager.emit('trackStart',player,null);
+  await manager.shutdown();
+  manager.emit('trackStart',player,null);
+  assert.equal(records.filter(r=>r.eventCode==='TRACK_STARTED').length,1);
+  duplicate.close();
+  const calls=[];
+  const logger=new Logger({level:'info',transports:[{write(record){calls.push(record.message);},close(){calls.push('closed');}}]});
+  logger.info('Node','queued before shutdown');
+  await Promise.all([logger.close(),logger.close()]);
   assert.ok(calls.includes('queued before shutdown'));
-  assert.equal(calls.filter(call => call === 'closed').length, 1);
+  assert.equal(calls.filter(call=>call==='closed').length,1);
 });
-
 test('player trace views are filtered, bounded and do not consume their own retained timeline', async () => {
   const { logger, records } = capture({ timelineLimit: 30 });
   const guildId = '123456789012345678';

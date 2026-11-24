@@ -28,54 +28,30 @@ test('manager logging is silent without opt-in and preserves raw debug events', 
   assert.equal(output.stderr, '');
 });
 
-test('attached manager logger shows real node counts and detaches all its listeners', () => {
-  const output = run(`
-    const {Manager,Logger}=require('./dist');
-    const m=new Manager({nodes:[{identifier:'measured-node',host:'127.0.0.1',port:2333,password:'test',secure:false}]});
-    m.nodes.add({identifier:'measured-node',host:'127.0.0.1',port:2333,password:'test',secure:false});
-    const logger=new Logger({level:'debug',color:false,timestamps:false});
-    const detach=logger.attachManager(m);
-    m.emit('debug','Moonlink.js > Node >> private-before-detach');
-    m.emit('nodeReady',{backend:{kind:'lavalink'}},{});
-    logger.managerStatus(m);
-    detach(); detach();
-    m.emit('debug','Moonlink.js > Node >> hidden-after-detach');
-    m.emit('nodeReady',{backend:{kind:'nodelink'}},{});
-  `);
-  assert.equal((output.stdout.match(/Backend session ready/g)||[]).length,1);
-  assert.doesNotMatch(output.stdout,/private-before-detach/);
-  assert.match(output.stdout, /SYSTEM STATUS/);
-  assert.match(output.stdout, /measured-node/);
-  assert.match(output.stdout, /0 players/);
-  assert.match(output.stdout, /ATTENTION/);
-  assert.doesNotMatch(output.stdout, /hidden-after-detach/);
-  assert.equal((output.stdout.match(/SYSTEM STATUS/g) || []).length, 1);
+test('canonical manager route never consumes raw debug and detaches independently of unrelated listeners',()=>{
+ const output=run(`
+ const {Manager}=require('./dist');
+ const m=new Manager({nodes:[{host:'127.0.0.1',port:2333,password:'test',secure:false}],options:{logging:{level:'debug',target:Object.fromEntries(['trace','debug','info','warn','error','fatal'].map(l=>[l,(event,message)=>process.stdout.write(message+'\\n')]))}}});
+ m.emit('debug','PRIVATE_RAW');
+ m.emit('nodeReady',{backend:{kind:'nodelink'}},{});
+ m.detachLogger();m.emit('nodeReady',{backend:{kind:'lavalink'}},{});
+ `);
+ assert.equal((output.stdout.match(/Backend session ready/g)||[]).length,1);
+ assert.doesNotMatch(output.stdout,/PRIVATE_RAW|AUDIO CLIENT/);
 });
-
-test('manager options can opt into logging without printing an automatic banner', () => {
-  const output = run(`const {Manager}=require('./dist'); const m=new Manager({nodes:[{host:'127.0.0.1',port:2333,password:'test',secure:false}],options:{logging:{level:'debug',color:false,timestamps:false}}}); m.emit('nodeReady',{backend:{kind:'nodelink'}},{}); m.emit('debug','Moonlink.js > Player >> private-by-config');`);
-  assert.match(output.stdout, /Backend session ready/);
-  assert.doesNotMatch(output.stdout,/private-by-config/);
-  assert.doesNotMatch(output.stdout, /AUDIO CLIENT/);
+test('canonical failover reports actual failure without claiming recovery',()=>{
+ const output=run(`
+ const {Manager,Node,Player,NodeState}=require('./dist');
+ const m=new Manager({nodes:[{identifier:'old',host:'127.0.0.1',port:2333,password:'test',secure:false}],options:{logging:{level:'info',target:Object.fromEntries(['trace','debug','info','warn','error','fatal'].map(l=>[l,(event,message)=>process.stdout.write(message+'\\n')]))}}});
+ m.database={set:async()=>{}};
+ m.nodes.add({identifier:'old',host:'127.0.0.1',port:2333,password:'test',secure:false});
+ const old=m.nodes.nodes.get('old');old.rest.destroyPlayer=async()=>{};
+ const target=new Node(m,{identifier:'target',host:'127.0.0.2',port:2333,password:'test',secure:false});target.connected=true;target.state=NodeState.READY;
+ const p=new Player(m,old,{guildId:'123456789012345678',voiceChannelId:'223456789012345678'});p.stopHealthCheck();p.restart=async()=>false;
+ p.transferNode(target).then(result=>{if(result)throw Error('false success');});
+ `);
+ assert.match(output.stdout,/Recovery initiated/);assert.match(output.stdout,/Recovery failed/);assert.doesNotMatch(output.stdout,/Recovery confirmed/);
 });
-
-test('failover panel follows the confirmed failure result and never prints Recovered', () => {
-  const output = run(`
-    const {Manager,Node,Player,Logger,NodeState}=require('./dist');
-    const m=new Manager({nodes:[{identifier:'old',host:'127.0.0.1',port:2333,password:'test',secure:false}]});
-    m.database={set:async()=>{}};
-    m.nodes.add({identifier:'old',host:'127.0.0.1',port:2333,password:'test',secure:false});
-    const old=m.nodes.nodes.get('old'); old.rest.destroyPlayer=async()=>{};
-    const target=new Node(m,{identifier:'target',host:'127.0.0.2',port:2333,password:'test',secure:false}); target.connected=true; target.state=NodeState.READY;
-    const p=new Player(m,old,{guildId:'123456789012345678',voiceChannelId:'223456789012345678'}); p.stopHealthCheck(); p.restart=async()=>false;
-    new Logger({level:'info',color:false}).attachManager(m);
-    p.transferNode(target).then(result=>{if(result)throw new Error('false success');});
-  `);
-  assert.match(output.stdout, /Recovery initiated/);
-  assert.match(output.stdout + output.stderr, /Recovery failed/);
-  assert.doesNotMatch(output.stdout + output.stderr, /Recovery confirmed/);
-});
-
 test('opt-in logger redacts credentials from strings, objects and errors', () => {
   const output = run("const {Logger}=require('./dist'); const log=new Logger({level:'debug',color:false,timestamps:false}); log.debug('Node','Authorization: Bearer bearer-secret-987 password=pass-secret-987'); log.info('Request',{token:'object-token-987',apiKey:'object-api-987'}); log.error('Backend',new Error('access_token=query-secret-987'))");
   const all = output.stdout + output.stderr;
