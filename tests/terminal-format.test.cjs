@@ -58,3 +58,18 @@ test('startup, dashboard and error panels color only the heading when explicitly
   assert.doesNotMatch(contexts[0](), /\x1b\[/);
   assert.doesNotMatch(formatStartupObservation({ readyNodes: 0, configuredNodes: 0 }, { color: false }, 'compact'), /\x1b\[/);
 });
+
+test('compact dashboard uses observed counts without drawing a full panel', () => {
+  const context = {
+    nodes: [{ id: 'one', backend: 'lavalink', state: 'ready', players: 2 }],
+    sources: [], audio: { players: 2, playing: 1, paused: 1, queuedTracks: 7 },
+    runtime: { heapUsedBytes: 1234, rssBytes: 4000, uptimeSeconds: 10, eventLoopUtilization: 0.3 },
+    truncatedNodes: 0,
+  };
+  const compact = formatDashboardObservation(context, { color: false }, 'compact');
+  assert.equal(compact, 'NYXLINK / CLUSTER | 1 nodes shown | 1/2 playing | queue 7');
+  assert.doesNotMatch(compact, /[┌└│]/);
+  const colored = formatDashboardObservation(context, { color: true }, 'compact');
+  assert.match(colored, /\x1b\[95mNYXLINK\x1b\[0m/);
+  assert.equal(colored.replace(/\x1b\[[0-9;]*m/g, ''), compact);
+});
