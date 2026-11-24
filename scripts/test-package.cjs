@@ -125,6 +125,16 @@ async function main() {
     const pipeline = run(process.execPath,['aurora-pipeline-consumer.mjs'],consumer);
     assert.equal(pipeline.stdout,''); assert.equal(pipeline.stderr,'');
     checks.push('exclusive Pino JSON/Pretty/Aurora/Custom/Silent routing and redaction');
+    await fs.copyFile(path.join(root,'examples/aurora-demo.mjs'),path.join(consumer,'aurora-demo.mjs'));
+    const demo = run(process.execPath,['aurora-demo.mjs','--format','json','--scenario','startup','--snapshot'],consumer);
+    assert.match(demo.stderr,/SIMULATED AURORA DEMO/);
+    const demoRecords = demo.stdout.trim().split('\n').map(JSON.parse);
+    assert.deepEqual(demoRecords.map(x=>x.eventCode),['NODE_READY','NODE_READY']);
+    const visualDemo = run(process.execPath,['aurora-demo.mjs','--scenario','failover','--snapshot'],consumer);
+    assert.match(visualDemo.stdout,/FAILOVER RECOVERED/);
+    assert.match(visualDemo.stderr,/SIMULATED/);
+    assert.doesNotMatch(visualDemo.stdout,/\x1b/);
+    checks.push('executable simulated JSON and Aurora scenarios without network or Discord');
     for (const file of ['discordjs.ts', 'discordjs.cjs']) await fs.copyFile(path.join(root, 'examples', file), path.join(consumer, file));
     run(process.execPath, [tsc, '--noEmit', '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', 'discordjs.ts'], consumer);
     await fs.writeFile(path.join(consumer, 'example-smoke.cjs'), `const { createMusicClient } = require('./discordjs.cjs'); const fixture = createMusicClient([{host:'127.0.0.1',port:2333,password:'fixture'}]); fixture.close().catch(error=>{console.error(error);process.exitCode=1});`);

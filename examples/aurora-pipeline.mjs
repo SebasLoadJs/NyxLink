@@ -71,7 +71,7 @@ export function createAuroraPipeline(options={}){
                 const raw=JSON.parse(line);
                 const record=canonical(raw);
                 if(!record)return;
-                try{options.onEvent?.(record);}catch{}
+                try{options.onEvent?.({...record,sanitizedContext:{...record.sanitizedContext}});}catch{}
                 if(format==='json')write(JSON.stringify({...record,level:raw.level,msg:auroraCatalog[record.eventCode].message}),record);
                 else if(format==='pretty')write(String(pretty(JSON.stringify({...record,level:raw.level,msg:auroraCatalog[record.eventCode].message,time:raw.time}))).trimEnd(),record);
                 else reporter.info(record);

@@ -27,3 +27,9 @@ for(const format of ['silent','json','pretty','aurora']){
         }
     }finally{await manager.shutdown();}
 }
+
+const customEvents=[];
+const customTarget=Object.fromEntries(['trace','debug','info','warn','error','fatal'].map(l=>[l,(record)=>customEvents.push(record)]));
+const custom=createAuroraPipeline({format:'custom',target:customTarget});
+const manager=new Manager({nodes:[{host:'localhost',port:2333,password:'fixture',secure:false}],options:{aurora:{target:custom.target,level:custom.level}}});
+try{manager.emit('nodeReady',{backend:{kind:'lavalink'}},{});assert.equal(customEvents.length,1);}finally{await manager.shutdown();await custom.close();}
