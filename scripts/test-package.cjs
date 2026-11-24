@@ -50,7 +50,9 @@ async function main() {
         figlet: '1.9.4', 'gradient-string': '3.0.0', chalk: '5.6.2', boxen: '8.0.1',
         'string-width': '7.2.0', 'strip-ansi': '7.1.2', 'pretty-ms': '9.2.0', 'log-symbols': '7.0.1',
         listr2: '8.3.3', ora: '8.2.0', 'cli-progress': '3.12.0',
-        'cli-table3': '0.6.5', 'pretty-bytes': '6.1.1', 'log-update': '6.1.0', ink: '5.2.1', react: '18.3.1', 'ink-testing-library': '4.0.0' } }));
+        'cli-table3': '0.6.5', 'pretty-bytes': '6.1.1', 'log-update': '6.1.0', ink: '5.2.1', react: '18.3.1', 'ink-testing-library': '4.0.0',
+        'cli-truncate':'4.0.0','wrap-ansi':'9.0.0','slice-ansi':'7.1.0','is-unicode-supported':'2.1.0','figures':'6.1.0','@crafter/charts':'0.2.5',
+        'ink-text-input':'6.0.0','ink-select-input':'6.2.0','ink-spinner':'5.0.0' } }));
     const pnpm = 'pnpm';
     run(pnpm, ['install', fromRegistry ? '--prefer-offline=false' : '--prefer-offline', ...(fromRegistry ? ['--force'] : []), '--registry=https://registry.npmjs.org/', '--ignore-scripts', '--no-frozen-lockfile'], consumer);
     checks.push(fromRegistry ? 'install exact published version from public npm in isolated consumer' : 'install packed artifact in isolated consumer');
@@ -107,6 +109,10 @@ async function main() {
     const observability = run(process.execPath, ['observability-consumer.cjs'], consumer);
     assert.equal(observability.stdout, ''); assert.equal(observability.stderr, '');
     checks.push('real Pino/Pino Pretty and OpenTelemetry SDK types, runtime, privacy and cleanup');
+    await fs.copyFile(path.join(root,'examples/aurora-terminal-tools.mjs'),path.join(consumer,'aurora-terminal-tools.mjs'));
+    await fs.copyFile(path.join(root,'tests/fixtures/aurora-terminal-tools-consumer.mjs'),path.join(consumer,'aurora-terminal-tools-consumer.mjs'));
+    run(process.execPath,['aurora-terminal-tools-consumer.mjs'],consumer);
+    checks.push('optional terminal width, chart and Unicode toolkit');
     await fs.copyFile(path.join(root, 'examples/aurora-visual.mjs'), path.join(consumer, 'aurora-visual.mjs'));
     await fs.copyFile(path.join(root, 'tests/fixtures/aurora-visual-consumer.mjs'), path.join(consumer, 'aurora-visual-consumer.mjs'));
     const visual = run(process.execPath, ['aurora-visual-consumer.mjs'], consumer);
