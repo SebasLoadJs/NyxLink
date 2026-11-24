@@ -2,6 +2,7 @@ import { redactSecrets } from './LogFormatter';
 import type { NyxLogLevel } from './LogLevels';
 import { performance } from 'node:perf_hooks';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { createPinoRecordEngine, type PinoRecordEngine } from './PinoEngine';
 
 export type LogContext = Readonly<Record<string, unknown>>;
 export interface StructuredLogRecord {
@@ -118,6 +119,7 @@ export class LogPipeline {
     private draining?: Promise<void>;
     private closing?: Promise<void>;
     private sequence = 0;
+    private engine?: PinoRecordEngine<StructuredLogRecord>;
     private readonly counters: LogPipelineStats = { accepted: 0, written: 0, dropped: 0, droppedCritical: 0, transportErrors: 0, sampled: 0, suppressed: 0, queued: 0, closed: false };
 
     constructor(private readonly options: LogPipelineOptions) {
@@ -182,7 +184,12 @@ export class LogPipeline {
     }
 
     private enqueue(record: StructuredLogRecord): void {
-        record = freeze({ ...record, sequence: ++this.sequence });
+        const sequenced = { ...record, sequence: ++this.sequence };
+        this.engine ??= createPinoRecordEngine('trace', value => this.enqueueSerialized(freeze(value)), () => { this.counters.transportErrors++; });
+        this.engine.write(sequenced.level, sequenced, sequenced.message);
+    }
+
+    private enqueueSerialized(record: StructuredLogRecord): void {
         const { level } = record;
         this.counters.accepted++;
         if (this.timelineLimit > 0 && record.event !== 'player.trace') {
@@ -264,6 +271,7 @@ export class LogPipeline {
         this.counters.closed = true;
         this.closing = this.flush().then(async () => {
             await Promise.all(this.transports.map(transport => this.invoke(() => transport.close?.())));
+            this.engine?.close();
             this.history.length = 0;
             this.repeated.clear();
             this.correlation.disable();

@@ -1,7 +1,6 @@
-import pino from 'pino';
 import { prettyFactory } from 'pino-pretty';
 import { createConsola } from 'consola';
-import { TerminalCoordinator, AuroraIncidentEngine, auroraCatalog } from 'nyxlink';
+import { TerminalCoordinator, AuroraIncidentEngine, auroraCatalog, createAuroraPinoEngine } from 'nyxlink';
 import { createPresentation, renderIncident } from './aurora-visual.mjs';
 import { startCoordinatedMusicView } from './aurora-diagnostics.mjs';
 import { wrapRecord } from './aurora-terminal-tools.mjs';
@@ -34,23 +33,15 @@ function canonical(record) {
 }
 // One engine construction and canonical serialization path for every active format.
 function createCanonicalEngine(level,consume,onRenderError){
-    let closed=false;
-    const logger=pino({level,base:null,redact:['password','token','authorization','sanitizedContext.password','sanitizedContext.token']},{
-        write(line){
-            if(closed)return;
-            try{
-                const raw=JSON.parse(line);
-                const record=canonical(raw);
-                if(record)consume(record,raw);
-            }catch{try{onRenderError?.();}catch{}}
-        }
-    });
-    const target=Object.fromEntries(levels.map(name=>[name,record=>{
-        if(closed)return;
+    const engine=createAuroraPinoEngine(level,(record,raw)=>{
         const safe=canonical(record);
-        if(safe&&safe.severity===name)logger[name](safe,auroraCatalog[safe.eventCode].message);
+        if(safe)consume(safe,raw);
+    },onRenderError);
+    const target=Object.fromEntries(levels.map(name=>[name,record=>{
+        const safe=canonical(record);
+        if(safe&&safe.severity===name)engine.target[name](safe,auroraCatalog[safe.eventCode].message);
     }]));
-    return {target,close(){closed=true;}};
+    return {target,close:()=>engine.close()};
 }
 export function createAuroraPipeline(options={}){
     const format=options.format??'silent';

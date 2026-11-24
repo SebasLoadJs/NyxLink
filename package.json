@@ -68,7 +68,8 @@
     "NOTICE.md"
   ],
   "dependencies": {
-    "consola": "3.4.2"
+    "consola": "3.4.2",
+    "pino": "10.4.0"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",

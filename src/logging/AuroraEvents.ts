@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import type { Manager } from '../core/Manager';
 import { claimManagerLogRoute } from './ManagerLogRoute';
+import { createPinoRecordEngine, type PinoOutputMeta } from './PinoEngine';
 import type { Player } from '../entities/Player';
 
 export type AuroraLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
@@ -70,6 +71,16 @@ export type AuroraEvent = {
     spanId?: string;
 };
 export type AuroraPinoTarget = Record<AuroraLevel, (event: AuroraEvent, message: string) => unknown>;
+/** Host presentation consumes the detached record only after Pino serialization. */
+export function createAuroraPinoEngine(level: AuroraLevel, consume: (record: AuroraEvent, meta: PinoOutputMeta) => void, onError?: () => void): { target: AuroraPinoTarget; close(): void } {
+    const engine = createPinoRecordEngine<AuroraEvent>(level, consume, onError);
+    const write = (severity: AuroraLevel) => (event: AuroraEvent, message: string) => {
+        if (Object.hasOwn(auroraCatalog, event.eventCode) && auroraCatalog[event.eventCode].level === severity) {
+            engine.write(severity, event, message);
+        }
+    };
+    return { target: { trace: write('trace'), debug: write('debug'), info: write('info'), warn: write('warn'), error: write('error'), fatal: write('fatal') }, close: () => engine.close() };
+}
 export interface AuroraEventOptions {
     level?: AuroraLevel | 'silent';
     categories?: readonly AuroraCategory[];
