@@ -31,8 +31,12 @@ export function formatStartupObservation(context: LogContext, options: Formatter
 }
 
 /** Render only observed fields; malformed/truncated event context falls back to its message. */
-export function formatDashboardObservation(context: LogContext, options: FormatterOptions): string | undefined {
+export function formatDashboardObservation(context: LogContext, options: FormatterOptions, layout = 'standard'): string | undefined {
     if (!Array.isArray(context.nodes) || !Array.isArray(context.sources) || !object(context.audio) || !object(context.runtime)) return;
+    if (layout === 'compact') {
+        const summary = `NYXLINK / CLUSTER | ${context.nodes.length} nodes shown | ${number(context.audio.playing)}/${number(context.audio.players)} playing | queue ${number(context.audio.queuedTracks)}`;
+        return options.color ? summary.replace('NYXLINK', ansi('NYXLINK', 95, true)) : summary;
+    }
     const rows: Record<string, unknown> = {
         Cluster: `${context.nodes.length} shown, ${number(context.truncatedNodes)} omitted`,
         Audio: `${number(context.audio.playing)} playing / ${number(context.audio.players)} players / ${number(context.audio.paused)} paused`,
