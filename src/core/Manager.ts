@@ -20,6 +20,7 @@ import { version } from "../..";
 import { SpotifySource } from "../sources/spotify";
 import { DeezerSource } from "../sources/deezer";
 import { Logger } from "../logging/Logger";
+import { ExtensionHost, type NyxExtension, type ExtensionOptions } from '../extensions/ExtensionHost';
 import { PrivateMetricsServer, type PrivateMetricsOptions } from '../observability/PrivateMetricsServer';
 import { GuildOwnership, type GuildOwnershipOptions } from '../cluster/GuildOwnership';
 
@@ -40,6 +41,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
     }
     public set database(database: DatabaseManager) { this.databaseInstance = database; }
     public readonly logger?: Logger;
+    private extensionHost?: ExtensionHost;
     private detachLogging?: () => void;
     private idleCheckInterval?: NodeJS.Timeout;
     private initializationPromise?: Promise<this>;
@@ -196,6 +198,17 @@ export class Manager extends EventEmitter<IManagerEvents> {
         this.detachLogging = undefined;
     }
 
+    /** Register a trusted optional extension; returns an idempotent async disposer. */
+    public useExtension(extension: NyxExtension, options?: ExtensionOptions): Promise<() => Promise<void>> {
+        if (this.destroyed) return Promise.reject(new Error('Manager is shut down'));
+        this.extensionHost ??= new ExtensionHost(this);
+        return this.extensionHost.register(extension, options);
+    }
+
+    public removeExtension(name: string): Promise<boolean> {
+        return this.extensionHost?.remove(name) ?? Promise.resolve(false);
+    }
+
     public use(connector: Connector, client: any): this {
         if (this.destroyed) throw new Error('Manager is shut down');
         connector.setManager(this);
@@ -253,6 +266,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
                 try { await operation(); } catch (error) { errors.push(error); }
             };
             await Promise.all([...this.privateMetricsServers].map(endpoint => attempt(() => endpoint.close())));
+            await attempt(() => this.extensionHost?.close());
             this.privateMetricsServers.clear();
             if (this.initializationPromise) await attempt(() => this.initializationPromise);
             await Promise.all(this.players.all.map(player => attempt(() => player.destroy('Manager shutdown'))));
@@ -263,6 +277,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
             for (const connector of this.connectors) await attempt(() => connector.dispose?.());
             this.connectors.clear();
             await attempt(() => this.detachLogger());
+            await attempt(() => this.logger?.close());
             if (this.databaseInstance) await attempt(() => this.databaseInstance?.shutdown());
             if (Structure.getManager() === this) Structure.setManager(undefined);
             if (errors.length) throw new AggregateError(errors, 'Manager shutdown encountered cleanup failures');

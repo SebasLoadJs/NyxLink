@@ -42,6 +42,12 @@ export class SearchService {
     }
 
     public async search(query: ISearchQuery): Promise<SearchResult> {
+        const logger = this.manager.logger;
+        const run = () => this.runSearch(query);
+        return logger && logger.isEnabled('error') ? logger.traceOperation('Search.search', run) : run();
+    }
+
+    private async runSearch(query: ISearchQuery): Promise<SearchResult> {
         if (this.manager.destroyed) throw new Error('Manager is shut down');
         if (!query || typeof query !== 'object' || Array.isArray(query)) throw new TypeError('Search options must be an object');
         if (typeof query.query !== 'string' || !query.query.trim()) throw new TypeError('Search query must be a non-empty string');

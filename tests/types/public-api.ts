@@ -262,3 +262,30 @@ const badGatewayOpcode: import('../../dist').GuildVoiceGatewayPacket = { op: 5, 
 // @ts-expect-error Fenced voice IPC requires a boolean Discord self_mute flag.
 const invalidGatewayMute: import('../../dist').GuildVoiceGatewayPacket = { op: 4, d: { ...voiceGatewayPacket.d, self_mute: 'no' } };
 void [outboundEnvelope, routedPacket, badGatewayOpcode, invalidGatewayMute];
+
+const diagnosticLogger = new (require('../../dist').Logger)({
+    profile: 'diagnostic', mode: 'json', layout: 'compact', timelineLimit: 100,
+    sampleRate: 0.5, deduplicateMs: 1000,
+    transports: [{ write(record: import('../../dist').StructuredLogRecord) { void record.context; } }],
+} satisfies import('../../dist').LoggerOptions) as import('../../dist').Logger;
+const correlated = diagnosticLogger.child({ guildId: '123456789012345678' });
+const operationResult: Promise<number> = correlated.traceOperation('test', async log => { log.event('info', 'Test', 'observed'); return 1; });
+const structuredEvents: import('../../dist').StructuredLogRecord[] = correlated.timeline({ limit: 10 });
+const loggerStats: Readonly<import('../../dist').LogPipelineStats> = diagnosticLogger.getStats();
+const diagnostic: import('../../dist').ErrorDiagnostic = diagnosticLogger.reportError(new Error('fixture'));
+const mixCreated: Promise<import('../../dist').MixLayerCreated | null> = player.addMix('encoded', { volume: 0.5 });
+const mixList: Promise<import('../../dist').MixLayersResponse | null> = player.getMixes();
+// @ts-expect-error Mixer volume is numeric.
+player.updateMixVolume('mix-id', 'loud');
+// @ts-expect-error Structured log levels do not include arbitrary strings.
+diagnosticLogger.event('invalid', 'Node', 'event');
+void [operationResult, structuredEvents, loggerStats, diagnostic, mixCreated, mixList];
+
+const optionalExtension: import('../../dist').NyxExtension = { name: 'typed-observer', setup(context) {
+    context.on('trackStart', (playingPlayer, track) => { const ids: [string, string | undefined] = [playingPlayer.guildId, track.identifier]; void ids; });
+    // @ts-expect-error Event names must be from the manager contract.
+    context.on('inventedEvent', () => {});
+    void context.signal;
+} };
+const extensionDisposer: Promise<() => Promise<void>> = manager.useExtension(optionalExtension);
+void extensionDisposer;

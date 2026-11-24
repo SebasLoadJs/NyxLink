@@ -17,6 +17,7 @@ import { IRESTLoadTracks, IRESTGetLyrics, IRESTGetPlayers, ITrack, INodeStats, I
 import { playbackGuard } from '../players/PlaybackGuard';
 import { validateNodeLinkStreamResponse } from '../backends/NodeLinkStreamResponse';
 import { assertClientPcmSeekPosition, createClientPcmSeekStream } from '../backends/ClientPCMSeek';
+import { mixCreateBody, requireMixId, requireMixVolume, validateMixCreated, validateMixLayers, type MixLayerCreated, type MixLayersResponse } from '../backends/NodeLinkMixContracts';
 
 export class RestError extends Error {
     public statusCode: number;
@@ -90,6 +91,14 @@ export class Rest {
     }
 
     private async featureRequest<T = any>(operation: ExtensionOperation, params: ExtensionRouteParameters, options: http.RequestOptions & { body?: any }, validate?: (response: unknown) => void): Promise<T> {
+        const logger = this.node.manager.logger;
+        const run = () => this.runFeatureRequest<T>(operation, params, options, validate);
+        return logger && logger.isEnabled('error')
+            ? logger.traceOperation('REST.' + operation, run, { nodeId: this.node.identifier, ...(params.guildId ? { guildId: params.guildId } : {}) })
+            : run();
+    }
+
+    private async runFeatureRequest<T>(operation: ExtensionOperation, params: ExtensionRouteParameters, options: http.RequestOptions & { body?: any }, validate?: (response: unknown) => void): Promise<T> {
         const route = this.extensionRoute(operation, params);
         // NodeLink extension commands must obey the same guild lease as
         // ordinary playback PATCH/DELETE, including mix and subscription APIs.
@@ -237,6 +246,13 @@ export class Rest {
     }
 
     public async updatePlayer(guildId: string, data: PlayerUpdatePayload, noReplace: boolean = false): Promise<PlayerUpdateAcknowledgement | null> {
+        const logger = this.node.manager.logger;
+        const run = () => this.updatePlayerRequest(guildId, data, noReplace);
+        return logger && logger.isEnabled('error')
+            ? logger.traceOperation('REST.updatePlayer', run, { nodeId: this.node.identifier, guildId }) : run();
+    }
+
+    private async updatePlayerRequest(guildId: string, data: PlayerUpdatePayload, noReplace: boolean): Promise<PlayerUpdateAcknowledgement | null> {
         await this.node.manager.guildOwnership?.assertCurrent(guildId);
         const payload = this.node.backend ? this.node.backend.preparePlayerUpdate(data) : preparePlayerUpdate(this.node.isNodeLink ? 'nodelink' : 'unknown', data);
         const params = new URLSearchParams();
@@ -417,31 +433,33 @@ export class Rest {
     public async addMixLayer(
         guildId: string,
         data: { track: { encoded: string; userData?: Record<string, any> }; volume?: number }
-    ): Promise<any | null> {
+    ): Promise<MixLayerCreated | null> {
         this.node.assertFeature("mix:add");
-
-        const res = await this.featureRequest<any>("mix:add", { guildId }, {
+        requireGuildId(guildId);
+        const body = mixCreateBody(data);
+        const res = await this.featureRequest<unknown>("mix:add", { guildId }, {
             headers: this.jsonHeaders,
-            body: data
-        });
-
-        return res || null;
+            body
+        }, validateMixCreated);
+        return res == null ? null : res as MixLayerCreated;
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
-    public async getMixLayers(guildId: string): Promise<any | null> {
+    public async getMixLayers(guildId: string): Promise<MixLayersResponse | null> {
         this.node.assertFeature("mix:list");
-
-        const res = await this.featureRequest<any>("mix:list", { guildId }, {
+        requireGuildId(guildId);
+        const res = await this.featureRequest<unknown>("mix:list", { guildId }, {
             headers: this.authHeaders
-        });
-
-        return res || null;
+        }, validateMixLayers);
+        return res == null ? null : res as MixLayersResponse;
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
     public async updateMixLayerVolume(guildId: string, mixId: string, volume: number): Promise<void> {
         this.node.assertFeature("mix:update");
+        requireGuildId(guildId);
+        requireMixId(mixId);
+        requireMixVolume(volume);
 
         await this.featureRequest("mix:update", { guildId, mixId }, {
             headers: this.jsonHeaders,
@@ -452,6 +470,8 @@ export class Rest {
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
     public async removeMixLayer(guildId: string, mixId: string): Promise<void> {
         this.node.assertFeature("mix:remove");
+        requireGuildId(guildId);
+        requireMixId(mixId);
 
         await this.featureRequest("mix:remove", { guildId, mixId }, {
             headers: this.authHeaders

@@ -10,7 +10,11 @@ Leyenda: **CI verificado** significa que existía evidencia de ejecución automa
 
 Referencia inicial CI: commit `2e2bc6bbfd1db20841cf658367c2c4956cc7915d` — [validación Node 22/24](https://github.com/SebasLoadJs/NyxLink/actions/runs/45104859133), [Lavalink/NodeLink](https://github.com/SebasLoadJs/NyxLink/actions/runs/45104859183), [endurance extendida](https://github.com/SebasLoadJs/NyxLink/actions/runs/45104859114), [CodeQL](https://github.com/SebasLoadJs/NyxLink/actions/runs/45104859127). Esas ejecuciones **no certifican commits posteriores**.
 
+Reanudación local del 23 de noviembre: base `03546fd`, rama `codex/resume-stabilization`. El último job de integración falló durante la descarga implícita de NodeLink moderno; no hay causa de registro demostrada. Se separó la descarga del arranque con reintentos transitorios acotados y diagnósticos sin credenciales. P1-021 y los gates de CI siguen pendientes de repetir en Linux con Docker; los resultados históricos de la tabla no certifican este cambio local. Evidencia y limitaciones: [resumption-verification.md](resumption-verification.md).
+
 ## Matriz de los 38 trabajos
+
+La implementación local posterior agrega pipeline/JSON/correlación/diagnósticos y dashboard de snapshots (P1-018/P3-037), mixer tipado y serializado (P2-022), hooks de extensiones opcionales, nueva guía API/migración/ejemplos (P2-028) y extracción de recuperación compartida (P3-038). Hay **930 pruebas locales aprobadas en Node.js 22 y 24**, sin equivaler a CI ni voz real. El detalle de los 24 capítulos, benchmarks y deuda restante está en [modernization-status.md](modernization-status.md). Los IDs originales se mantienen sin duplicación.
 
 | ID | Fase | Trabajo original | Estado de evidencia | Implementación / tests relevantes | Falta para cerrar |
 | --- | --- | --- | --- | --- | --- |

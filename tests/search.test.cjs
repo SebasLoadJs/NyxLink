@@ -97,11 +97,16 @@ test('real search HTTP timeouts abort the socket and HTTP 429 preserves status w
   const server = http.createServer((_req, res) => { requests++; if (mode === '429') { res.writeHead(429, { 'content-type': 'application/json' }); res.end(JSON.stringify({ message: 'local rate limit' })); } });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
-  const { manager, node } = fixture(t, { timeoutMs: 40, fallbackPlatforms: ['soundcloud'] });
+  const { manager, node } = fixture(t, { timeoutMs: 1000, fallbackPlatforms: ['soundcloud'] });
   node.port = server.address().port;
   await assert.rejects(manager.search({ query: 'rate limited' }), error => error instanceof HttpError && error.statusCode === 429 && error.body.message === 'local rate limit');
   assert.equal(requests, 1);
+  // Receiving an actual 429 must not race a tiny connection deadline on loaded
+  // Windows runners. The stalled-server case still has its own short budget.
+  manager.options.search.timeoutMs = 250;
+  const timeoutStarted = Date.now();
   mode = 'hang'; await assert.rejects(manager.search({ query: 'timeout' }), /timeout|timed out/i); assert.equal(requests, 2);
+  assert.ok(Date.now() - timeoutStarted < 2000, 'a stalled request must remain bounded');
   const controller = new AbortController(); const search = manager.search({ query: 'cancel', signal: controller.signal });
   const rejected = assert.rejects(search, /abort/i); setTimeout(() => controller.abort(), 10); await rejected;
 });

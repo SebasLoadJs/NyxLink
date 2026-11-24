@@ -418,6 +418,11 @@ Llama a esta función desde el cierre de tu aplicación. `manager.shutdown()` es
 
 ## Guías para migración y versiones
 
+- [Guía de API](docs/api-reference.md) — contratos, lifecycle, recuperación y funciones opcionales
+- [Logging y observabilidad](docs/logging-guide.md) — perfiles, JSON, trazas, destinos y dashboard opt-in
+- [Mixer NodeLink](docs/mixer.md) — respuestas tipadas, volumen y concurrencia
+- [Extensiones opcionales](docs/extensions.md) — registro, hooks tipados, errores y cierre
+- [Estado de modernización](docs/modernization-status.md) — implementación, evidencia y puertas pendientes
 - [Migrar de Moonlink a NyxLink](docs/migrating-from-moonlink.md) — imports, cambios de comportamiento, sesiones, backends y rollback
 - [Cambios previstos para v5.3](CHANGELOG.md) — funcionalidades implementadas y limitaciones aún pendientes de verificar
 - [Plan de aceptación de v5.3](docs/release-5.3-plan.md) — fases, pruebas y condiciones necesarias antes de la publicación estable

@@ -78,6 +78,14 @@ NYXLINK_CONTAINER_ENGINE=docker pnpm run test:lavalink-plugins
 
 For Discord voice and audible transition checks, follow `docs/live-voice-verification.md`. That harness requires explicit permission and separately configured credentials; it is not part of ordinary CI. Only approve the stable release after its results and the release candidate's package-consumer checks are reviewed.
 
+## Local modernization additions
+
+Existing Logger methods and silent defaults remain. Custom structured destinations receive redacted immutable records; provide `LogTransport` rather than depending on an internal Consola reporter. Await `flush`/`close` when output must finish; Manager shutdown now closes its owned logger. A saturated queue is bounded and exposes drops through diagnostics instead of growing indefinitely. See [logging-guide.md](logging-guide.md).
+
+Mixer responses now have explicit types and runtime validation. `getMixes()` returns `{ mixes: [...] }`, not an unchecked bare array; mix volume is 0..1. Player mixer commands are serialized, and lifecycle changes may reject with `PLAYER_OPERATION_CANCELLED` after a mutation has already reached the old server. Catch that separately from a current-session backend failure. See [mixer.md](mixer.md).
+
+`useExtension` is optional and additive; existing connectors and injected resolvers/storage continue unchanged. Its hooks are typed and isolated, with explicit setup/cleanup deadlines. See [extensions.md](extensions.md).
+
 ## Rollback
 
 Keep the previously working Moonlink deployment and configuration available. If the new client fails acceptance tests, redeploy the known-good package and backup of its application state. Never point two running processes at the same Discord guild voice session during rollback.

@@ -18,6 +18,8 @@ import { TrackCodec } from '../tracks/TrackCodec';
 import { TrackResolver } from '../tracks/TrackResolver';
 import { VoiceReceiver, VoiceReceiverOptions } from "./VoiceReceiver";
 import { PlayerSnapshotCodec, recordRevision, type PlayerSnapshot } from '../database/PlayerSnapshot';
+import { mixCreateBody, type MixCreateOptions, type MixLayerCreated, type MixLayersResponse } from '../backends/NodeLinkMixContracts';
+import { PlayerOperationCancelledError } from '../errors/PlayerOperationCancelledError';
 
 export class Player {
     public readonly manager: Manager;
@@ -613,33 +615,52 @@ export class Player {
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
-    public async addMix(track: Track | string, options?: { volume?: number; userData?: Record<string, any> }): Promise<any | null> {
+    public async addMix(track: Track | string, options?: MixCreateOptions): Promise<MixLayerCreated | null> {
         this.assertNodeLinkFeature("mix:add");
         const encoded = this.resolveEncodedTrack(track);
-        return this.node.rest.addMixLayer(this.guildId, {
+        const body = mixCreateBody({
             track: { encoded, userData: options?.userData },
             volume: options?.volume
         });
+        return this.mixCommand('mix:add', node => node.rest.addMixLayer(this.guildId, body));
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
-    public async getMixes(): Promise<any | null> {
+    public async getMixes(): Promise<MixLayersResponse | null> {
         this.assertNodeLinkFeature("mix:list");
-        return this.node.rest.getMixLayers(this.guildId);
+        return this.mixCommand('mix:list', node => node.rest.getMixLayers(this.guildId));
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
     public async updateMixVolume(mixId: string, volume: number): Promise<this> {
         this.assertNodeLinkFeature("mix:update");
-        await this.node.rest.updateMixLayerVolume(this.guildId, mixId, volume);
+        await this.mixCommand('mix:update', node => node.rest.updateMixLayerVolume(this.guildId, mixId, volume));
         return this;
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
     public async removeMix(mixId: string): Promise<this> {
         this.assertNodeLinkFeature("mix:remove");
-        await this.node.rest.removeMixLayer(this.guildId, mixId);
+        await this.mixCommand('mix:remove', node => node.rest.removeMixLayer(this.guildId, mixId));
         return this;
+    }
+
+    private mixCommand<T>(operation: string, execute: (node: Node) => Promise<T>): Promise<T> {
+        const node = this.node, session = node.sessionId, socket = node.socket, backend = node.backend;
+        const guard = playbackGuard(this), ticket = guard.ticket;
+        const active = () => !this.destroyed && !this.manager.destroyed && !node.destroyed && node.connected &&
+            this.node === node && node.sessionId === session && node.socket === socket && node.backend === backend && guard.isCurrent(ticket);
+        return this.commands.enqueue(async () => {
+            if (!active()) throw new PlayerOperationCancelledError(operation);
+            let result: T;
+            try { result = await execute(node); }
+            catch (error) {
+                if (!active()) throw new PlayerOperationCancelledError(operation);
+                throw error;
+            }
+            if (!active()) throw new PlayerOperationCancelledError(operation);
+            return result;
+        });
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */

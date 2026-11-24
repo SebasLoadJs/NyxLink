@@ -3,10 +3,8 @@ const path = require('node:path');
 const http = require('node:http');
 const net = require('node:net');
 const { randomBytes } = require('node:crypto');
-const { execFile } = require('node:child_process');
-const { promisify } = require('node:util');
 const { setTimeout: delay } = require('node:timers/promises');
-const exec = promisify(execFile);
+const { createContainerCommand, ensureContainerImage } = require('./container-command.cjs');
 const pinnedImages = require('../integration/backend-servers.json');
 const profile = process.env.NYXLINK_NODELINK_PROFILE || 'baseline';
 if (!['baseline', 'modern', 'patched'].includes(profile)) throw new Error('Unknown NodeLink test profile');
@@ -49,11 +47,11 @@ async function freePort() {
 async function withBackendLab(run, options = {}) {
   if (process.platform !== 'linux') throw new Error('The isolated backend lab requires a Linux container host.');
   const engine = process.env.NYXLINK_CONTAINER_ENGINE || 'podman';
-  const command = args => exec(engine, args, { timeout: 120000, maxBuffer: 1024 * 1024 });
   const root = path.resolve(__dirname, '../..');
   await fs.mkdir(path.join(root, '.runtime/integration'), { recursive: true });
   const directory = await fs.mkdtemp(path.join(root, '.runtime/integration/run-'));
   const password = randomBytes(24).toString('hex');
+  const command = createContainerCommand(engine, [password]);
   const media = tone();
   // A frequency transition at 500ms makes an actual seek audible/measurable:
   // before 500ms = 440Hz, after 500ms = 880Hz.
@@ -78,6 +76,9 @@ async function withBackendLab(run, options = {}) {
   const backends = [];
   try {
     for (const kind of ['lavalink', 'nodelink']) {
+      // Download separately so registry latency cannot consume the startup
+      // deadline, and never retry a container start or a protocol assertion.
+      await ensureContainerImage(command, images[kind].image);
       const port = await freePort();
       const name = `nyxlink-test-${kind}-${process.pid}-${randomBytes(3).toString('hex')}`;
       const configPath = path.join(directory, kind === 'lavalink' ? 'application.yml' : 'config.js');
@@ -95,6 +96,7 @@ async function withBackendLab(run, options = {}) {
         args.push('--read-only', '--tmpfs', '/tmp:rw,nosuid,size=64m', '-e', 'npm_config_offline=true', '-v', `${pluginsPath}:/app/plugins:ro`, '-e', `NODELINK_SERVER_PORT=${port}`, '-e', 'NODELINK_SERVER_HOST=127.0.0.1', '-e', `NODELINK_SERVER_PASSWORD=${password}`, '-e', 'NODELINK_CLUSTER_ENABLED=false');
       }
       args.push(images[kind].image);
+      args.splice(1, 0, '--pull=never');
       containers.push(name);
       await command(args);
       const url = `http://127.0.0.1:${port}`;

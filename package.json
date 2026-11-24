@@ -24,6 +24,7 @@
     "pack:check": "node scripts/check-package.cjs",
     "test:backends": "pnpm run build && node scripts/test-backends.cjs",
     "bench": "pnpm run build && node --expose-gc --max-old-space-size=512 scripts/benchmark.cjs",
+    "bench:logging": "pnpm run build && node --expose-gc scripts/benchmark-logging.cjs",
     "test:endurance": "pnpm run build && node scripts/endurance.cjs",
     "test:package": "pnpm run build && node scripts/test-package.cjs",
     "test:extensions": "pnpm run build && node scripts/test-extensions.cjs",

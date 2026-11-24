@@ -4,8 +4,16 @@ This changelog describes the unreleased NyxLink 5.3 development line and its ver
 
 ## [Unreleased — v5.3]
 
+### Test infrastructure
+
+- Separated digest-pinned backend image downloads from container startup. Cached images need no download; transient pull failures get at most one retry with a dedicated 180-second deadline per attempt. Container starts and protocol assertions are never retried by this helper; missing locally patched images fail without registry fallback.
+- Added bounded container failure diagnostics with timeout classification and redaction of generated lab passwords, instead of printing credential-bearing command arguments.
+- Fixed Windows package checks to execute installed npm/pnpm JavaScript CLIs through Node without a shell, avoiding `spawnSync npm.cmd EINVAL` while preserving argument boundaries.
+
 ### Architecture and public API
 
+- Extracted the worker/special-voice recovery transaction into a shared internal module, preventing nested restart failures from destroying a newer user intent and preserving retry budgets on unacknowledged recovery.
+- Added optional trusted extension setup/dispose with typed isolated event hooks, AbortSignal, lifecycle deadlines and manager-owned shutdown.
 - Introduced a multi-backend client architecture with explicit Lavalink v4 and NodeLink adapters, capability discovery, connection-scoped inventories, selection constraints and backend-specific contracts.
 - Added stronger REST/WebSocket response validation and extension routing that rejects unsupported operations rather than silently sending incompatible payloads.
 - Extended playback snapshots, track encoding/resolution, storage contracts and public TypeScript declarations for CommonJS and ESM consumers.
@@ -32,6 +40,7 @@ This changelog describes the unreleased NyxLink 5.3 development line and its ver
 
 ### NodeLink integration
 
+- Added typed mix create/list contracts, runtime response/input validation, 0..1 mix-volume enforcement and serialized Player mix commands with explicit stale-lifecycle cancellation.
 - Added validated source-health REST responses and real-time events; optional source-aware node selection.
 - Added per-player crossfade settings, queue-preload scheduling and recognized nonterminal gapless/crossfade transitions.
 - Added supported low-level NodeLink extension routes: stream and format handling, lyrics/captions, groups, SponsorBlock and remote mix operations.
@@ -46,6 +55,9 @@ These APIs only describe **client and tested protocol behavior**; they do not gu
 
 ### Logging and security
 
+- Added a bounded opt-in structured logging pipeline with injectable destinations, newline-delimited JSON, child context, async correlation/spans, timeline filters, profiles/layouts, sampling/group summaries and explicit flush/close.
+- Added bounded getter-free credential redaction, transport backpressure/timeout isolation, drop/error counters, grounded diagnostics and optional observed cluster/source/runtime snapshots. NO_COLOR, ASCII and narrow-terminal rendering are supported.
+- Exposed aggregate logger diagnostics only through the existing authenticated private metrics service; no message history or guild labels are exported.
 - Added opt-in Consola-based logging with system-status and failover reporting. Logging remains silent by default.
 - Added basic redaction of known secret fields and authorization tokens; reinforced transport/authentication handling, failure boundaries and test-laboratory security.
 - Enabled strict compilation on Node.js 22/24, regression/contract tests, backend integration, CodeQL and endurance validation in GitHub Actions.

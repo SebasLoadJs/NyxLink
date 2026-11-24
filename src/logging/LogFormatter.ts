@@ -21,8 +21,9 @@ export function ansi(text: string, code: number, enabled: boolean): string {
 /** Best-effort defense for credentials embedded in legacy debug messages. */
 export function redactSecrets(value: string): string {
   return value
+    .replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/@]+:[^\s/@]+@/gi, '$1[REDACTED]@')
     .replace(/\bBearer\s+[A-Za-z0-9._~+\/=-]+/gi, 'Bearer [REDACTED]')
-    .replace(/((?:["']?)(?:authorization|password|passwd|passphrase|api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|client[_-]?secret|token)(?:["']?)\s*[:=]\s*["']?)([^"'\s,}\]&]+)/gi, '$1[REDACTED]');
+    .replace(/((?:["']?)(?:authorization|password|passwd|passphrase|api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|client[_-]?secret|session[_-]?id|token)(?:["']?)\s*[:=]\s*["']?)([^"'\s,}\]&]+)/gi, '$1[REDACTED]');
 }
 
 export function formatValue(value: unknown): string {
@@ -59,7 +60,7 @@ function splitToWidth(text: string, width: number): string[] {
 }
 
 export function formatBox(title: string, details: Record<string, unknown> = {}, width = 70): string {
-  const innerWidth = Math.max(30, Math.min(108, Math.floor(width) - 4));
+  const innerWidth = Math.max(16, Math.min(108, Math.floor(Number.isFinite(width) ? width : 70) - 4));
   const lines = [title.toUpperCase(), ''];
   for (const [key, value] of Object.entries(details)) {
     const label = key.padEnd(13, ' ');
@@ -109,9 +110,10 @@ export type FailoverReport = {
 };
 
 function panel(title: string, content: string[], width: number): string {
-  const w = Math.max(44, Math.min(106, Math.floor(width)));
+  const w = Math.max(20, Math.min(106, Math.floor(Number.isFinite(width) ? width : 72)));
   const lineWidth = w - 4;
-  const header = `┌─ ${title} ${'─'.repeat(Math.max(0, w - title.length - 5))}┐`;
+  const visibleTitle = [...title].slice(0, w - 5).join('');
+  const header = `┌─ ${visibleTitle} ${'─'.repeat(Math.max(0, w - [...visibleTitle].length - 5))}┐`;
   const rows = content.flatMap(x => splitToWidth(x, lineWidth)).map(s => `│ ${padRight(s, lineWidth)} │`);
   return [header, ...rows, `└${'─'.repeat(w-2)}┘`].join('\n');
 }

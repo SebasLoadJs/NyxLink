@@ -13,6 +13,7 @@ import type { NodeRequirements } from '../nodes/NodeSelector';
 import type { CircuitBreakerOptions } from '../nodes/NodeCircuitBreaker';
 
 export interface IManagerEvents {
+    extensionError: (name: string, error: import('../extensions/ExtensionHost').ExtensionLifecycleError) => void;
     debug: (message: string) => void;
 
     // Node Events

@@ -1,7 +1,9 @@
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
+const { packageManagerCommand } = require('./package-manager-command.cjs');
 
-const result = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { encoding: 'utf8' });
+const invocation = packageManagerCommand('npm', ['pack', '--dry-run', '--json', '--ignore-scripts']);
+const result = spawnSync(invocation.command, invocation.args, { encoding: 'utf8', timeout: 120000 });
 assert.equal(result.status, 0, result.stderr || result.error?.message);
 const [archive] = JSON.parse(result.stdout);
 const files = archive.files.map(file => file.path);

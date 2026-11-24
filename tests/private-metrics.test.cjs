@@ -4,6 +4,24 @@ const { createPlayer } = require('./helpers/player.cjs');
 
 const TOKEN = 'nyxlink-metrics-test-token-with-32-characters';
 
+test('logging diagnostics expose counters without payloads or a public endpoint', async t => {
+  const { manager, endpoint, get } = await open(t);
+  const { Logger } = require('../dist');
+  assert.deepEqual(await (await get('/logging')).json(), { configured: false });
+  manager.logger = new Logger({ level: 'info', maxQueue: 1, transports: [{ write() {} }] });
+  t.after(() => manager.logger.close());
+  manager.logger.info('Node', 'password=PRIVATE_LOG_METRICS'); manager.logger.error('Node', 'critical');
+  await manager.logger.flush();
+  const counters = await (await get('/logging')).json();
+  assert.equal(counters.configured, true);
+  assert.equal(counters.dropped, 1);
+  const metrics = await (await get('/metrics')).text();
+  assert.match(metrics, /# TYPE nyxlink_log_dropped_total counter/);
+  assert.match(metrics, /nyxlink_log_dropped_total 1/);
+  assert.ok(!JSON.stringify(counters).includes('PRIVATE_LOG_METRICS'));
+  assert.equal((await fetch(endpoint.url + '/logging')).status, 401);
+});
+
 async function open(t) {
   const { manager, node, player } = createPlayer(t);
   const endpoint = await manager.startPrivateMetricsServer({ token: TOKEN });

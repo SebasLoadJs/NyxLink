@@ -8,10 +8,16 @@ const root = path.resolve(__dirname, '..');
 const manifest = require('../package.json');
 const baseline = require('../tests/fixtures/public-exports.json');
 const { validateReleaseManifest } = require('./release-policy.cjs');
+const { packageManagerCommand } = require('./package-manager-command.cjs');
 const fromRegistry = process.argv.includes('--registry');
 assert.ok(process.argv.slice(2).every(argument => argument === '--registry'), 'Usage: node scripts/test-package.cjs [--registry]');
 
 function run(command, args, cwd) {
+  if (command === 'npm' || command === 'pnpm') {
+    const invocation = packageManagerCommand(command, args);
+    command = invocation.command;
+    args = invocation.args;
+  }
   const result = spawnSync(command, args, { cwd, encoding: 'utf8', timeout: 120000, env: { ...process.env, CI: 'false', COREPACK_ENABLE_PROJECT_SPEC: '0' } });
   assert.equal(result.status, 0, `${command} ${args.join(' ')} failed: ${result.stderr || result.stdout || result.error?.message}`);
   return result;
@@ -25,7 +31,7 @@ async function main() {
   let archive;
   try {
     if (!fromRegistry) {
-      const packed = run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', directory], root);
+      const packed = run('npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', directory], root);
       const [description] = JSON.parse(packed.stdout);
       archive = path.join(directory, description.filename);
       assert.equal(path.dirname(archive), directory);
@@ -37,7 +43,7 @@ async function main() {
     const discord = require('../node_modules/discord.js/package.json').version;
     await fs.writeFile(path.join(consumer, 'package.json'), JSON.stringify({ private: true, packageManager: manifest.packageManager,
       dependencies: { [manifest.name]: fromRegistry ? manifest.version : `file:${archive}` }, devDependencies: { '@types/node': types, typescript: compiler, 'discord.js': discord } }));
-    const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+    const pnpm = 'pnpm';
     run(pnpm, ['install', fromRegistry ? '--prefer-offline=false' : '--prefer-offline', ...(fromRegistry ? ['--force'] : []), '--registry=https://registry.npmjs.org/', '--ignore-scripts', '--no-frozen-lockfile'], consumer);
     checks.push(fromRegistry ? 'install exact published version from public npm in isolated consumer' : 'install packed artifact in isolated consumer');
     const installed = path.join(consumer, 'node_modules', ...manifest.name.split('/'));
@@ -56,7 +62,7 @@ async function main() {
     const specifier = JSON.stringify(manifest.name);
     const setup = `const assert = require('node:assert/strict'); const api = require(${specifier});
       for (const name of ${JSON.stringify(baseline)}) assert.ok(name in api, name);
-      for (const name of ['PlayerSnapshotCodec', 'SnapshotConflictError', 'SnapshotValidationError']) assert.equal(typeof api[name], 'function');
+      for (const name of ['PlayerSnapshotCodec', 'SnapshotConflictError', 'SnapshotValidationError', 'JsonLogTransport', 'TerminalDashboard', 'diagnoseError', 'ExtensionLifecycleError', 'PlayerOperationCancelledError']) assert.equal(typeof api[name], 'function');
       assert.equal(api.version, ${JSON.stringify(manifest.version)});
       for (const name of ['RedisStorage', 'RedisGuildLeaseCoordinator', 'RedisGuildIpcRouter', 'PrivateMetricsServer']) assert.equal(typeof api[name], 'function');
       const m = new api.Manager({nodes:[{host:'127.0.0.1',port:2333,password:'local-fixture'}],options:{database:{type:'memory'}}});
@@ -67,7 +73,7 @@ async function main() {
     assert.equal(commonjs.stdout, ''); assert.equal(commonjs.stderr, '');
     checks.push('CommonJS public exports, metadata and silent lifecycle');
     await fs.writeFile(path.join(consumer, 'esm.mjs'), `import assert from 'node:assert/strict';
-      import { Manager, Track, TrackCodec, TrackResolver, Memory, PlayerSnapshotCodec, SnapshotConflictError, RedisStorage, RedisGuildLeaseCoordinator, RedisGuildIpcRouter, PrivateMetricsServer, version } from ${specifier};
+      import { Manager, Track, TrackCodec, TrackResolver, Memory, PlayerSnapshotCodec, SnapshotConflictError, RedisStorage, RedisGuildLeaseCoordinator, RedisGuildIpcRouter, PrivateMetricsServer, Logger, JsonLogTransport, TerminalDashboard, diagnoseError, ExtensionLifecycleError, PlayerOperationCancelledError, version } from ${specifier};
       assert.equal(version, ${JSON.stringify(manifest.version)});
       assert.equal(typeof Track, 'function'); assert.equal(typeof TrackCodec.serialize, 'function'); assert.equal(typeof TrackResolver.resolve, 'function');
       for (const component of [RedisStorage, RedisGuildLeaseCoordinator, RedisGuildIpcRouter, PrivateMetricsServer]) assert.equal(typeof component, 'function');
@@ -75,7 +81,11 @@ async function main() {
       assert.equal(await adapter.compareAndSet('record', null, { revision: 'installed-revision' }), true);
       assert.equal(PlayerSnapshotCodec.fromRecord({guildId:'123456789012345678',voiceChannelId:'223456789012345678'}).schemaVersion, 1);
       assert.equal(new SnapshotConflictError().code, 'SNAPSHOT_CONFLICT');
-      const manager = new Manager({nodes:[{host:'127.0.0.1',port:2333,password:'local-fixture'}],options:{database:{type:'memory'}}}); await manager.shutdown();`);
+      for (const component of [JsonLogTransport, TerminalDashboard, diagnoseError, ExtensionLifecycleError, PlayerOperationCancelledError]) assert.equal(typeof component, 'function');
+      const logger = new Logger({profile:'debug',transports:[{write(record){assert.equal(record.schemaVersion,1);}}]});
+      assert.equal(await logger.traceOperation('installed-check',async()=>21),21); await logger.close();
+      const manager = new Manager({nodes:[{host:'127.0.0.1',port:2333,password:'local-fixture'}],options:{database:{type:'memory'}}});
+      const remove = await manager.useExtension({name:'installed-test',setup(){}}); await remove(); await manager.shutdown();`);
     const esm = run(process.execPath, ['esm.mjs'], consumer);
     assert.equal(esm.stdout, ''); assert.equal(esm.stderr, '');
     checks.push('ESM named imports and lifecycle');
@@ -89,6 +99,9 @@ async function main() {
     await fs.writeFile(path.join(consumer, 'example-smoke.cjs'), `const { createMusicClient } = require('./discordjs.cjs'); const fixture = createMusicClient([{host:'127.0.0.1',port:2333,password:'fixture'}]); fixture.close().catch(error=>{console.error(error);process.exitCode=1});`);
     const example = run(process.execPath, ['example-smoke.cjs'], consumer); assert.equal(example.stdout, ''); assert.equal(example.stderr, '');
     checks.push('TypeScript example compile and CommonJS factory/cleanup without login');
+    await fs.copyFile(path.join(root, 'examples/observability.ts'), path.join(consumer, 'observability.ts'));
+    run(process.execPath, [tsc, '--noEmit', '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', 'observability.ts'], consumer);
+    checks.push('structured logging, diagnostics and typed mix example compile from installed package');
     passed = true;
   } finally {
     const report = { timestamp: new Date().toISOString(), scope: fromRegistry ? 'published public npm installation; no Discord' : 'packed local installation; no registry publication or Discord',
