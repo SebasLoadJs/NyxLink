@@ -18,22 +18,24 @@ export function ansi(text: string, code: number, enabled: boolean): string {
   return enabled ? `\x1b[${code}m${text}\x1b[0m` : text;
 }
 
-/** Best-effort defense for credentials embedded in legacy debug messages. */
+const secretKey = /^(?:authorization|password|passwd|passphrase|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|token)$/i;
+const assignment = /((?:^|[^a-z0-9_-])(?:["']?)(?:authorization|password|passwd|passphrase|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|token)(?:["']?)\s*[:=]\s*)(\[(?:REDACTED)\]|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|\x60(?:\\[\s\S]|[^\x60\\])*\x60|(?:Bearer\s+)?[^\s,}\]&]+)/gi;
+
+/** Best-effort defense for legacy text. Structured Aurora uses an allowlist instead. */
 export function redactSecrets(value: string): string {
-  return value
-    .replace(/\bBearer\s+[A-Za-z0-9._~+\/=-]+/gi, 'Bearer [REDACTED]')
-    .replace(/((?:["']?)(?:authorization|password|passwd|passphrase|api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|client[_-]?secret|token)(?:["']?)\s*[:=]\s*["']?)([^"'\s,}\]&]+)/gi, '$1[REDACTED]');
+  return value.replace(assignment, (_match, prefix: string) => prefix + '[REDACTED]')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+\/=-]+/gi, 'Bearer [REDACTED]');
 }
 
 export function formatValue(value: unknown): string {
-  const raw = value instanceof Error ? (value.stack || value.message) :
-    typeof value === 'string' ? value :
-    inspect(value, { depth: 5, colors: false, compact: true, breakLength: 110 });
+  const raw = typeof value === 'string' ? value :
+    inspect(value, { depth: 5, colors: false, compact: true, breakLength: 110,
+      customInspect: false, getters: false });
   return redactSecrets(raw);
 }
 
 export function formatArgs(args: unknown[]): string {
-  return args.map(formatValue).join(' ');
+  return redactSecrets(args.map(formatValue).join(' '));
 }
 
 function padRight(text: string, length: number): string {
@@ -63,7 +65,7 @@ export function formatBox(title: string, details: Record<string, unknown> = {}, 
   const lines = [redactSecrets(title).toUpperCase(), ''];
   for (const [key, value] of Object.entries(details)) {
     const label = redactSecrets(key).padEnd(13, ' ');
-    lines.push(`${label}: ${formatValue(value)}`);
+    lines.push(`${label}: ${secretKey.test(key.trim()) ? '[REDACTED]' : formatValue(value)}`);
   }
   const inner = lines.flatMap((line) => splitToWidth(line, innerWidth));
   const output = [`┌${'─'.repeat(innerWidth + 2)}┐`];

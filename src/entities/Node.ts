@@ -700,7 +700,7 @@ export class Node {
     const socket = this.socket;
     const current = () => !this.destroyed && !this.manager.destroyed && this.connected &&
       this.backendGeneration === generation && this.socket === socket;
-    const operation: Promise<boolean> = Promise.resolve().then(async () => {
+    const operation: Promise<boolean> = Promise.resolve().then(() => observeOperation(this.manager, 'nyxlink.capabilities', async () => {
       if (!current()) return false;
       try {
         const result = await this.rest.getInfoWithHeaders();
@@ -719,7 +719,7 @@ export class Node {
         if (current()) this.manager.emit('debug', `NyxLink > Node > Backend metadata refresh failed for ${this.identifier}`);
         return false;
       }
-    }).finally(() => {
+    }, result => result ? 'success' : 'resolved')).finally(() => {
       if (this.backendRefresh === operation) this.backendRefresh = undefined;
     });
     this.backendRefresh = operation;

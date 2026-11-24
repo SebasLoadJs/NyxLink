@@ -1,5 +1,5 @@
 import type { ConsolaReporter, LogObject } from 'consola';
-import { formatEntry, formatValue, redactSecrets, type FormatterOptions } from './LogFormatter';
+import { formatEntry, formatArgs, redactSecrets, type FormatterOptions } from './LogFormatter';
 
 export type StructuredLogRecord = {
   level: number;
@@ -55,7 +55,7 @@ export class ConsoleReporter implements ConsolaReporter {
     if (this.sink) this.deliver({
       level: logObject.level, type, module,
       timestamp: logObject.date.toISOString(),
-      message: logObject.args.map(formatValue).join(' '),
+      message: formatArgs(logObject.args),
     });
     if (!this.consoleEnabled) return;
     const formatted = formatEntry({ type, tag: module, date: logObject.date, args: logObject.args }, this.options);

@@ -15,7 +15,7 @@ export type { TerminalOptions, TerminalLease, TerminalStats, TerminalPriority, T
 export { AuroraEvents, auroraCatalog } from './src/logging/AuroraEvents';
 export type { AuroraEvent, AuroraEventCode, AuroraCategory, AuroraLevel, AuroraOutcome, AuroraContext, AuroraPinoTarget, AuroraEventOptions } from './src/logging/AuroraEvents';
 export { OpenTelemetry } from './src/observability/OpenTelemetry';
-export type { OpenTelemetryOptions, TelemetryMeter, TelemetryTracer, TelemetrySpan, TelemetryOperation, TelemetryOutcome } from './src/observability/OpenTelemetry';
+export type { OpenTelemetryOptions, TelemetryMeter, TelemetryTracer, TelemetrySpan, TelemetryOperation, TelemetryOutcome, TelemetryObservation, TelemetryGauge } from './src/observability/OpenTelemetry';
 export { PrivateMetricsServer } from './src/observability/PrivateMetricsServer';
 export type { PrivateMetricsOptions, PrivateMetricsSnapshot, PrivateMetricsNode } from './src/observability/PrivateMetricsServer';
 export type { LoggerOptions, NyxLogLevel, AudioNodeStatus, FailoverReport, StructuredLogRecord, StructuredLogSink, PinoLogTarget } from './src/logging';
