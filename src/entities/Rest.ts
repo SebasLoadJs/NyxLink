@@ -62,7 +62,7 @@ export class Rest {
     private observedRequest<T = any>(url: string,
         options: http.RequestOptions & { body?: any; returnHeaders?: boolean; throwOnError?: boolean; allowedOrigins?: readonly string[]; noContentAsNull?: boolean },
         timeout?: number, retries?: number, retryDelay?: number, maxRedirects?: number): Promise<T | ResponseWithHeaders<T> | undefined> {
-        return observeOperation(this.node.manager, 'nyxlink.rest', () => options.returnHeaders
+        return observeOperation<T | ResponseWithHeaders<T> | undefined>(this.node.manager, 'nyxlink.rest', () => options.returnHeaders
             ? makeRequest<T>(url, { ...options, returnHeaders: true }, timeout, retries, retryDelay, maxRedirects)
             : makeRequest<T>(url, { ...options, returnHeaders: false }, timeout, retries, retryDelay, maxRedirects),
             result => result == null ? 'empty' : 'resolved');
