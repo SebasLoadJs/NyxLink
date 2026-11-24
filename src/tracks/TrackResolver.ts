@@ -77,6 +77,9 @@ export class TrackResolver {
         if (![info.title, info.author, info.identifier, info.sourceName].every(value => typeof value === 'string') || !validDuration) {
             throw new TrackResolutionError('Destination returned invalid track metadata');
         }
+        if (target.manager.options.sources?.disabledSources?.some(source => source.toLowerCase() === info.sourceName.toLowerCase())) {
+            throw new TrackResolutionError('Destination returned a disabled track source');
+        }
         const resolved = new Track(data, track.requester, track.origin, []);
         resolved.userData = { ...track.userData };
         resolved.position = track.getInfo().position;
