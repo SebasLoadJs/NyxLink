@@ -1,7 +1,9 @@
 /** Bounded, opt-in backend request coalescing with independent caller cancellation. */
 export class SharedSearchRequests<T> {
     private readonly entries = new Map<string, { controller: AbortController; promise: Promise<T>; users: number }>();
+    private closed = false;
     async run(key: string, signal: AbortSignal, load: (signal: AbortSignal) => Promise<T>): Promise<T> {
+        if (this.closed) throw new Error('Search service is shut down');
         signal.throwIfAborted();
         let entry = this.entries.get(key);
         if (!entry) {
@@ -38,6 +40,8 @@ export class SharedSearchRequests<T> {
         }
     }
     close(): void {
+        if (this.closed) return;
+        this.closed = true;
         for (const entry of this.entries.values()) entry.controller.abort(new Error('Manager is shut down'));
         this.entries.clear();
     }
