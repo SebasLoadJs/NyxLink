@@ -43,16 +43,10 @@ async function main() {
     const discord = require('../node_modules/discord.js/package.json').version;
     await fs.writeFile(path.join(consumer, 'package.json'), JSON.stringify({ private: true, packageManager: manifest.packageManager,
       dependencies: { [manifest.name]: fromRegistry ? manifest.version : `file:${archive}` }, devDependencies: { '@types/node': types, typescript: compiler, 'discord.js': discord,
-        consola: '3.4.2', pino: '10.4.0', 'pino-pretty': '13.2.0', '@opentelemetry/api': '1.9.0',
-        '@opentelemetry/sdk-trace-base': '2.9.0', '@opentelemetry/sdk-metrics': '2.9.0', '@opentelemetry/context-async-hooks': '2.9.0',
-        '@opentelemetry/sdk-node': '0.220.0', '@opentelemetry/instrumentation-pino': '0.55.1',
-        '@opentelemetry/exporter-trace-otlp-http': '0.220.0', '@opentelemetry/exporter-metrics-otlp-http': '0.220.0',
-        figlet: '1.9.4', 'gradient-string': '3.0.0', chalk: '5.6.2', boxen: '8.0.1',
-        'string-width': '7.2.0', 'strip-ansi': '7.1.2', 'pretty-ms': '9.2.0', 'log-symbols': '7.0.1',
-        listr2: '8.3.3', ora: '8.2.0', 'cli-progress': '3.12.0',
-        'cli-table3': '0.6.5', 'pretty-bytes': '6.1.1', 'log-update': '6.1.0', ink: '5.2.1', react: '18.3.1', 'ink-testing-library': '4.0.0',
-        'cli-truncate':'4.0.0','wrap-ansi':'9.0.0','slice-ansi':'7.1.0','is-unicode-supported':'2.1.0','figures':'6.1.0',
-        '@opentelemetry/api-logs':'0.220.0','@opentelemetry/sdk-logs':'0.220.0','@opentelemetry/exporter-logs-otlp-http':'0.220.0','ansi-escapes':'7.3.0','terminal-link':'3.0.0','supports-hyperlinks':'2.3.0','ink-link':'4.1.0','pino-abstract-transport':'3.0.0','tinybench':'6.2.1','fuse.js':'7.5.0','ink-text-input':'6.0.0','ink-select-input':'6.2.0','ink-spinner':'5.0.0' } }));
+        ...manifest.dependencies,
+        ...manifest.peerDependencies,
+        '@opentelemetry/context-async-hooks': manifest.peerDependencies['@opentelemetry/sdk-trace-base'],
+        'ink-testing-library': '4.0.0', tinybench: manifest.devDependencies.tinybench } }));
     const pnpm = 'pnpm';
     run(pnpm, ['install', fromRegistry ? '--prefer-offline=false' : '--prefer-offline', ...(fromRegistry ? ['--force'] : []), '--registry=https://registry.npmjs.org/', '--ignore-scripts', '--no-frozen-lockfile'], consumer);
     checks.push(fromRegistry ? 'install exact published version from public npm in isolated consumer' : 'install packed artifact in isolated consumer');
