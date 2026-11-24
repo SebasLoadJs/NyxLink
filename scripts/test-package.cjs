@@ -40,7 +40,8 @@ async function main() {
         pino: '10.4.0', 'pino-pretty': '13.2.0', '@opentelemetry/api': '1.9.0',
         '@opentelemetry/sdk-trace-base': '2.2.0', '@opentelemetry/sdk-metrics': '2.2.0',
         figlet: '1.9.4', 'gradient-string': '3.0.0', chalk: '5.6.2', boxen: '8.0.1',
-        'string-width': '7.2.0', 'strip-ansi': '7.1.2', 'pretty-ms': '9.2.0', 'log-symbols': '7.0.1' } }));
+        'string-width': '7.2.0', 'strip-ansi': '7.1.2', 'pretty-ms': '9.2.0', 'log-symbols': '7.0.1',
+        listr2: '8.3.3', ora: '8.2.0', 'cli-progress': '3.12.0' } }));
     const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
     run(pnpm, ['install', fromRegistry ? '--prefer-offline=false' : '--prefer-offline', ...(fromRegistry ? ['--force'] : []), '--registry=https://registry.npmjs.org/', '--ignore-scripts', '--no-frozen-lockfile'], consumer);
     checks.push(fromRegistry ? 'install exact published version from public npm in isolated consumer' : 'install packed artifact in isolated consumer');
@@ -98,6 +99,11 @@ async function main() {
     const visual = run(process.execPath, ['aurora-visual-consumer.mjs'], consumer);
     assert.equal(visual.stdout, ''); assert.equal(visual.stderr, '');
     checks.push('real optional Aurora visual tools and 40/80/120 column static rendering');
+    await fs.copyFile(path.join(root, 'examples/aurora-bootstrap.mjs'), path.join(consumer, 'aurora-bootstrap.mjs'));
+    await fs.copyFile(path.join(root, 'tests/fixtures/aurora-bootstrap-consumer.mjs'), path.join(consumer, 'aurora-bootstrap-consumer.mjs'));
+    const bootstrap = run(process.execPath, ['aurora-bootstrap-consumer.mjs'], consumer);
+    assert.equal(bootstrap.stdout, ''); assert.equal(bootstrap.stderr, '');
+    checks.push('real optional Listr2, Ora and CLI Progress bootstrap adapter');
     for (const file of ['discordjs.ts', 'discordjs.cjs']) await fs.copyFile(path.join(root, 'examples', file), path.join(consumer, file));
     run(process.execPath, [tsc, '--noEmit', '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', 'discordjs.ts'], consumer);
     await fs.writeFile(path.join(consumer, 'example-smoke.cjs'), `const { createMusicClient } = require('./discordjs.cjs'); const fixture = createMusicClient([{host:'127.0.0.1',port:2333,password:'fixture'}]); fixture.close().catch(error=>{console.error(error);process.exitCode=1});`);

@@ -53,3 +53,20 @@ describes the client, not connected nodes. Failover describes automatic
 movement (`autoMovePlayers`), not actual recovery or manual transfers.
 No dynamic tasks, cursor effects, real Pino destination bridge or PTY
 verification are claimed by this increment.
+
+## Dynamic bootstrap increment
+
+The explicit `AuroraBootstrap` observer distinguishes completion of
+`manager.init()` (connections requested) from actual READY backend sessions.
+Network observation uses a fixed set of registered node objects, a bounded
+timeout, and optional cancellation. It neither delays nor changes normal
+manager initialization unless the application explicitly awaits observation.
+
+The optional host example `examples/aurora-bootstrap.mjs` wraps these two
+operations in Listr2 silent tasks, obtains Ora frames without starting its
+renderer, and directs CLI Progress to a private stream whose sanitized frames
+are forwarded into a coordinator lease. No simultaneous terminal ownership.
+Noninteractive mode prints only final phase summaries. Dependencies are pinned
+in the isolated package consumer test. Actual PTY and full CI acceptance
+remain pending; this is not a complete multi-stage bootstrap or a guarantee
+of audible playback.
