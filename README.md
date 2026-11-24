@@ -524,3 +524,11 @@ Aurora defaults to silent and never reads raw backend payloads. The host
 owns Pino and any transport. A failover duration is measured only if its
 start event was observed; a recovery is not a certification of audible audio.
 See [Aurora implementation status](docs/aurora-v4-status.md).
+
+### Aurora V4 observability
+
+Aurora is opt-in and silent by default. The package does not start a TUI
+or a telemetry SDK. The host-side visual examples and integration tests
+live in the repository; see [Aurora status and commands](docs/aurora-v4-status.md)
+and [host deployment guidance](docs/aurora-observability.md). These are
+development-line features, not a published stable-release promise.

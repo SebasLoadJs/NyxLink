@@ -2,7 +2,8 @@ import { performance } from 'node:perf_hooks';
 import type { Manager } from '../core/Manager';
 import type { Player } from '../entities/Player';
 import type { Track } from '../entities/Track';
-import type { AuroraEvent } from './AuroraEvents';
+import { safeFailoverReason, type AuroraEvent } from './AuroraEvents';
+import type { FailoverReasonCode } from '../typings/Interfaces';
 import type { CapabilityDescription } from '../backends/CapabilityRegistry';
 import { NodeState } from '../typings/types';
 
@@ -88,12 +89,14 @@ export class AuroraMusicStrip {
     }
 }
 
-export type IncidentState = 'recovering' | 'recovered' | 'failed' | 'cancelled';
+export type IncidentState = 'recovering' | 'recovered' | 'degraded' | 'failed' | 'cancelled';
 export interface IncidentSnapshot {
     operationId: string;
     state: IncidentState;
     backend: 'lavalink' | 'nodelink' | 'unknown';
     durationMs?: number;
+    sourceBackend?: 'lavalink' | 'nodelink' | 'unknown';
+    reasonCode?: FailoverReasonCode;
 }
 const incidentStates = new Map<string, IncidentState>([
     ['FAILOVER_STARTED', 'recovering'], ['FAILOVER_RECOVERED', 'recovered'],
@@ -106,13 +109,16 @@ export class AuroraIncidentEngine {
         if (!Number.isSafeInteger(capacity) || capacity < 1 || capacity > 10000) throw new RangeError('Invalid incident capacity');
     }
     accept(event: AuroraEvent): IncidentSnapshot | undefined {
-        const state = incidentStates.get(event.eventCode);
+        const reasonCode = safeFailoverReason(event.sanitizedContext?.reasonCode);
+        const state = event.eventCode === 'FAILOVER_RECOVERED' && reasonCode === 'source-cleanup-failed' ? 'degraded' : incidentStates.get(event.eventCode);
         const id = event.operationId;
         if (!state || typeof id !== 'string' || !/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(id)) return;
         const prior = this.incidents.get(id);
         if (prior && (prior.state !== 'recovering' || state === 'recovering')) return;
         const duration = state !== 'recovering' ? finite(event.durationMs) : undefined;
         const result: IncidentSnapshot = { operationId: id, state, backend: backend(event.sanitizedContext?.backend),
+            ...(prior?.state === 'recovering' && state !== 'recovering' ? { sourceBackend: prior.backend } : {}),
+            ...(reasonCode ? { reasonCode } : {}),
             ...(duration === undefined ? {} : { durationMs: duration }) };
         this.incidents.delete(id);
         this.incidents.set(id, result);

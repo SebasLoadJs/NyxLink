@@ -57,3 +57,15 @@ test('Aurora detaches from manager shutdown', async () => {
     manager.emit('nodeReady', {});
     assert.equal(events.length, 0);
 });
+
+test('failover reason codes are fixed and never inferred from raw error text',async()=>{
+ const {manager,events}=fixture();const player={node:{backend:{kind:'nodelink'}}};
+ try{
+  manager.emit('playerNodeFailover',player,{status:'in-progress'});
+  manager.emit('playerNodeFailover',player,{status:'recovered',reason:'private-cleanup-error',reasonCode:'source-cleanup-failed'});
+  manager.emit('playerNodeFailover',player,{status:'failed',reason:'private-error',reasonCode:'private-code'});
+  assert.equal(events[1].event.sanitizedContext.reasonCode,'source-cleanup-failed');
+  assert.equal(events[2].event.sanitizedContext.reasonCode,undefined);
+  assert.doesNotMatch(JSON.stringify(events),/private-/);
+ }finally{await manager.shutdown();}
+});

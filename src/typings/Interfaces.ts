@@ -113,12 +113,14 @@ export interface IManagerEvents {
     eternalBoxJump: (player: Player, payload?: any) => void;
 }
 
+export type FailoverReasonCode = 'source-cleanup-failed' | 'intent-cancelled' | 'restart-rejected' | 'migration-error';
 export interface INodeFailoverReport {
     source: string;
     target: string;
     status: 'in-progress' | 'recovered' | 'failed' | 'cancelled';
     positionMs?: number;
     reason?: string;
+    reasonCode?: FailoverReasonCode;
 }
 
 export interface IManagerNodeConfig {

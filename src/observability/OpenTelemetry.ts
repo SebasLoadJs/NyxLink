@@ -1,5 +1,7 @@
 import { performance } from 'node:perf_hooks';
 import type { Manager } from '../core/Manager';
+import type { Node } from '../entities/Node';
+import { NodeState } from '../typings/types';
 import type { SearchResult } from '../structures/SearchResult';
 
 const operationNames = ['nyxlink.rest', 'nyxlink.player.play', 'nyxlink.player.seek', 'nyxlink.player.stop', 'nyxlink.failover', 'nyxlink.connect', 'nyxlink.resolve', 'nyxlink.node.select', 'nyxlink.session.restore', 'nyxlink.autoplay', 'nyxlink.crossfade', 'nyxlink.capabilities'] as const;
@@ -50,6 +52,7 @@ export class OpenTelemetry {
     private readonly counter?: ReturnType<TelemetryMeter['createCounter']>;
     private readonly duration?: ReturnType<TelemetryMeter['createHistogram']>;
     private readonly operationsDuration?: ReturnType<TelemetryMeter['createHistogram']>;
+    private readonly handshakes = new Map<Node, { start: number; span?: TelemetrySpan }>();
     private readonly disposers: Array<() => void> = [];
     private closed = false;
 
@@ -64,6 +67,13 @@ export class OpenTelemetry {
         // Fixed vocabulary only. Never export node identifiers, guild IDs, tracks,
         // query strings, provider error messages, or raw event payloads.
         this.disposers.push(
+            manager.on('nodeStateChange', (node, _old, state) => {
+                if (state === NodeState.CONNECTING && !this.handshakes.has(node)) {
+                    this.handshakes.set(node, { start: performance.now(), span: this.safe(() => options.tracer?.startSpan('nyxlink.handshake')) });
+                } else if (state === NodeState.READY) this.finishHandshake(node, 'success');
+                else if (state === NodeState.DISCONNECTED) this.finishHandshake(node, 'error');
+                else if (state === NodeState.DESTROYED) this.finishHandshake(node, 'cancelled');
+            }),
             manager.on('nodeReady', node => this.event('node.ready', this.backend(node.backend?.kind))),
             manager.on('nodeError', node => this.event('node.error', this.backend(node.backend?.kind))),
             manager.on('nodeDisconnect', node => this.event('node.disconnect', this.backend(node.backend?.kind))),
@@ -83,6 +93,16 @@ export class OpenTelemetry {
                 }
             }),
         );
+    }
+
+    private finishHandshake(node: Node, outcome: TelemetryOutcome): void {
+        const pending = this.handshakes.get(node);
+        if (!pending) return;
+        this.handshakes.delete(node);
+        this.safe(() => pending.span?.setAttribute('nyxlink.outcome', outcome));
+        this.safe(() => pending.span?.setStatus({ code: outcome === 'error' ? 2 : 0 }));
+        this.safe(() => pending.span?.end());
+        this.safe(() => this.operationsDuration?.record(performance.now() - pending.start, { operation: 'nyxlink.handshake', outcome }));
     }
 
     private safe<T>(action: () => T): T | undefined {
@@ -186,6 +206,7 @@ export class OpenTelemetry {
     close(): void {
         if (this.closed) return;
         this.closed = true;
+        for (const node of this.handshakes.keys()) this.finishHandshake(node, 'cancelled');
         for (const dispose of this.disposers.splice(0)) this.safe(dispose);
     }
 }

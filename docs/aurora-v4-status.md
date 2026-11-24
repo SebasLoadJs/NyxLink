@@ -201,3 +201,104 @@ removed on close. A new capability negotiation span wraps the existing
 coalesced metadata request. Counts are not audio audibility measurements.
 Legacy text redaction remains best effort: arbitrary prose without known
 credential keys cannot be guaranteed safe. Prefer Aurora's fixed schema.
+
+## REST and handshake timing
+
+The remaining Rest transport calls now use the same operation instrument
+as loadtracks and player PATCH without adding nested duplicate spans to
+those existing paths. HTTP streaming spans end when response headers arrive,
+not when audio is consumed. Transport resolution is not proof of schema
+validation or playback. Lifecycle handshake spans measure CONNECTING
+through READY, DISCONNECTED, DESTROYED or observer shutdown, including any
+scheduled reconnect delay represented by CONNECTING. They are separate
+from the connection setup span and never include credentials or endpoints.
+No additional timers or global hooks. Integration/regression tests and CI
+are required for this increment.
+
+## Terminal ownership and cancellation hardening
+
+The coordinator now rejects a second owner of the same stream, automatically
+redraws an active ASCII region on resize, and shares the first close result
+among concurrent callers. It guards rejection callbacks against reentrant
+queue growth. An optional independent critical-record fallback receives
+sanitized terminal text when a queued critical event is rejected or evicted
+by shutdown; callers must not point it back at the coordinator. Delivery of
+bytes already accepted by the OS/stream cannot be guaranteed. Without a
+fallback, loss remains explicitly counted. Regression tests cover width
+changes, owner release, saturation, cancellation and callback reentrancy.
+
+## Coordinated music and incident presentation
+
+The explicit host API `pipeline.startMusic(strip, {signal})` acquires the
+coordinator's existing region, updates at a bounded cadence and releases
+on cancellation, rendering failure or pipeline shutdown. It neither starts
+playback nor owns the selected-player observer. A noninteractive Aurora
+destination receives a single static snapshot; other logging modes do not
+start a music view. A second region is never created when the bootstrap
+or another view already owns the lease. The standalone Log Update view
+remains a mutually exclusive alternative. Incident summaries preserve the
+observed source backend from the start record and suppress retained
+duplicate terminal reports. They do not claim known causes or audible
+recovery when those signals are absent. Tests and CI remain required.
+
+## Dependency evidence matrix (baseline and pending acceptance)
+
+Versions are the isolated consumer pins in `scripts/test-package.cjs`. The
+packed package itself still requires only Consola. The latest approved
+baseline is #46; changes in #47–48 must be validated again.
+
+| Package | Executed integration | Consumer fixture |
+| --- | --- | --- |
+| pino 10.4.0 | Canonical record and destination | aurora-pipeline-consumer.mjs |
+| pino-pretty 13.2.0 | Pretty and detailed records | aurora-pipeline-consumer.mjs |
+| consola 3.4.2 | Reporter bridge | aurora-pipeline-consumer.mjs |
+| figlet 1.9.4 | Wordmark | aurora-visual-consumer.mjs |
+| gradient-string 3.0.0 | Wordmark/divider | aurora-visual-consumer.mjs |
+| chalk 5.6.2 | Semantic coloring | aurora-visual-consumer.mjs, aurora-pty.py |
+| boxen 8.0.1 | Banner/incident panels | aurora-visual-consumer.mjs, aurora-pty.py |
+| string-width 7.2.0 | Width measurement | aurora-visual-consumer.mjs |
+| strip-ansi 7.1.2 | Plain snapshots | aurora-visual-consumer.mjs |
+| pretty-ms 9.2.0 | Durations | aurora-diagnostics-consumer.mjs |
+| log-symbols 7.0.1 | Semantic markers | aurora-visual-consumer.mjs |
+| listr2 8.3.3 | Bootstrap task sequencing | aurora-bootstrap-consumer.mjs |
+| ora 8.2.0 | Indeterminate bootstrap frame | aurora-bootstrap-consumer.mjs |
+| cli-progress 3.12.0 | Known readiness total | aurora-bootstrap-consumer.mjs |
+| cli-table3 0.6.5 | Capability table | aurora-diagnostics-consumer.mjs |
+| pretty-bytes 6.1.1 | Memory sizes | aurora-diagnostics-consumer.mjs |
+| log-update 6.1.0 | Standalone live music renderer | aurora-diagnostics-consumer.mjs (static fallback; interactive path still needs PTY) |
+| ink 5.2.1 / react 18.3.1 | Standalone inspector | aurora-inspector-consumer.mjs, aurora-pty.py |
+| @opentelemetry/api 1.9.0 | Active context | aurora-otel-consumer.mjs |
+| SDK trace/metrics/context 2.2.0 | Nested spans, metrics and lifecycle | observability-consumer.cts, aurora-otel-consumer.mjs |
+| SDK Node / OTLP exporters 0.208.0 | Explicit host export to loopback receiver | aurora-sdk-consumer.cjs |
+| instrumentation-pino 0.55.1 | Automatic log correlation | aurora-sdk-consumer.cjs |
+
+Not all extended use cases in the original V4 brief have been implemented.
+In particular, richer incident phases, timed trace trees, per-node progress,
+a local inspector report export, bounded latency history and all requested
+PTY modes still require acceptance. No new functionality is inferred from
+a dependency merely being installed.
+
+## Inspector reports, timestamps and bounded latency samples
+
+The host exporter forwards actual span start timestamps. The Inspector
+shows a bounded parent/child tree with relative start offsets, measured
+duration and missing-parent markers; it never creates synthetic spans.
+A host-configured reportPath enables the explicit e key to export the
+trusted read-only store to a new local JSON file (exclusive create, mode
+0600 on POSIX). There is no automatic network upload or overwrite.
+Latency samples are taken at host request, retained up to 60 per node
+and capacity-limited across nodes; absent readings are not synthesized.
+The view samples while active and stops refreshing when paused.
+New tests require CI acceptance. Report exports assume the supplied
+source is the sanitized Inspector store, not arbitrary user objects.
+
+## Incident evidence and standalone Log Update acceptance
+
+Migration reports now carry a fixed optional reason code at the actual
+cancellation, restart-rejection, exception or source-cleanup failure site.
+The raw legacy reason is not copied into Aurora. A committed destination
+with failed source cleanup produces a degraded diagnostic incident, while
+the underlying transfer remains confirmed. This is not an audibility
+claim. The standalone Log Update renderer has a real PTY fixture driven
+by explicit input changes and clean exit. Eight PTY sessions are expected
+in the packed acceptance test; new results remain pending.

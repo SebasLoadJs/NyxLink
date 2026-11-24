@@ -5,6 +5,7 @@ import os
 import pty
 import re
 import select
+import signal
 import struct
 import subprocess
 import sys
@@ -55,7 +56,11 @@ def session(name, args, width=80, steps=(), no_color=False):
                 raise AssertionError("PTY marker missing: " + repr(marker))
         for marker, key in steps:
             read_until(marker)
-            os.write(master, key)
+            if isinstance(key, int):
+                fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack('HHHH', 30, key, 0, 0))
+                os.kill(child.pid, signal.SIGWINCH)
+            else:
+                os.write(master, key)
         read_until()
         assert child.wait(timeout=2) == 0, name
         return bytes(data)
@@ -84,4 +89,12 @@ inspector = session("inspector", ["aurora-demo.mjs", "--format", "silent", "--in
     steps=((b"[Overview]", b"\t"), (b"[Nodes]", b"\t"), (b"[Players]", b"\t"), (b"[Events]", b"\t"), (b"[Traces]", b"q")))
 assert b"SIMULATED" in inspector and b"PLAYER-01" in inspector
 assert b"QUEUE_ADDED" in inspector and b"No completed spans supplied by host." in inspector
-print("PTY acceptance: 6 sessions passed")
+resize = session("resize", ["aurora-pty-region.mjs", "--resize"], width=40,
+    steps=((b"READY-TO-RESIZE", 12), (b"RESIZED", b"q\n")))
+assert b"\x1b[2Kabcdefghijklmnopqrstuvwxyz" in resize
+assert b"\x1b[2Kabcdefghijk\r\x1b[2KRESIZED" in resize
+assert b"\x1b[?25l" not in resize
+log_update = session("log-update", ["aurora-log-update-pty.mjs"],
+    steps=((b"MUSIC PLAYING 1s", b"n\n"), (b"MUSIC PLAYING 5s", b"q\n")))
+assert b"VIEW CLOSED" in log_update
+print("PTY acceptance: 8 sessions passed")

@@ -1,5 +1,37 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Text, render, useApp, useInput } from 'ink';
+import { writeFile } from 'node:fs/promises';
+
+/** Retained spans only; absent parents are not fabricated. Iterative traversal avoids cycles. */
+export function traceRows(spans, traceId, limit=30){
+    const nodes=spans.filter(s=>s.traceId===traceId).slice(0,10000);
+    const known=new Set(nodes.map(s=>s.spanId));
+    const children=new Map();
+    const roots=[];
+    for(const span of nodes){
+        if(!span.parentSpanId||!known.has(span.parentSpanId))roots.push(span);
+        else{const list=children.get(span.parentSpanId)??[];list.push(span);children.set(span.parentSpanId,list);}
+    }
+    const order=(a,b)=>(a.startTimeMs??Infinity)-(b.startTimeMs??Infinity)||a.spanId.localeCompare(b.spanId);
+    const timed=nodes.filter(s=>Number.isFinite(s.startTimeMs));
+    const origin=timed.length?Math.min(...timed.map(s=>s.startTimeMs)):undefined;
+    const stack=roots.sort(order).reverse().map(span=>({span,depth:0}));
+    const visited=new Set(),rows=[];
+    while(rows.length<limit&&visited.size<nodes.length){
+        if(!stack.length){const span=nodes.find(s=>!visited.has(s.spanId));if(!span)break;stack.push({span,depth:0});}
+        const {span,depth}=stack.pop();if(visited.has(span.spanId))continue;visited.add(span.spanId);
+        const offset=origin!==undefined&&Number.isFinite(span.startTimeMs)?'+'+Math.round(span.startTimeMs-origin)+'ms':'time N/A';
+        rows.push('  '.repeat(Math.min(depth,5))+span.name+' '+offset+' / '+ms(span.durationMs)+(span.parentSpanId&&!known.has(span.parentSpanId)?' [parent not retained]':''));
+        for(const child of (children.get(span.spanId)??[]).sort(order).reverse())stack.push({span:child,depth:depth+1});
+    }
+    return rows;
+}
+
+/** Explicit local export from the trusted read-only store, never overwrites. */
+export async function exportInspectorReport(source,path){
+    const snapshot=source.snapshot();
+    await writeFile(path,JSON.stringify({schemaVersion:1,generatedAt:new Date().toISOString(),...snapshot},null,2)+'\n',{flag:'wx',mode:0o600});
+}
 
 const h = React.createElement;
 const tabs = ['Overview','Nodes','Players','Events','Traces'];
@@ -10,7 +42,7 @@ const cycle = (values, value) => values[(values.indexOf(value) + 1) % values.len
 const ms = value => value === undefined ? 'N/A' : Math.round(value) + 'ms';
 const short = id => id?.slice(0, 8) ?? '-';
 
-export function Inspector({ source, initialTab = 'Overview', interactive = true }) {
+export function Inspector({ source, initialTab = 'Overview', interactive = true, reportPath }) {
     const { exit } = useApp();
     const [snapshot, setSnapshot] = useState(() => source.snapshot());
     const [tab, setTab] = useState(Math.max(0, tabs.indexOf(initialTab)));
@@ -22,9 +54,10 @@ export function Inspector({ source, initialTab = 'Overview', interactive = true 
     const [paused, setPaused] = useState(false);
     const [cursor, setCursor] = useState(0);
     const [detail, setDetail] = useState(false);
+    const [exportStatus,setExportStatus]=useState('');
     useEffect(() => {
         if (paused || !interactive) return;
-        const timer = setInterval(() => { try { setSnapshot(source.snapshot()); } catch {} }, 500);
+        const timer = setInterval(() => { try { source.sampleLatencies?.(); setSnapshot(source.snapshot()); } catch {} }, 500);
         return () => clearInterval(timer);
     }, [source, paused, interactive]);
     const matches = item => JSON.stringify(item).toLowerCase().includes(query.toLowerCase());
@@ -55,6 +88,10 @@ export function Inspector({ source, initialTab = 'Overview', interactive = true 
         else if (input === 'c') { setCategory(v => cycle(categories,v)); setCursor(0); }
         else if (input === 'b') { setBackend(v => cycle(backends,v)); setCursor(0); }
         else if (input === '/') setSearching(true);
+        else if (input === 'e' && reportPath) {
+            setExportStatus('Exporting...');
+            exportInspectorReport(source,reportPath).then(()=>setExportStatus('Report saved'),()=>setExportStatus('Report export failed (file may already exist)'));
+        }
     }, { isActive: interactive });
     const rows = [];
     if (tab === 0) {
@@ -77,10 +114,11 @@ export function Inspector({ source, initialTab = 'Overview', interactive = true 
             if (tab === 4) {
                 rows.push('Trace: ' + item.traceId, 'Span: ' + item.spanId,
                     'Parent: ' + (item.parentSpanId ?? 'root or unknown'));
-                const children = snapshot.spans.filter(s => s.traceId === item.traceId && s.parentSpanId === item.spanId);
-                for (const child of children.slice(0,5)) rows.push('  -> ' + child.name + ' ' + ms(child.durationMs));
+                rows.push(...traceRows(snapshot.spans,item.traceId,8));
             } else if (tab === 1) {
                 rows.push('Memory bytes: ' + (item.memoryUsedBytes ?? 'N/A'));
+                const history=source.latencyHistory?.(item.alias)??[];
+                if(history.length)rows.push('Latency samples: '+history.slice(-8).map(x=>ms(x.latencyMs)).join(' / '));
                 for (const feature of item.capabilities.slice(0,8)) rows.push(feature.feature + ': ' + feature.state + ' (' + feature.evidence + ')');
             } else if (tab === 3) rows.push(item.message, 'Trace: ' + (item.traceId ?? 'N/A'), 'Duration: ' + ms(item.durationMs));
         }
@@ -91,7 +129,8 @@ export function Inspector({ source, initialTab = 'Overview', interactive = true 
         h(Text,{},'Level: '+level+'  Category: '+category+'  Backend: '+backend),
         h(Text,{},'Search: '+query+(searching?'_':'')),
         ...rows.map((line,i)=>h(Text,{key:i},line)),
-        h(Text,{dimColor:true},'Tab/arrows: navigate | Enter: detail | p: pause | f/c/b: filters | /: search | q: quit')
+        ...(exportStatus?[h(Text,{key:'export'},exportStatus)]:[]),
+        h(Text,{dimColor:true},'Tab/arrows: navigate | Enter: detail | p: pause | f/c/b: filters | /: search | q: quit'+(reportPath?' | e: export':''))
     );
 }
 export function startInspector(source, options = {}) {
@@ -104,5 +143,5 @@ export function startInspector(source, options = {}) {
         return undefined;
     }
     // Explicit standalone mode. Do not run other stdout renderers beside Ink.
-    return render(h(Inspector,{source}),{stdout,stdin,patchConsole:false});
+    return render(h(Inspector,{source,reportPath:options.reportPath}),{stdout,stdin,patchConsole:false});
 }

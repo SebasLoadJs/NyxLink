@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import React from 'react';
 import { render } from 'ink-testing-library';
-import { Inspector, startInspector } from './aurora-inspector.mjs';
+import { Inspector, startInspector, traceRows, exportInspectorReport } from './aurora-inspector.mjs';
 import { Writable } from 'node:stream';
 
 const source = { snapshot: () => ({
@@ -20,3 +20,16 @@ const stdout=new Writable({write(chunk,_encoding,done){chunks.push(chunk.toStrin
 assert.equal(startInspector(source,{stdout,stdin:{isTTY:false}}),undefined);
 assert.match(chunks.join(''),/SIMULATED/);
 assert.doesNotMatch(chunks.join(''),/\x1b/);
+
+const traces=[{name:'nyxlink.search',traceId:'a',spanId:'1',startTimeMs:100,durationMs:20},{name:'nyxlink.rest',traceId:'a',spanId:'2',parentSpanId:'1',startTimeMs:105,durationMs:5}];
+assert.deepEqual(traceRows(traces,'a'),['nyxlink.search +0ms / 20ms','  nyxlink.rest +5ms / 5ms']);
+assert.match(traceRows([traces[1]],'a')[0],/parent not retained/);
+const fs=await import('node:fs/promises'),os=await import('node:os'),path=await import('node:path');
+const dir=await fs.mkdtemp(path.join(os.tmpdir(),'aurora-report-'));
+try{
+ const report=path.join(dir,'report.json');
+ await exportInspectorReport(source,report);
+ const data=JSON.parse(await fs.readFile(report,'utf8'));
+ assert.equal(data.schemaVersion,1);assert.equal(data.source,'simulated');
+ await assert.rejects(exportInspectorReport(source,report),{code:'EEXIST'});
+}finally{await fs.rm(dir,{recursive:true,force:true});}

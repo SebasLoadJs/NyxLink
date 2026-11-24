@@ -33,3 +33,9 @@ const customTarget=Object.fromEntries(['trace','debug','info','warn','error','fa
 const custom=createAuroraPipeline({format:'custom',target:customTarget});
 const manager=new Manager({nodes:[{host:'localhost',port:2333,password:'fixture',secure:false}],options:{aurora:{target:custom.target,level:custom.level}}});
 try{manager.emit('nodeReady',{backend:{kind:'lavalink'}},{});assert.equal(customEvents.length,1);}finally{await manager.shutdown();await custom.close();}
+
+const staticChunks=[];
+const musicPipeline=createAuroraPipeline({format:'aurora',stream:new Writable({write(c,_e,done){staticChunks.push(c.toString());done();}})});
+const endMusic=musicPipeline.startMusic({snapshot:()=>({state:'playing',positionMs:500,durationMs:1000})});
+endMusic();await musicPipeline.close();
+assert.match(staticChunks.join(''),/MUSIC PLAYING/);

@@ -100,3 +100,42 @@ test('stream failures isolate exceptions and reject pending records', async () =
     assert.equal(terminal.stats.rejected, 1);
     assert.equal(await terminal.close(), false);
 });
+
+test('one stream owner, automatic resize, and shared close result', () => interactive(async () => {
+    const stream = new Stream();
+    const terminal = new TerminalCoordinator({ stream, interactive: true });
+    assert.throws(() => new TerminalCoordinator({ stream }), /already owned/);
+    const lease = terminal.acquire();
+    lease.update('abcdefghijklmnopqrstuvwxyz0123456789');
+    stream.columns = 12;
+    stream.emit('resize');
+    assert.equal(stream.output.at(-1), '\r\x1b[2Kabcdefghijk');
+    stream.columns = 40;
+    stream.emit('resize');
+    assert.match(stream.output.at(-1), /0123456789$/);
+    const first = terminal.close();
+    assert.equal(terminal.close(), first);
+    assert.equal(await first, true);
+    assert.equal(stream.listenerCount('resize'), 0);
+    const next = new TerminalCoordinator({stream});
+    await next.close();
+}));
+test('critical overflow reaches independent fallback; reentrant rejection cannot grow queue', async () => {
+    const stream = new Stream(); stream.accept = false;
+    const fallback = [];
+    let terminal;
+    terminal = new TerminalCoordinator({stream, maxQueued: 1,
+        onRejected() { terminal.write('recursive normal'); },
+        onCriticalRejected(reason,text) { fallback.push([reason,text]); }
+    });
+    terminal.write('in flight');
+    terminal.write('queued critical','critical');
+    assert.equal(terminal.write('\x1b[31moverflow\x1b[0m','critical'),false);
+    assert.equal(terminal.stats.queued,1);
+    assert.deepEqual(fallback,[['capacity','overflow']]);
+    const abort = new AbortController();
+    abort.abort();
+    assert.equal(await terminal.close(abort.signal), false);
+    assert.deepEqual(fallback,[['capacity','overflow'],['closed','queued critical\n']]);
+    assert.equal(await terminal.close(),false);
+});

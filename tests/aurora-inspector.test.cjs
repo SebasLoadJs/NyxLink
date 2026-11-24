@@ -33,3 +33,18 @@ test('inspector accepts only valid completed span metadata and no attributes', a
         assert.doesNotMatch(JSON.stringify(store.snapshot()), /private-token/);
     } finally { await m.shutdown(); }
 });
+
+test('latency samples are bounded and detached, missing measurements are not synthesized', async()=>{
+ const m=new Manager({nodes:[{host:'localhost',port:2333,password:'fixture',secure:false}]});
+ const node={connected:true,destroyed:false,draining:false,latency:10};
+ m.nodes.nodes.set('private-node',node);
+ const store=new AuroraInspectorStore(m,2);
+ try{
+   for(let i=0;i<70;i++){node.latency=i;store.sampleLatencies(i);}
+   const history=store.latencyHistory('NODE-01');
+   assert.equal(history.length,60);assert.equal(history[0].latencyMs,10);
+   history[0].latencyMs=10000;assert.equal(store.latencyHistory('NODE-01')[0].latencyMs,10);
+   node.connected=false;store.sampleLatencies(100);assert.equal(store.latencyHistory('NODE-01').at(-1).timeMs,69);
+   m.nodes.nodes.clear();store.sampleLatencies(101);assert.deepEqual(store.latencyHistory('NODE-01'),[]);
+ }finally{m.nodes.nodes.clear();await m.shutdown();}
+});

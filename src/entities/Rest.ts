@@ -53,6 +53,26 @@ export class Rest {
         };
     }
 
+    private observedRequest<T = any>(url: string,
+        options: http.RequestOptions & { body?: any; returnHeaders: true; throwOnError?: boolean; allowedOrigins?: readonly string[]; noContentAsNull?: boolean },
+        timeout?: number, retries?: number, retryDelay?: number, maxRedirects?: number): Promise<ResponseWithHeaders<T> | undefined>;
+    private observedRequest<T = any>(url: string,
+        options: http.RequestOptions & { body?: any; returnHeaders?: false; throwOnError?: boolean; allowedOrigins?: readonly string[]; noContentAsNull?: boolean },
+        timeout?: number, retries?: number, retryDelay?: number, maxRedirects?: number): Promise<T | undefined>;
+    private observedRequest<T = any>(url: string,
+        options: http.RequestOptions & { body?: any; returnHeaders?: boolean; throwOnError?: boolean; allowedOrigins?: readonly string[]; noContentAsNull?: boolean },
+        timeout?: number, retries?: number, retryDelay?: number, maxRedirects?: number): Promise<T | ResponseWithHeaders<T> | undefined> {
+        return observeOperation<T | ResponseWithHeaders<T> | undefined>(this.node.manager, 'nyxlink.rest', () => options.returnHeaders
+            ? makeRequest<T>(url, { ...options, returnHeaders: true }, timeout, retries, retryDelay, maxRedirects)
+            : makeRequest<T>(url, { ...options, returnHeaders: false }, timeout, retries, retryDelay, maxRedirects),
+            result => result == null ? 'empty' : 'resolved');
+    }
+
+    // Measures the response headers, not stream consumption or audio delivery.
+    private observedStream(...args: Parameters<typeof makeStreamRequest>): ReturnType<typeof makeStreamRequest> {
+        return observeOperation(this.node.manager, 'nyxlink.rest', () => makeStreamRequest(...args));
+    }
+
     public get url(): string {
         return `http${this.node.secure ? "s" : ""}://${this.node.host}:${this.node.port}`;
     }
@@ -106,7 +126,7 @@ export class Rest {
         const current = () => !this.node.destroyed && this.node.backend === backend &&
             this.node.socket === socket && this.node.sessionId === session;
         const result = await this.node.circuit.run(async () => {
-            try { return await makeRequest<T>(this.url + route.path, { ...options, method: route.method, throwOnError: true }, 10000, 0); }
+            try { return await this.observedRequest<T>(this.url + route.path, { ...options, method: route.method, throwOnError: true }, 10000, 0); }
             catch (error) { this.featureError(feature, error, backend, current); }
         });
         if (result === undefined) throw new Error('Backend did not acknowledge feature request');
@@ -171,7 +191,7 @@ export class Rest {
             this.node.socket === socket && this.node.sessionId === session;
         const result = await this.node.circuit.run(async () => {
             try {
-                return await makeRequest<unknown>(this.url + path, {
+                return await this.observedRequest<unknown>(this.url + path, {
                     method, headers: method === 'PUT' ? this.jsonHeaders : this.authHeaders,
                     ...(method === 'PUT' ? { body } : {}), throwOnError: true
                 }, 10000, 0);
@@ -213,7 +233,7 @@ export class Rest {
     }
 
     public async getPlayers(): Promise<IRESTGetPlayers[] | null> {
-        const res = await makeRequest<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}/players`, {
+        const res = await this.observedRequest<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}/players`, {
             method: "GET",
             headers: this.authHeaders
         });
@@ -228,7 +248,7 @@ export class Rest {
     }
 
     public async getPlayer(guildId: string): Promise<IRESTGetPlayers | null> {
-        const res = await makeRequest<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}`, {
+        const res = await this.observedRequest<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}`, {
             method: "GET",
             headers: this.authHeaders
         });
@@ -277,7 +297,7 @@ export class Rest {
         const timeout = options?.timeoutMs ?? 10000;
         if (options && (!Number.isFinite(timeout) || timeout <= 0 || timeout > 60000)) throw new TypeError('Cleanup timeout must be within 1..60000 ms');
         try {
-            await makeRequest(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}`, {
+            await this.observedRequest(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}`, {
                 method: "DELETE",
                 headers: this.authHeaders,
                 signal: options?.signal,
@@ -313,7 +333,7 @@ export class Rest {
         const params = new URLSearchParams();
         params.append("encodedTrack", encodedTrack);
 
-        const res = await makeRequest<unknown>(`${this.url}/v4/decodetrack?${params}`, {
+        const res = await this.observedRequest<unknown>(`${this.url}/v4/decodetrack?${params}`, {
             method: "GET",
             headers: this.authHeaders
         });
@@ -323,7 +343,7 @@ export class Rest {
     }
 
     public async decodeTracks(encodedTracks: string[]): Promise<ITrack[] | null> {
-        const res = await makeRequest<unknown>(`${this.url}/v4/decodetracks`, {
+        const res = await this.observedRequest<unknown>(`${this.url}/v4/decodetracks`, {
             method: "POST",
             headers: this.jsonHeaders,
             body: encodedTracks
@@ -335,7 +355,7 @@ export class Rest {
     }
 
     public async getInfo(): Promise<any | null> {
-        const res = await makeRequest<any>(`${this.url}/v4/info`, {
+        const res = await this.observedRequest<any>(`${this.url}/v4/info`, {
             method: "GET",
             headers: this.authHeaders
         });
@@ -343,7 +363,7 @@ export class Rest {
     }
 
     public async getInfoWithHeaders(): Promise<ResponseWithHeaders<any> | null> {
-        const res = await makeRequest<any>(`${this.url}/v4/info`, {
+        const res = await this.observedRequest<any>(`${this.url}/v4/info`, {
             method: "GET",
             headers: this.authHeaders,
             returnHeaders: true,
@@ -353,7 +373,7 @@ export class Rest {
     }
 
     public async getVersion(timeout?: number, retries?: number): Promise<string | null> {
-        const res = await makeRequest<string>(`${this.url}/version`, {
+        const res = await this.observedRequest<string>(`${this.url}/version`, {
             method: "GET",
             headers: this.authHeaders
         }, timeout, retries);
@@ -363,7 +383,7 @@ export class Rest {
     public async getStats(): Promise<INodeStats | null> {
         const protectedRequest = this.node.circuit.enabled;
         const res = await this.node.circuit.run(async () => {
-            const stats = await makeRequest<INodeStats>(`${this.url}/v4/stats`, {
+            const stats = await this.observedRequest<INodeStats>(`${this.url}/v4/stats`, {
                 method: "GET", headers: this.authHeaders, throwOnError: protectedRequest
             }, protectedRequest ? 10000 : undefined, protectedRequest ? 0 : undefined);
             if (protectedRequest) {
@@ -378,7 +398,7 @@ export class Rest {
     }
 
     public async getRoutePlannerStatus(): Promise<IRoutePlannerStatus | null> {
-        const res = await makeRequest<IRoutePlannerStatus>(`${this.url}/v4/routeplanner/status`, {
+        const res = await this.observedRequest<IRoutePlannerStatus>(`${this.url}/v4/routeplanner/status`, {
             method: "GET",
             headers: this.authHeaders
         });
@@ -386,7 +406,7 @@ export class Rest {
     }
 
     public async freeFailedAddress(address: string): Promise<void> {
-        await makeRequest(`${this.url}/v4/routeplanner/free/address`, {
+        await this.observedRequest(`${this.url}/v4/routeplanner/free/address`, {
             method: "POST",
             headers: this.jsonHeaders,
             body: { address }
@@ -394,14 +414,14 @@ export class Rest {
     }
 
     public async freeAllFailedAddresses(): Promise<void> {
-        await makeRequest(`${this.url}/v4/routeplanner/free/all`, {
+        await this.observedRequest(`${this.url}/v4/routeplanner/free/all`, {
             method: "POST",
             headers: this.authHeaders
         });
     }
 
     public async updateSession(resuming: boolean, timeout: number): Promise<SessionUpdateResponse | null> {
-        const res = await makeRequest<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}`, {
+        const res = await this.observedRequest<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}`, {
             method: "PATCH",
             headers: this.jsonHeaders,
             body: {
@@ -478,7 +498,7 @@ export class Rest {
             this.node.socket === socket && this.node.sessionId === session;
         const result = await this.node.circuit.run(async () => {
             try {
-                return await makeRequest<unknown>(this.url + '/v4/lyrics?' + params.toString(), {
+                return await this.observedRequest<unknown>(this.url + '/v4/lyrics?' + params.toString(), {
                     method: 'GET', headers: this.authHeaders, throwOnError: true,
                     noContentAsNull: true
                 }, 10000, 0);
@@ -687,7 +707,7 @@ export class Rest {
         const current = () => !this.node.destroyed && this.node.backend === backend &&
             this.node.socket === socket && this.node.sessionId === session;
         try {
-            const response = await makeRequest<unknown>(this.url + route.path, {
+            const response = await this.observedRequest<unknown>(this.url + route.path, {
                 method: route.method, headers: this.jsonHeaders,
                 body: { encodedTrack, format: 'formats', ...(options.itag !== undefined ? { itag: options.itag } : {}) },
                 signal: options.signal, throwOnError: true,
@@ -747,7 +767,7 @@ export class Rest {
         const current = () => !this.node.destroyed && this.node.backend === backend &&
             this.node.socket === socket && this.node.sessionId === session;
         try {
-            const res = await makeStreamRequest(this.url + route.path, {
+            const res = await this.observedStream(this.url + route.path, {
                 method: route.method,
                 headers: options.range ? { ...this.jsonHeaders, Range: options.range } : this.jsonHeaders,
                 body: requestPayload, signal: options.signal,
