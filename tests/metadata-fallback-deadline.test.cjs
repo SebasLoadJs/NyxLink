@@ -83,3 +83,31 @@ test('metadata fallback stops all source attempts when its caller cancels playba
   await rejected;
   assert.equal(calls, 1, 'cancelled request must not try another provider');
 });
+
+test('metadata deadline settles even when a custom REST adapter never honors abort', async t => {
+  const { node } = createPlayer(t);
+  let requests = 0;
+  node.rest.loadTracks = async () => {
+    requests++;
+    return new Promise(() => {});
+  };
+  const started = Date.now();
+  await assert.rejects(resolveMetadata(createTrack('ignores-abort'), node, {
+    sources: ['youtube', 'soundcloud'], timeoutMs: 75,
+  }), /timed out/i);
+  assert.equal(requests, 1, 'a timed-out request must not start a second backend lookup');
+  assert.ok(Date.now() - started < 1500, 'the caller must not wait for an unresponsive adapter');
+});
+
+test('metadata deadline consumes a late rejecting transport result', async t => {
+  const { node } = createPlayer(t);
+  let rejectLate;
+  node.rest.loadTracks = async () => new Promise((_resolve, reject) => {
+    rejectLate = reject;
+  });
+  await assert.rejects(resolveMetadata(createTrack('late-failure'), node, {
+    sources: ['youtube'], timeoutMs: 75,
+  }), /timed out/i);
+  rejectLate(new Error('delayed failure after deadline'));
+  await new Promise(resolve => setImmediate(resolve));
+});
