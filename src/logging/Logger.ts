@@ -1,5 +1,5 @@
 import { createConsola } from 'consola';
-import { ConsoleReporter } from './ConsoleReporter';
+import { ConsoleReporter, type StructuredLogSink } from './ConsoleReporter';
 import { createBanner } from './Banner';
 import { formatSystemStatus, formatFailover, type AudioNodeStatus, type FailoverReport } from './LogFormatter';
 import { consolaLevels, type NyxLogLevel } from './LogLevels';
@@ -11,6 +11,10 @@ export type LoggerOptions = {
   color?: boolean;
   timestamps?: boolean;
   width?: number;
+  /** Optional sanitized structured output; never enabled implicitly. */
+  sink?: StructuredLogSink;
+  /** Disable terminal output when forwarding to an external logger. */
+  console?: boolean;
 };
 
 export type DebugSource = {
@@ -27,7 +31,7 @@ export type DebugSource = {
 export class Logger {
   private readonly instance: ReturnType<typeof createConsola>;
   private readonly reporter: ConsoleReporter;
-  private readonly options: Required<LoggerOptions>;
+  private readonly options: Required<Omit<LoggerOptions, 'sink' | 'console'>>;
   private currentLevel: NyxLogLevel;
 
   constructor(options: LoggerOptions = {}) {
@@ -38,7 +42,7 @@ export class Logger {
       level: options.level ?? 'silent',
     };
     this.currentLevel = this.options.level!;
-    this.reporter = new ConsoleReporter(this.options);
+    this.reporter = new ConsoleReporter(this.options, options.sink, options.console ?? true);
     this.instance = createConsola({
       level: consolaLevels[this.currentLevel],
       reporters: [this.reporter],
