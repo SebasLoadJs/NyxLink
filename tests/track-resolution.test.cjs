@@ -260,3 +260,39 @@ test('stop aborts a pending cross-backend migration lookup before source cleanup
   assert.equal(sourceDestroyed, false, 'cancelled migration must never delete the source player');
   assert.equal(player.node, source);
 });
+
+test('destination resolution discards an encoding returned after its session rotates', async t => {
+  const { manager, node: source } = createPlayer(t);
+  const destination = target(manager);
+  const original = createTrack('session-rotated');
+  original.backend = 'lavalink';
+  const entered = deferred(), pending = deferred();
+  destination.rest.loadTracks = async () => { entered.resolve(); return pending.promise; };
+  const { TrackResolver } = require('../dist');
+  const resolving = TrackResolver.resolve(original, destination, source);
+  const rejected = assert.rejects(resolving, /Destination node changed/i);
+  await entered.promise;
+  destination.sessionId = 'replacement-session';
+  pending.resolve({ loadType: 'track', data: migrated(original) });
+  await rejected;
+  assert.equal(original.encoded, 'encoded-session-rotated');
+  assert.equal(original.backend, 'lavalink');
+});
+
+test('destination resolution discards an encoding after the registered node is replaced', async t => {
+  const { manager, node: source } = createPlayer(t);
+  const destination = target(manager);
+  const original = createTrack('node-replaced');
+  original.backend = 'lavalink';
+  const entered = deferred(), pending = deferred();
+  destination.rest.loadTracks = async () => { entered.resolve(); return pending.promise; };
+  const { TrackResolver } = require('../dist');
+  const resolving = TrackResolver.resolve(original, destination, source);
+  const rejected = assert.rejects(resolving, /Destination node changed/i);
+  await entered.promise;
+  const replacement = target(manager);
+  assert.notEqual(replacement, destination);
+  pending.resolve({ loadType: 'track', data: migrated(original) });
+  await rejected;
+  assert.equal(original.encoded, 'encoded-node-replaced');
+});
