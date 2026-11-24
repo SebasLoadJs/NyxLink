@@ -1,10 +1,12 @@
 import type { Manager } from '../core/Manager';
 import { Memory } from './Memory';
 export declare class Local extends Memory {
-    private snapshotPath;
-    private logPath;
+    private paths?;
+    private get snapshotPath();
+    private get logPath();
     private tail;
     private closing;
+    private initialized;
     private shutdownPromise?;
     private compactionTimer?;
     init(manager: Manager, options?: {

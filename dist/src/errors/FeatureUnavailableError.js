@@ -7,7 +7,7 @@ class FeatureUnavailableError extends Error {
     statusCode;
     code = 'FEATURE_UNAVAILABLE';
     constructor(feature, backend, statusCode) {
-        super(`NodeLink-only feature (${feature}) is unavailable on ${backend}${statusCode ? ` (HTTP ${statusCode})` : ''}.`);
+        super(`Feature (${feature}) is unavailable on ${backend}${statusCode ? ` (HTTP ${statusCode})` : ''}.`);
         this.feature = feature;
         this.backend = backend;
         this.statusCode = statusCode;

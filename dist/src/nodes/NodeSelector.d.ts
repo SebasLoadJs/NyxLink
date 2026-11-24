@@ -1,6 +1,7 @@
 import type { Node } from '../entities/Node';
 import type { INodeOptions } from '../typings/Interfaces';
 import type { BackendKind } from '../backends/BackendAdapter';
+import { type NodeScoreWeights } from './NodeScoring';
 export type NodeRequirements = {
     readonly backend?: BackendKind;
     readonly requiredCapabilities?: readonly string[];
@@ -8,8 +9,13 @@ export type NodeRequirements = {
     readonly regionPolicy?: 'prefer' | 'require';
 };
 export type NodeSelectionOptions = NodeRequirements & {
+    scoreWeights?: NodeScoreWeights;
+    preferredNode?: string;
+    minimumScoreImprovement?: number;
     exclude?: readonly string[];
     allowUnhealthyFallback?: boolean;
+    preferSource?: string;
+    sourceHealthMaxAgeMs?: number;
 };
 export type NodeRejectionReason = 'unavailable' | 'excluded' | 'not-ready' | 'not-found' | 'backend' | 'capability' | 'region' | 'unhealthy' | 'draining' | 'circuit-open';
 export type NodeRejection = {

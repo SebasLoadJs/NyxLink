@@ -23,11 +23,15 @@ class Track {
     userData;
     retries = 0;
     isPartial = false;
-    constructor(data, requester, origin) {
-        const manager = Util_1.Structure.getManager();
-        const partialTrackOptions = manager?.options?.trackPartial;
+    #partialTrackOptions;
+    #originalInfo;
+    constructor(data, requester, origin, partialTrackOptions = Util_1.Structure.getManager()?.options?.trackPartial ?? []) {
+        this.#partialTrackOptions = Array.isArray(partialTrackOptions) ? [...partialTrackOptions] : [];
         const normalized = this.normalizeTrackData(data);
         this.encoded = normalized.encoded;
+        this.#originalInfo = { ...normalized.info };
+        this.title = normalized.info.title;
+        this.author = normalized.info.author;
         this.requester = requester || normalized.userData?.requester;
         this.origin = origin;
         if (data.backend === 'lavalink' || data.backend === 'nodelink')
@@ -35,11 +39,11 @@ class Track {
         this.pluginInfo = normalized.pluginInfo ?? {};
         this.userData = normalized.userData ?? {};
         const trackProps = this.createPropertySetters(normalized.info);
-        if (partialTrackOptions && Array.isArray(partialTrackOptions) && partialTrackOptions.length > 0) {
+        if (this.#partialTrackOptions.length > 0) {
             this.isPartial = true;
             trackProps.title();
             trackProps.author();
-            partialTrackOptions.forEach(prop => {
+            this.#partialTrackOptions.forEach(prop => {
                 if (prop in trackProps) {
                     trackProps[prop]();
                 }
@@ -111,8 +115,11 @@ class Track {
     get thumbnail() {
         if (this.artworkUrl)
             return this.artworkUrl;
-        if (this.sourceName === "youtube") {
-            return `https://img.youtube.com/vi/${this.identifier}/mqdefault.jpg`;
+        const info = this.getInfo();
+        if (info.artworkUrl)
+            return info.artworkUrl;
+        if (info.sourceName === "youtube" && info.identifier) {
+            return `https://img.youtube.com/vi/${info.identifier}/mqdefault.jpg`;
         }
         return null;
     }
@@ -130,26 +137,33 @@ class Track {
         return this;
     }
     clone() {
-        const newTrack = new (Util_1.Structure.get("Track"))(this.toJSON(), this.requester, this.origin);
-        newTrack.userData = JSON.parse(JSON.stringify(this.userData));
+        const record = this.toJSON();
+        const userData = JSON.parse(JSON.stringify(this.userData));
+        const pluginInfo = JSON.parse(JSON.stringify(this.pluginInfo));
+        const newTrack = new (Util_1.Structure.get("Track"))({ ...record, userData, pluginInfo }, this.requester, this.origin, this.#partialTrackOptions);
+        newTrack.retries = this.retries;
         return newTrack;
+    }
+    getInfo() {
+        const original = this.#originalInfo;
+        return {
+            title: this.title,
+            author: this.author,
+            length: this.duration ?? original.length,
+            identifier: this.identifier ?? original.identifier,
+            isSeekable: this.isSeekable ?? original.isSeekable,
+            isStream: this.isStream ?? original.isStream,
+            uri: this.uri === undefined ? original.uri : this.uri,
+            artworkUrl: this.artworkUrl === undefined ? original.artworkUrl ?? null : this.artworkUrl,
+            isrc: this.isrc === undefined ? original.isrc ?? null : this.isrc,
+            sourceName: this.sourceName ?? original.sourceName,
+            position: this.position ?? original.position ?? 0,
+        };
     }
     toJSON() {
         return {
             encoded: this.encoded,
-            info: {
-                title: this.title,
-                author: this.author,
-                length: this.duration,
-                identifier: this.identifier,
-                isSeekable: this.isSeekable,
-                isStream: this.isStream,
-                uri: this.uri,
-                artworkUrl: this.artworkUrl,
-                isrc: this.isrc,
-                sourceName: this.sourceName,
-                position: this.position,
-            },
+            info: this.getInfo(),
             pluginInfo: this.pluginInfo,
             userData: this.userData,
             backend: this.backend,

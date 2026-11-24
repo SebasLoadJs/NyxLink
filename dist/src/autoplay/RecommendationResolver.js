@@ -1,32 +1,51 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RecommendationResolver = void 0;
+const Track_1 = require("../entities/Track");
 const PlaybackGuard_1 = require("../players/PlaybackGuard");
 const requests = new WeakMap();
+function trackInfo(track) {
+    if (track instanceof Track_1.Track)
+        return track.getInfo();
+    const record = track;
+    return record.info ?? record;
+}
 class RecommendationResolver {
     static async update(node, player, track) {
         const request = {};
         requests.set(player, request);
         const guard = (0, PlaybackGuard_1.playbackGuard)(player);
         const ticket = guard.ticket;
-        if (!track || !track.sourceName || !track.identifier)
+        if (guard.isCurrent(ticket) && !player.destroyed)
+            player.recommendations = [];
+        if (!track || player.destroyed)
+            return;
+        const info = trackInfo(track);
+        if (typeof info.sourceName !== 'string' || !info.sourceName ||
+            typeof info.identifier !== 'string' || !info.identifier)
             return;
         try {
             let uri = null;
             let searchSource = null;
-            const source = track.sourceName.toLowerCase();
-            const identifier = track.identifier;
+            const source = info.sourceName.toLowerCase();
+            const identifier = info.identifier;
+            const validYouTubeId = /^[A-Za-z0-9_-]{11}$/.test(identifier);
             switch (source) {
                 case "youtube":
+                    if (!validYouTubeId)
+                        return;
                     uri = `https://www.youtube.com/watch?v=${identifier}&list=RD${identifier}`;
                     searchSource = "youtube";
                     break;
                 case "youtubemusic":
+                    if (!validYouTubeId)
+                        return;
                     uri = `https://music.youtube.com/watch?v=${identifier}&list=RD${identifier}`;
                     searchSource = "youtubemusic";
                     break;
                 case "spotify":
-                    if (node.isNodeLink && node.capabilities.has("source:spotify")) {
+                    if (node.isNodeLink && node.capabilities.has("source:spotify") &&
+                        /^[A-Za-z0-9]{22}$/.test(identifier)) {
                         uri = `seed_tracks=${identifier}`;
                         searchSource = "sprec";
                     }
@@ -50,14 +69,20 @@ class RecommendationResolver {
             }
             if (!uri || !searchSource) {
                 if (source !== "youtube") {
-                    const res = await node.manager.search({ query: `${track.title} ${track.author}`, node: node.identifier });
-                    if (res?.tracks?.length > 0) {
-                        uri = `https://www.youtube.com/watch?v=${res.tracks[0].identifier}&list=RD${res.tracks[0].identifier}`;
-                        searchSource = "youtube";
-                    }
-                    else {
+                    const res = await node.manager.search({
+                        query: `${track.title} ${track.author}`,
+                        node: node.identifier,
+                        source: "youtube",
+                    });
+                    const seed = res?.loadType !== "error" && res?.tracks?.map(trackInfo).find(candidate => {
+                        const source = typeof candidate.sourceName === 'string' ? candidate.sourceName.toLowerCase() : '';
+                        return (source === 'youtube' || source === 'youtubemusic') &&
+                            typeof candidate.identifier === 'string' && /^[A-Za-z0-9_-]{11}$/.test(candidate.identifier);
+                    });
+                    if (!seed)
                         return;
-                    }
+                    uri = `https://www.youtube.com/watch?v=${seed.identifier}&list=RD${seed.identifier}`;
+                    searchSource = "youtube";
                 }
                 else {
                     return;
@@ -80,8 +105,9 @@ class RecommendationResolver {
             const getTrackKey = (t) => {
                 if (!t)
                     return null;
-                const id = t.identifier ?? t.info?.identifier;
-                const src = (t.sourceName ?? t.info?.sourceName ?? "unknown").toLowerCase();
+                const metadata = t instanceof Track_1.Track ? t.getInfo() : t.info ?? t;
+                const id = t.identifier ?? metadata.identifier;
+                const src = (t.sourceName ?? metadata.sourceName ?? "unknown").toLowerCase();
                 if (id)
                     return `${src}:${id}`;
                 return t.encoded || null;
@@ -107,7 +133,7 @@ class RecommendationResolver {
                 player.recommendations = candidates;
         }
         catch (error) {
-            node.manager.emit("debug", `Moonlink.js > Node#updateRecommendations >> Error fetching recommendations: ${error.message}`);
+            node.manager.emit("debug", `NyxLink > RecommendationResolver > Lookup failed: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
 }

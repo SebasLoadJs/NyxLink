@@ -1,19 +1,21 @@
-import { ITrack } from "../typings/Interfaces";
+import { ITrack, ITrackInfo } from "../typings/Interfaces";
+import { TPartialTrackProperties } from "../typings/types";
 import type { BackendKind } from '../backends/BackendAdapter';
 export declare class Track {
+    #private;
     readonly encoded: string;
     title: string;
     author: string;
-    duration: number;
-    identifier: string;
-    isSeekable: boolean;
-    isStream: boolean;
-    uri: string | null;
-    artworkUrl: string | null;
-    isrc: string | null;
-    sourceName: string;
-    position: number;
-    time: number;
+    duration?: number;
+    identifier?: string;
+    isSeekable?: boolean;
+    isStream?: boolean;
+    uri?: string | null;
+    artworkUrl?: string | null;
+    isrc?: string | null;
+    sourceName?: string;
+    position?: number;
+    time?: number;
     requester: any;
     origin?: string;
     backend?: BackendKind;
@@ -21,7 +23,7 @@ export declare class Track {
     userData: Record<string, any>;
     retries: number;
     private isPartial;
-    constructor(data: ITrack | Record<string, any>, requester?: any, origin?: string);
+    constructor(data: ITrack | Record<string, any>, requester?: any, origin?: string, partialTrackOptions?: readonly TPartialTrackProperties[]);
     private normalizeTrackData;
     private createPropertySetters;
     isPartialTrack(): boolean;
@@ -29,5 +31,6 @@ export declare class Track {
     setRequester(requester: any): this;
     setPosition(position: number): this;
     clone(): Track;
+    getInfo(): ITrackInfo;
     toJSON(): ITrack;
 }

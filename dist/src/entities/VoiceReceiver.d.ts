@@ -32,8 +32,13 @@ export declare class VoiceReceiver extends EventEmitter<VoiceReceiverEvents> {
     private readonly reconnectDelay;
     private readonly maxReconnectAttempts;
     private closedByUser;
+    private reconnectTimer?;
+    private owner?;
+    private detachLifecycle;
     constructor(node: Node, guildId: string, options?: VoiceReceiverOptions);
     connect(): this;
+    private isActive;
+    private openSocket;
     close(code?: number, reason?: string): void;
     private attachSocket;
     private scheduleReconnect;

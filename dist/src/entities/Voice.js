@@ -65,6 +65,8 @@ class Voice extends Util_1.EventEmitter {
         this.reconnectionTimer = null;
     }
     connect(options) {
+        if (!this.isDestroyed())
+            this.manager.guildOwnership?.assertLocal(this.player.guildId);
         if (this.isDestroyed())
             return Promise.reject(new Error('Voice is destroyed'));
         if (this.disconnectPromise)
@@ -115,6 +117,8 @@ class Voice extends Util_1.EventEmitter {
         return this.disconnectWithReason();
     }
     disconnectWithReason(error) {
+        if (!this.isDestroyed())
+            this.manager.guildOwnership?.assertLocal(this.player.guildId);
         if (this.isDestroyed())
             return Promise.resolve();
         if (this.disconnectPromise)
@@ -162,7 +166,7 @@ class Voice extends Util_1.EventEmitter {
             this.player.set('userInitiatedConnect', false);
             return;
         }
-        if (!this.acceptingPackets || this.disconnectPromise)
+        if (!this.acceptingPackets || this.disconnectPromise || typeof data.session_id !== 'string' || !data.session_id)
             return;
         const moved = this.player.voiceChannelId !== data.channel_id;
         const changed = moved || this.sessionId !== data.session_id;
@@ -272,8 +276,8 @@ class Voice extends Util_1.EventEmitter {
             this.manager.emit("debug", `Player ${this.player.guildId} recovery: Attempting soft reconnect.`);
             const store = {
                 voiceChannelId: this.player.voiceChannelId,
-                selfDeaf: this.player.get("selfDeaf"),
-                selfMute: this.player.get("selfMute"),
+                selfDeaf: this.player.get("selfDeaf") ?? true,
+                selfMute: this.player.get("selfMute") ?? false,
             };
             await this.disconnect();
             this.player.setVoiceChannelId(store.voiceChannelId);
@@ -302,7 +306,9 @@ class Voice extends Util_1.EventEmitter {
         if (this.inFlight || this.isDestroyed() || this.disconnectPromise || this.awaitingServer || !this.sessionId || !this.token || !this.endpoint)
             return;
         const payload = { sessionId: this.sessionId, token: this.token, endpoint: this.endpoint, channelId: this.player.voiceChannelId };
-        const same = this.lastVoiceUpdate && Object.keys(payload).every(key => payload[key] === this.lastVoiceUpdate[key]);
+        const last = this.lastVoiceUpdate;
+        const same = last !== null && payload.sessionId === last.sessionId && payload.token === last.token &&
+            payload.endpoint === last.endpoint && payload.channelId === last.channelId;
         if (same && this.state === types_1.VoiceConnectionState.CONNECTED)
             return;
         const generation = this.generation;
@@ -326,7 +332,7 @@ class Voice extends Util_1.EventEmitter {
                     return;
                 this.emit('connect');
                 const nonce = this.pendingPlaybackRestoreNonce;
-                if (active() && this.isMoving && nonce !== null && nonce === this.moveNonce && !this.moveRestartInFlight && (0, PlaybackGuard_1.playbackGuard)(this.player).isCurrent(this.movePlaybackTicket)) {
+                if (active() && this.isMoving && nonce !== null && nonce === this.moveNonce && !this.moveRestartInFlight && this.movePlaybackTicket !== undefined && (0, PlaybackGuard_1.playbackGuard)(this.player).isCurrent(this.movePlaybackTicket)) {
                     this.moveRestartInFlight = true;
                     try {
                         await this.player.restart({ startQueued: false });
@@ -345,7 +351,7 @@ class Voice extends Util_1.EventEmitter {
                     return;
                 this.invalidateCredentials();
                 this.setState(types_1.VoiceConnectionState.DISCONNECTED);
-                this.manager.emit('debug', `NyxLink > Voice > Update failed: ${error.message}`);
+                this.manager.emit('debug', `NyxLink > Voice > Update failed: ${error instanceof Error ? error.message : String(error)}`);
                 this.emit('disconnect', error);
             }
             finally {
@@ -368,6 +374,7 @@ class Voice extends Util_1.EventEmitter {
         this.finishDisconnect?.();
         if (active) {
             try {
+                this.manager.guildOwnership?.assertLocal(this.player.guildId);
                 this.manager.send(this.player.guildId, { op: 4, d: { guild_id: this.player.guildId, channel_id: null, self_deaf: false, self_mute: false } });
             }
             catch { }

@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Queue = void 0;
 const TrackCodec_1 = require("../tracks/TrackCodec");
+const PlayerSnapshot_1 = require("../database/PlayerSnapshot");
 class Queue {
     player;
     manager;
@@ -10,8 +11,26 @@ class Queue {
         this.player = player;
         this.manager = player.manager;
     }
+    static validTrack(track) {
+        if (!track || typeof track !== 'object')
+            return false;
+        try {
+            const candidate = track;
+            if (typeof candidate.encoded !== 'string' || !candidate.encoded ||
+                typeof candidate.getInfo !== 'function' || typeof candidate.toJSON !== 'function') {
+                return false;
+            }
+            const snapshot = (0, PlayerSnapshot_1.snapshotJSON)(TrackCodec_1.TrackCodec.serialize(candidate));
+            return snapshot?.encoded === candidate.encoded &&
+                !!snapshot.info && typeof snapshot.info === 'object';
+        }
+        catch {
+            return false;
+        }
+    }
     _updateQueue() {
         this.player.updateData('queue', this.tracks.map(t => TrackCodec_1.TrackCodec.serialize(t)));
+        this.player.requestQueuePreload?.();
     }
     get size() {
         return this.tracks.length;
@@ -26,12 +45,12 @@ class Queue {
         return this.tracks.length === 0;
     }
     get duration() {
-        return this.tracks.reduce((acc, cur) => acc + cur.duration, 0);
+        return this.tracks.reduce((acc, cur) => acc + Math.max(0, cur.getInfo().length), 0);
     }
     get remainingDuration() {
         const queueDuration = this.duration;
         const currentTrackRemaining = this.player.current
-            ? Math.max(0, this.player.current.duration - this.player.current.position)
+            ? Math.max(0, this.player.current.getInfo().length - this.player.current.getInfo().position)
             : 0;
         return queueDuration + currentTrackRemaining;
     }
@@ -40,6 +59,9 @@ class Queue {
     }
     add(track) {
         const tracksToAdd = Array.isArray(track) ? track : [track];
+        if (tracksToAdd.some(item => item != null && !Queue.validTrack(item))) {
+            throw new TypeError('Queue.add requires playable Track entries');
+        }
         const maxSize = this.manager.options.queue?.maxSize ?? 1000;
         const allowDuplicates = this.manager.options.queue?.allowDuplicates ?? true;
         let addedTracks = [];
@@ -63,14 +85,29 @@ class Queue {
         }
     }
     insert(index, track) {
-        const tracksToAdd = Array.isArray(track) ? track : [track];
+        if (!Number.isSafeInteger(index) || index < 0 || index > this.tracks.length)
+            return;
+        const tracksToAdd = (Array.isArray(track) ? track : [track]).filter(t => t != null);
+        if (tracksToAdd.some(item => !Queue.validTrack(item))) {
+            throw new TypeError('Queue.insert requires playable Track entries');
+        }
+        const allowDuplicates = this.manager.options.queue?.allowDuplicates ?? true;
+        const seen = new Set(this.tracks.map(t => t.encoded));
+        const accepted = allowDuplicates ? tracksToAdd : tracksToAdd.filter(t => {
+            if (seen.has(t.encoded))
+                return false;
+            seen.add(t.encoded);
+            return true;
+        });
+        if (!accepted.length)
+            return;
         const maxSize = this.manager.options.queue?.maxSize ?? 1000;
-        if (maxSize !== "unlimited" && this.tracks.length + tracksToAdd.length > maxSize) {
+        if (maxSize !== "unlimited" && this.tracks.length + accepted.length > maxSize) {
             this.manager.emit("debug", `Moonlink.js > Queue >> Max queue size (${maxSize}) reached. Cannot insert more tracks.`);
             return;
         }
-        this.tracks.splice(index, 0, ...tracksToAdd);
-        this.manager.emit("queueAdd", this.player, tracksToAdd.length === 1 ? tracksToAdd[0] : tracksToAdd);
+        this.tracks.splice(index, 0, ...accepted);
+        this.manager.emit("queueAdd", this.player, accepted.length === 1 ? accepted[0] : accepted);
         this._updateQueue();
     }
     get(position) {
@@ -80,7 +117,7 @@ class Queue {
         return this.tracks.includes(track);
     }
     remove(index = 0) {
-        if (index < 0 || index >= this.tracks.length)
+        if (!Number.isSafeInteger(index) || index < 0 || index >= this.tracks.length)
             return undefined;
         const removedTrack = this.tracks.splice(index, 1)[0];
         if (removedTrack) {
@@ -98,6 +135,8 @@ class Queue {
         return track;
     }
     unshift(track) {
+        if (!Queue.validTrack(track))
+            throw new TypeError('Queue.unshift requires a playable Track');
         this.tracks.unshift(track);
         this.manager.emit("queueAdd", this.player, track);
         this._updateQueue();
@@ -124,7 +163,7 @@ class Queue {
         this._updateQueue();
     }
     shuffleRange(start, end) {
-        if (start < 0 || end >= this.tracks.length || start >= end)
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end >= this.tracks.length || start >= end)
             return;
         const chunk = this.tracks.slice(start, end + 1);
         for (let i = chunk.length - 1; i > 0; i--) {
@@ -174,16 +213,16 @@ class Queue {
     sortByDuration() {
         if (this.tracks.length < 2)
             return;
-        this.tracks.sort((a, b) => a.duration - b.duration);
+        this.tracks.sort((a, b) => a.getInfo().length - b.getInfo().length);
         this._updateQueue();
     }
     find(query) {
         const searchTerm = query.toLowerCase();
-        return this.tracks.find(t => t.identifier === query ||
+        return this.tracks.find(t => t.getInfo().identifier === query ||
             t.title.toLowerCase().includes(searchTerm));
     }
     move(from, to) {
-        if (from < 0 || to < 0 || from >= this.tracks.length || to >= this.tracks.length)
+        if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from < 0 || to < 0 || from >= this.tracks.length || to >= this.tracks.length)
             return false;
         const track = this.tracks.splice(from, 1)[0];
         this.tracks.splice(to, 0, track);
@@ -192,7 +231,8 @@ class Queue {
         return true;
     }
     moveRange(fromIndex, toIndex, count) {
-        if (fromIndex < 0 || fromIndex >= this.tracks.length ||
+        if (!Number.isSafeInteger(fromIndex) || !Number.isSafeInteger(toIndex) || !Number.isSafeInteger(count) ||
+            fromIndex < 0 || fromIndex >= this.tracks.length ||
             toIndex < 0 || toIndex > this.tracks.length ||
             count <= 0 || fromIndex + count > this.tracks.length) {
             return false;
@@ -204,7 +244,7 @@ class Queue {
         return true;
     }
     removeRange(startIndex, endIndex) {
-        if (startIndex < 0 || startIndex >= this.tracks.length ||
+        if (!Number.isSafeInteger(startIndex) || !Number.isSafeInteger(endIndex) || startIndex < 0 || startIndex >= this.tracks.length ||
             endIndex < startIndex || endIndex >= this.tracks.length) {
             return false;
         }
@@ -214,21 +254,30 @@ class Queue {
         return true;
     }
     duplicate(index, count = 1) {
-        if (index < 0 || index >= this.tracks.length || count <= 0) {
+        if (!Number.isSafeInteger(index) || !Number.isSafeInteger(count) || index < 0 || index >= this.tracks.length || count <= 0) {
             return false;
         }
+        const maxSize = this.manager.options.queue?.maxSize ?? 1000;
+        if (this.manager.options.queue?.allowDuplicates === false ||
+            (maxSize !== "unlimited" && count > maxSize - this.tracks.length) || count > 100_000)
+            return false;
         const trackToDuplicate = this.tracks[index];
         const duplicatedTracks = [];
-        for (let i = 0; i < count; i++) {
-            duplicatedTracks.push(trackToDuplicate);
+        try {
+            for (let i = 0; i < count; i++) {
+                duplicatedTracks.push(trackToDuplicate.clone());
+            }
         }
-        this.tracks.splice(index + 1, 0, ...duplicatedTracks);
+        catch {
+            return false;
+        }
+        this.tracks = this.tracks.slice(0, index + 1).concat(duplicatedTracks, this.tracks.slice(index + 1));
         this.manager.emit("queueDuplicate", this.player, duplicatedTracks, index);
         this._updateQueue();
         return true;
     }
     jump(index) {
-        if (index < 0 || index >= this.tracks.length)
+        if (!Number.isSafeInteger(index) || index < 0 || index >= this.tracks.length)
             return false;
         if (index === 0)
             return true;
@@ -258,14 +307,16 @@ class Queue {
         return this.tracks[actualIndex];
     }
     swap(index1, index2) {
-        if (index1 < 0 || index1 >= this.tracks.length || index2 < 0 || index2 >= this.tracks.length)
+        if (!Number.isSafeInteger(index1) || !Number.isSafeInteger(index2) || index1 < 0 || index1 >= this.tracks.length || index2 < 0 || index2 >= this.tracks.length)
             return false;
         [this.tracks[index1], this.tracks[index2]] = [this.tracks[index2], this.tracks[index1]];
         this._updateQueue();
         return true;
     }
     replace(index, track) {
-        if (index < 0 || index >= this.tracks.length)
+        if (!Number.isSafeInteger(index) || index < 0 || index >= this.tracks.length || !Queue.validTrack(track))
+            return false;
+        if (this.manager.options.queue?.allowDuplicates === false && this.tracks.some((existing, i) => i !== index && existing.encoded === track.encoded))
             return false;
         this.tracks[index] = track;
         this._updateQueue();
@@ -290,11 +341,11 @@ class Queue {
         return removed;
     }
     truncate(size) {
-        if (size < 0 || size >= this.tracks.length)
+        if (!Number.isSafeInteger(size) || size < 0 || size >= this.tracks.length)
             return false;
         const removed = this.tracks.splice(size, this.tracks.length - size);
         if (removed.length > 0) {
-            this.manager.emit("queueRemoveRange", this.player, removed, size, this.tracks.length + removed.length);
+            this.manager.emit("queueRemoveRange", this.player, removed, size, this.tracks.length + removed.length - 1);
             this._updateQueue();
             return true;
         }

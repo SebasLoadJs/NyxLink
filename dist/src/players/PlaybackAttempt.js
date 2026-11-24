@@ -75,6 +75,7 @@ class PlaybackAttempt {
         this.preloaded = attempt;
         return {
             track: track ? this.decorate(track, attempt) : null,
+            pending: () => !!attempt && this.preloaded === attempt && !attempt.started,
             rollback: () => {
                 if (this.preloaded === attempt) {
                     this.preloaded = previous;

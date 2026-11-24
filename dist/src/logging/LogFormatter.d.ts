@@ -10,6 +10,7 @@ export type FormatterOptions = {
     width?: number;
 };
 export declare function ansi(text: string, code: number, enabled: boolean): string;
+export declare function redactSecrets(value: string): string;
 export declare function formatValue(value: unknown): string;
 export declare function formatArgs(args: unknown[]): string;
 export declare function formatBox(title: string, details?: Record<string, unknown>, width?: number): string;

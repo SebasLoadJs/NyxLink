@@ -17,7 +17,8 @@ export declare class PlaybackAttempt {
         rollback: () => void;
     };
     preload<T extends TrackData>(node: Node, track: T | null): {
-        track: T;
+        track: T | null;
+        pending: () => boolean;
         rollback: () => void;
     };
     private active;

@@ -5,9 +5,16 @@ exports.playbackGuard = playbackGuard;
 class PlaybackGuard {
     generation = 0;
     automaticGeneration = 0;
+    controller = new AbortController();
     get ticket() { return this.generation; }
+    get signal() { return this.controller.signal; }
     get automaticTicket() { return this.automaticGeneration; }
-    invalidate() { this.cancelAutoPlay(); return ++this.generation; }
+    invalidate() {
+        this.controller.abort(new Error('Playback intent superseded'));
+        this.controller = new AbortController();
+        this.cancelAutoPlay();
+        return ++this.generation;
+    }
     isCurrent(ticket) { return ticket === this.generation; }
     cancelAutoPlay() { return ++this.automaticGeneration; }
     isAutoCurrent(ticket) { return ticket === this.automaticGeneration; }

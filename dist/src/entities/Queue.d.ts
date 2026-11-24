@@ -5,6 +5,7 @@ export declare class Queue {
     private manager;
     tracks: Track[];
     constructor(player: Player);
+    private static validTrack;
     private _updateQueue;
     get size(): number;
     get first(): Track | undefined;

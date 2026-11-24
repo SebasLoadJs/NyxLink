@@ -7,6 +7,9 @@ export declare class PlayerManager {
     constructor(manager: Manager);
     get all(): Player[];
     create(options: IPlayerConfig): Player;
+    createOwned(options: IPlayerConfig): Promise<Player>;
+    restoreOwned(options: IPlayerConfig): Promise<Player>;
+    private createWithLease;
     restore(options: IPlayerConfig): Player;
     private createOnNode;
     get(guildId: string): Player | undefined;

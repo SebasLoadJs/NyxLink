@@ -13,7 +13,7 @@ class TrackCodec {
         if (!data || typeof data.encoded !== 'string' || !data.encoded)
             throw new TypeError('Stored track requires an encoding');
         const record = data.info ? data : (0, Util_1.decodeTrack)(data.encoded);
-        const track = new Track_1.Track(record, data.requester, data.origin);
+        const track = new Track_1.Track(record, data.requester, data.origin, []);
         if (data.position !== undefined)
             track.position = data.position;
         if (data.backend === 'lavalink' || data.backend === 'nodelink')

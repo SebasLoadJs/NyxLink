@@ -1,25 +1,30 @@
 import { type NodeSelectionOptions } from "../nodes/NodeSelector";
-import { Manager } from "../core/Manager";
-import { IManagerNodeConfig } from "../typings/Interfaces";
+import type { Manager } from "../core/Manager";
+import type { Node } from "../entities/Node";
+import type { BackendInventoryEntry } from "../backends/BackendInventory";
+import type { IManagerNodeConfig, INodeStats } from "../typings/Interfaces";
 export declare class NodeManager {
     readonly manager: Manager;
-    readonly nodes: Map<string, any>;
+    readonly nodes: Map<string, Node>;
     private readonly nodeConfigs;
     private readonly drains;
+    private readonly ejections;
     constructor(manager: Manager, nodeConfigs: IManagerNodeConfig[]);
     init(): void;
     add(config: IManagerNodeConfig): void;
     remove(identifier: string): boolean;
-    get onlineNodes(): any[];
+    get onlineNodes(): Node[];
     get hasOnlineNodes(): boolean;
-    get ready(): any[];
+    get ready(): Node[];
     get hasReady(): boolean;
-    get leastUsedNode(): any | undefined;
-    get stats(): Record<string, any>;
-    findNode(options?: NodeSelectionOptions): any | undefined;
+    get leastUsedNode(): Node | undefined;
+    get stats(): Record<string, INodeStats>;
+    getBackendInventory(): BackendInventoryEntry[];
+    findNode(options?: NodeSelectionOptions): Node | undefined;
     setDraining(identifier: string, draining?: boolean): boolean;
     drain(identifier: string): Promise<boolean>;
     private drainPlayers;
     eject(identifier: string): Promise<boolean>;
+    private ejectNode;
     private _validateConfig;
 }
