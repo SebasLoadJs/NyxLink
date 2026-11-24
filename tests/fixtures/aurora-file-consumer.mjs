@@ -16,4 +16,11 @@ try{
   assert.deepEqual(raw.trim().split('\n').map(line=>JSON.parse(line).eventCode),['NODE_READY']);
   await assert.rejects(createAuroraFilePipeline(path),{code:'EEXIST'});
  }finally{await manager.shutdown();await pipeline.close();}
+ const saturatedPath=join(dir,'saturated.ndjson');
+ const bounded=await createAuroraFilePipeline(saturatedPath,{maxQueued:1});
+ const event={eventCode:'NODE_READY',timestamp:new Date().toISOString(),sanitizedContext:{backend:'nodelink'}};
+ bounded.target.info(event,'ready');
+ bounded.target.info(event,'ready');
+ await assert.rejects(bounded.close(),/capacity exceeded/);
+ assert.equal((await readFile(saturatedPath,'utf8')).trim().split('\n').length,1);
 }finally{await rm(dir,{recursive:true,force:true});}

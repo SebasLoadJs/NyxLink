@@ -4,8 +4,10 @@ import { Manager, AuroraInspectorStore } from 'nyxlink';
 import { createAuroraPipeline } from './aurora-pipeline.mjs';
 import { startInspector } from './aurora-inspector.mjs';
 import { musicLine, capabilityTable } from './aurora-diagnostics.mjs';
+import { helpLink } from './aurora-terminal-tools.mjs';
 
-const {values}=parseArgs({options:{format:{type:'string',default:'aurora'},scenario:{type:'string',default:'all'},snapshot:{type:'boolean',default:false},inspector:{type:'boolean',default:false}}});
+const {values}=parseArgs({options:{format:{type:'string',default:'aurora'},scenario:{type:'string',default:'all'},snapshot:{type:'boolean',default:false},inspector:{type:'boolean',default:false},help:{type:'boolean',default:false}}});
+if(values.help){process.stdout.write('nyxlink-aurora --format <silent|json|pretty|aurora> --scenario <name> --inspector --snapshot\n'+helpLink()+'\n');process.exit(0);}
 const scenarios=['startup','music','failover','degraded','recovery-failed','burst','all'];
 if(!scenarios.includes(values.scenario)||!['silent','json','pretty','aurora'].includes(values.format))throw new Error('Unsupported demo option');
 const scenario=name=>values.scenario==='all'||values.scenario===name;

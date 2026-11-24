@@ -94,3 +94,5 @@ Packed consumer reached the search assertion, then failed when a rapid navigatio
 ## Advanced Aurora integrations (candidate)
 
 Explicit terminal hyperlink capability checks and Ink documentation link, native Pino exclusive file destination using pino-abstract-transport and Pino's Sonic Boom, opt-in canonical OTLP log export, and Tinybench measurement have been implemented as a candidate. Lock entries use exact resolved versions. Packed tests and CI must certify them; no release is implied. Cross-platform Node PTY and retirement of standalone historical Logger API remain open.
+
+Node PTY is now integrated as a separate lockfile-backed native test project and Linux/Windows CI workflow. The file destination now has bounded admission and a saturation regression; documentation link is wired to the CLI help. These are candidate changes, not evidence of a passing workflow. Historical standalone Logger migration remains a release blocker.
