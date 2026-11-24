@@ -8,10 +8,12 @@ const manifest = (version, tag) => ({
   publishConfig: { registry: 'https://registry.npmjs.org/', access: 'public', tag },
 });
 
-test('current development package remains valid without promoting it', () => {
+test('current manifest has the channel appropriate to its exact version', () => {
   const result = validateReleaseManifest(current);
-  assert.equal(result.channel, 'dev');
-  assert.equal(result.stable, false);
+  const expected = /-dev\.\d+$/.test(current.version) ? 'dev' : /-rc\.\d+$/.test(current.version) ? 'next' : 'latest';
+  assert.equal(result.channel, expected);
+  assert.equal(result.stable, expected === 'latest');
+  assert.equal(result.version, current.version);
 });
 
 test('release candidate must use the npm next channel', () => {

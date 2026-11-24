@@ -31,7 +31,7 @@ After gathering the five `.runtime/live-voice/` reports on a **clean candidate c
 
 ## Prepare an RC without publishing
 
-On a clean `dev` checkout, after freezing the candidate:
+On the `v5.3` release-stabilization branch created from the accepted `dev` integration, after freezing the candidate:
 
 1. Set `package.json.version` to `5.3.0-rc.1` and `publishConfig.tag` to `next`. Update the lockfile if package metadata change requires it.
 2. Run the mandatory acceptance commands below, including real backend and 600-second tests, against **the new version commit**. Confirm package `version` is reflected in the compiled public API.
@@ -69,7 +69,7 @@ If a defect requires changing code, prepare **`rc.2`** on a new commit and repea
 - Require all RC acceptance results: consumer install from **public npm**, real Discord audible playback/reconnect and crossfade where supported, documented limitations, dependency/security clearance, licenses and attribution review, migration notes and no blocking defects.
 - Freeze the accepted implementation, update the manifest to **`5.3.0` / `latest`** on a **new commit** (the version change means the stable commit SHA cannot equal the RC commit SHA).
 - Re-run required CI and packaging checks on that exact stable commit, plus targeted live acceptance for any changed runtime behavior.
-- Create the protected `v5.3` branch and annotated `v5.3.0` tag from that approved stable commit; run `release:check-tag` for `refs/tags/v5.3.0`.
+- Advance the `v5.3` release-stabilization branch to that approved stable commit and create the annotated `v5.3.0` tag; run `release:check-tag` for `refs/tags/v5.3.0`.
 - Only with separate explicit stable publication approval, create the GitHub Release and publish `nyxlink@5.3.0` to npm `latest`. Then verify a clean install and the public `npm view nyxlink version` value.
 
 Keep `v5.2` untouched. Preserve the previous known-good deployment for rollback; npm packages are immutable and a published `latest` tag change must be managed explicitly rather than assumed reversible.
@@ -80,7 +80,7 @@ Only after **every accepted item in the original 38-task backlog and modernizati
 
 1. Merge the completed and reviewed implementation pull requests into `dev`. Do not merge draft PRs, bypass required status checks, or rewrite `dev` history.
 2. Freeze and approve an immutable RC source/version, tag `v5.3.0-rc.1`, and publish `nyxlink@5.3.0-rc.1` to npm `next` **only with explicit approval**. Run an external clean consumer install plus the accepted audible/real-server matrix. If changes are needed, publish `rc.2` from a fresh commit and tag, not an overwritten RC.
-3. After RC acceptance, bump to stable `5.3.0`, re-run all gates on that commit, create protected branch `v5.3` and immutable tag `v5.3.0` from it, and create the GitHub Release and npm `latest` package **only with separate explicit approval**.
+3. After RC acceptance, bump to stable `5.3.0`, re-run all gates on that commit, advance `v5.3` and create immutable tag `v5.3.0` from it, and create the GitHub Release and npm `latest` package **only with separate explicit approval**.
 4. Verify GitHub Release/tag SHA, `npm view nyxlink@5.3.0`, `npm dist-tag ls nyxlink`, a clean install, and preserve rollback evidence. Do not conflate the successful publication with continuous audio acceptance.
 5. **Only after stable release is verified**, inventory *all* branches and open PRs. Retain `dev`, `v5.2`, `v5.3`, any still-supported version branches, release/maintenance branches with documented purpose, and any branches backing active PRs or containing unmerged commits. Produce a deletion proposal listing exact branch names, unique commits, open PRs, tags and remote protection. Ask the owner to explicitly approve the exact deletion list before removing any remote branches. Never delete protected branches, tags, `dev`, `v5.2` or a branch with unmerged work merely because a release succeeded.
 

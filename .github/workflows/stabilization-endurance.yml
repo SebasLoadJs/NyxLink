@@ -12,13 +12,18 @@ on:
       - '.github/workflows/endurance.yml'
       - '.github/workflows/stabilization-endurance.yml'
   push:
-    branches: [dev]
+    branches: [dev, v5.3]
     # Tag pushes bypass path filters in GitHub Actions: every immutable RC
     # and stable release must rerun the full 600-second backend endurance.
     tags:
       - 'v5.3.0-rc.*'
       - 'v5.3.0'
     paths:
+      - 'package.json'
+      - 'src/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'pnpm-lock.yaml'
       - 'docs/release-5.3-rc-runbook.md'
       - '.github/workflows/stabilization-endurance.yml'
   workflow_dispatch:

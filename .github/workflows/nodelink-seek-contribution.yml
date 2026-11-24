@@ -1,6 +1,8 @@
 name: NodeLink seek contribution acceptance
 
 on:
+  push:
+    branches: [v5.3]
   pull_request:
     branches: [dev]
     paths:
