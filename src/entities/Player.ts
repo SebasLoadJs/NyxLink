@@ -403,7 +403,7 @@ export class Player {
         const ticket = playbackGuard(this).invalidate();
         this.pendingPlayTicket = ticket;
         return this.commands.enqueue(async () => {
-            const played = await observeOperation(this.manager, 'nyxlink.player.play', () => this.playNext(options, ticket), result => result ? 'success' : 'cancelled');
+            const played = await observeOperation(this.manager, 'nyxlink.player.play', () => this.playNext(options, ticket), result => result ? 'success' : 'resolved');
             if (played) this.lastSuccessfulExplicitPlayTicket = ticket;
             return played;
         }).finally(() => {

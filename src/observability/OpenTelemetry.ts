@@ -102,7 +102,7 @@ export class OpenTelemetry {
                             this.event('search.' + outcome, 'unknown');
                         } else {
                             this.safe(() => this.operationsDuration?.record(elapsed, { operation: name, outcome }));
-                            this.event(name.slice(8) + '.' + outcome, 'unknown');
+                            this.event('operation.' + name.slice(8) + '.' + outcome, 'unknown');
                         }
                     }
                 }

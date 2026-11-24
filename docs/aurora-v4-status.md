@@ -98,3 +98,6 @@ and exit. No audio command is exposed. It is a standalone terminal owner
 with console patching disabled and static fallback for non-TTY/CI/NO_COLOR.
 Fixture tests render all five views through Ink itself. Real key input, PTY,
 host exporter adapter and comprehensive trace tree remain to be validated.
+
+## Advanced tracing increment
+Active spans are used when supported by the host tracer. Search, loadtracks and player PATCH requests, queued explicit play/seek/stop, and executed failover attempts are instrumented. Resolved commands are not proof of audible playback. The host example forwards completed span metadata to the Inspector and supplies active trace IDs to Pino. Real async context manager, nested spans and Pino correlation have a packed consumer fixture. Node handshake, other REST routes, autoplay, crossfade, selection, session recovery, automatic Pino instrumentation, OTLP exporters and unified presentation remain pending. CI required.
