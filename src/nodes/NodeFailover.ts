@@ -1,3 +1,4 @@
+import { observeOperation } from '../observability/OpenTelemetry';
 import type { Node } from '../entities/Node';
 import type { Player } from '../entities/Player';
 import { playbackGuard } from '../players/PlaybackGuard';
@@ -30,7 +31,8 @@ export class NodeFailover {
             }
             return queue.run(() => {
                 if (cancelled()) return Promise.resolve({ status: 'cancelled' as const, attempts: 0 });
-                return this.attempt(player, source, options);
+                return observeOperation(player.manager, 'nyxlink.failover', () => this.attempt(player, source, options),
+                    result => result.status === 'recovered' ? 'success' : result.status === 'failed' ? 'error' : 'cancelled');
             }, () => {
                 player.manager.emit('playerRecoveryFailed', player);
                 return { status: 'failed', attempts: 0, reason: 'queue-full' };

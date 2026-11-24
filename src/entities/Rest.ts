@@ -1,3 +1,4 @@
+import { observeOperation } from '../observability/OpenTelemetry';
 import { requireGroupId, requireGuildId, groupCreateBody, groupPatchBody, validateGroup, validateGroups, validateGroupPatch, sponsorOptionsBody, sponsorSegmentsBody, validateSponsorState, type PlayerGroup, type GroupCreate, type GroupPatch, type GroupPatchResult, type SponsorBlockOptions, type SponsorBlockSegment, type SponsorBlockState } from '../backends/NodeLinkOrchestration';
 import { lyricsParameters, validateSourceHealth, validateNodeLinkStreamFormats, type LyricsRequestOptions, type SourceHealthResponse, type NodeLinkStreamFormats } from '../backends/NodeLinkContracts';
 import { hasLavaLyricsPlugin, lavaLyricsParameters, validateLavaLyrics, type LavaLyricsData, type LavaLyricsOptions } from '../backends/LavaLyricsContracts';
@@ -248,12 +249,12 @@ export class Rest {
         const session = this.node.sessionId;
 
         try {
-            const res = await this.node.circuit.run(() => makeRequest<unknown>(`${this.url}/v4/sessions/${session}/players/${guildId}?${params.toString()}`, {
+            const res = await observeOperation(this.node.manager, 'nyxlink.rest', () => this.node.circuit.run(() => makeRequest<unknown>(`${this.url}/v4/sessions/${session}/players/${guildId}?${params.toString()}`, {
                 method: "PATCH",
                 headers: this.jsonHeaders,
                 body: payload,
                 throwOnError: true
-            }, undefined, 0));
+            }, undefined, 0)), result => result == null ? 'empty' : 'resolved');
             if (res === undefined || res === null) return null;
             validatePlayerAcknowledgement(res, guildId);
             return res;
@@ -295,7 +296,7 @@ export class Rest {
         params.append("identifier", identifier);
 
         const protectedRequest = this.node.circuit.enabled;
-        return this.node.circuit.run(async () => {
+        return observeOperation(this.node.manager, 'nyxlink.rest', () => this.node.circuit.run(async () => {
             const res = await makeRequest<unknown>(`${this.url}/v4/loadtracks?${params}`, {
                 method: "GET",
                 headers: this.authHeaders,
@@ -305,7 +306,7 @@ export class Rest {
             if (res === undefined || res === null) return { loadType: "empty", data: {} };
             validateLoadResponse(res);
             return res;
-        });
+        }), result => result.loadType === 'error' ? 'error' : result.loadType === 'empty' ? 'empty' : 'resolved');
     }
 
     public async decodeTrack(encodedTrack: string): Promise<ITrack | null> {

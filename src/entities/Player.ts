@@ -1,3 +1,4 @@
+import { observeOperation } from '../observability/OpenTelemetry';
 import { normalizeCrossfade, type CrossfadeOptions, type QueuePreloadOptions } from '../backends/NodeLinkContracts';
 import { preparePlayerUpdate, type PlayerUpdatePayload, type PlayerVoiceUpdate } from '../backends/ProtocolContracts';
 import { migratePlayer, migrationRestart, type RestartOptions } from "../players/PlayerMigration";
@@ -402,7 +403,7 @@ export class Player {
         const ticket = playbackGuard(this).invalidate();
         this.pendingPlayTicket = ticket;
         return this.commands.enqueue(async () => {
-            const played = await this.playNext(options, ticket);
+            const played = await observeOperation(this.manager, 'nyxlink.player.play', () => this.playNext(options, ticket), result => result ? 'success' : 'cancelled');
             if (played) this.lastSuccessfulExplicitPlayTicket = ticket;
             return played;
         }).finally(() => {
@@ -1002,7 +1003,7 @@ export class Player {
 
     public async stop(): Promise<this> {
         playbackGuard(this).invalidate();
-        return this.commands.enqueue(() => this.stopPlayback());
+        return this.commands.enqueue(() => observeOperation(this.manager, 'nyxlink.player.stop', () => this.stopPlayback()));
     }
 
     private async stopPlayback(): Promise<this> {
@@ -1114,7 +1115,7 @@ export class Player {
         const ticket = playbackGuard(this).ticket;
         const track = this.current;
         const afterPendingPlay = this.pendingPlayTicket === ticket;
-        return this.commands.enqueue(() => this.seekPlayback(position, ticket, track, afterPendingPlay));
+        return this.commands.enqueue(() => observeOperation(this.manager, 'nyxlink.player.seek', () => this.seekPlayback(position, ticket, track, afterPendingPlay)));
     }
 
     private async seekPlayback(position: number, ticket: number, track: Track | null, afterPendingPlay: boolean): Promise<this> {
