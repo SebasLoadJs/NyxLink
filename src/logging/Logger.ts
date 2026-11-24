@@ -101,7 +101,7 @@ export class Logger {
         const visibleContext = options.layout === 'detailed' || options.layout === 'diagnostic' ? record.context :
           Object.fromEntries(standardFields.filter(key => record.context[key] !== undefined).map(key => [key, record.context[key]]));
         const panel = record.event === 'startup.snapshot' ? formatStartupObservation(record.context, this.options, options.layout ?? 'standard') :
-          record.event === 'dashboard.snapshot' ? formatDashboardObservation(record.context, this.options) :
+          record.event === 'dashboard.snapshot' ? formatDashboardObservation(record.context, this.options, options.layout) :
           record.event === 'error.diagnostic' ? formatErrorDiagnostic(record.context, this.options) : undefined;
         const formatted = panel ?? (record.event === 'panel' || record.event === 'player.trace' || record.event.startsWith('failover.') ? record.message : formatEntry({
           type: ['trace', 'debug', 'info', 'success', 'warn', 'error'].includes(record.event) ? record.event : record.level, tag: record.component, date: new Date(record.timestamp),
