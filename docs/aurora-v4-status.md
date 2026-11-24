@@ -240,3 +240,40 @@ remains a mutually exclusive alternative. Incident summaries preserve the
 observed source backend from the start record and suppress retained
 duplicate terminal reports. They do not claim known causes or audible
 recovery when those signals are absent. Tests and CI remain required.
+
+## Dependency evidence matrix (baseline and pending acceptance)
+
+Versions are the isolated consumer pins in `scripts/test-package.cjs`. The
+packed package itself still requires only Consola. The latest approved
+baseline is #46; changes in #47–48 must be validated again.
+
+| Package | Executed integration | Consumer fixture |
+| --- | --- | --- |
+| pino 10.4.0 | Canonical record and destination | aurora-pipeline-consumer.mjs |
+| pino-pretty 13.2.0 | Pretty and detailed records | aurora-pipeline-consumer.mjs |
+| consola 3.4.2 | Reporter bridge | aurora-pipeline-consumer.mjs |
+| figlet 1.9.4 | Wordmark | aurora-visual-consumer.mjs |
+| gradient-string 3.0.0 | Wordmark/divider | aurora-visual-consumer.mjs |
+| chalk 5.6.2 | Semantic coloring | aurora-visual-consumer.mjs, aurora-pty.py |
+| boxen 8.0.1 | Banner/incident panels | aurora-visual-consumer.mjs, aurora-pty.py |
+| string-width 7.2.0 | Width measurement | aurora-visual-consumer.mjs |
+| strip-ansi 7.1.2 | Plain snapshots | aurora-visual-consumer.mjs |
+| pretty-ms 9.2.0 | Durations | aurora-diagnostics-consumer.mjs |
+| log-symbols 7.0.1 | Semantic markers | aurora-visual-consumer.mjs |
+| listr2 8.3.3 | Bootstrap task sequencing | aurora-bootstrap-consumer.mjs |
+| ora 8.2.0 | Indeterminate bootstrap frame | aurora-bootstrap-consumer.mjs |
+| cli-progress 3.12.0 | Known readiness total | aurora-bootstrap-consumer.mjs |
+| cli-table3 0.6.5 | Capability table | aurora-diagnostics-consumer.mjs |
+| pretty-bytes 6.1.1 | Memory sizes | aurora-diagnostics-consumer.mjs |
+| log-update 6.1.0 | Standalone live music renderer | aurora-diagnostics-consumer.mjs (static fallback; interactive path still needs PTY) |
+| ink 5.2.1 / react 18.3.1 | Standalone inspector | aurora-inspector-consumer.mjs, aurora-pty.py |
+| @opentelemetry/api 1.9.0 | Active context | aurora-otel-consumer.mjs |
+| SDK trace/metrics/context 2.2.0 | Nested spans, metrics and lifecycle | observability-consumer.cts, aurora-otel-consumer.mjs |
+| SDK Node / OTLP exporters 0.208.0 | Explicit host export to loopback receiver | aurora-sdk-consumer.cjs |
+| instrumentation-pino 0.55.1 | Automatic log correlation | aurora-sdk-consumer.cjs |
+
+Not all extended use cases in the original V4 brief have been implemented.
+In particular, richer incident phases, timed trace trees, per-node progress,
+a local inspector report export, bounded latency history and all requested
+PTY modes still require acceptance. No new functionality is inferred from
+a dependency merely being installed.

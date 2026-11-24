@@ -7,8 +7,10 @@ if(process.argv.includes('--resize')){
     process.stdin.resume();
     const done=new Promise(resolve=>process.stdin.once('data',resolve));
     lease.update('abcdefghijklmnopqrstuvwxyz');
+    const resized=()=>{if(process.stdout.columns===12)terminal.write('RESIZED');};
+    process.stdout.on('resize',resized);
     terminal.write('READY-TO-RESIZE');
-    await done;
+    try{await done;}finally{process.stdout.off('resize',resized);}
     process.stdin.pause();
 }else lease.update('connecting');
 terminal.write('PERSISTENT EVENT');

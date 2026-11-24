@@ -86,7 +86,7 @@ export class AuroraPresentation {
         const backend = context.backend === 'lavalink' || context.backend === 'nodelink' ? context.backend.toUpperCase() : '';
         const duration = typeof event.durationMs === 'number' && Number.isFinite(event.durationMs) && event.durationMs >= 0
             ? this.tools.duration(event.durationMs) : '';
-        const detail = [definition.message, backend, duration].filter(Boolean).join(' · ');
+        const detail = [definition.message, backend, duration].filter(Boolean).join(this.unicode ? ' · ' : ' | ');
         const label = this.paint(definition.level.toUpperCase().padEnd(5), severity[definition.level]);
         const category = this.paint(definition.category.padEnd(10), '#818CF8');
         const prefix = [time, label, marker, category].join(' ');

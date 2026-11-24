@@ -90,8 +90,8 @@ inspector = session("inspector", ["aurora-demo.mjs", "--format", "silent", "--in
 assert b"SIMULATED" in inspector and b"PLAYER-01" in inspector
 assert b"QUEUE_ADDED" in inspector and b"No completed spans supplied by host." in inspector
 resize = session("resize", ["aurora-pty-region.mjs", "--resize"], width=40,
-    steps=((b"READY-TO-RESIZE", 12), (b"\x1b[2Kabcdefghijk", b"q\n")))
+    steps=((b"READY-TO-RESIZE", 12), (b"RESIZED", b"q\n")))
 assert b"\x1b[2Kabcdefghijklmnopqrstuvwxyz" in resize
-assert b"\x1b[2Kabcdefghijk" in resize
+assert b"\x1b[2Kabcdefghijk\r\x1b[2KRESIZED" in resize
 assert b"\x1b[?25l" not in resize
 print("PTY acceptance: 7 sessions passed")
