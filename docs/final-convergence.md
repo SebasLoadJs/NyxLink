@@ -4,18 +4,18 @@ Inputs: dev 67bcaee6b95a055cc3a160981ad2e85c0de8705e; #32 c9e042d632542d8aac4b5c
 
 This branch initially applies 83 disjoint file changes from #32 to the integrated Aurora/release base. It intentionally leaves both-modified files at dev until reconciled. Neither source branch is deleted or changed. CI cannot establish completion while these overlaps are outstanding. Do not merge this integration branch until the remaining files have been reconciled, the public generated API regenerated, and all checks pass on its exact SHA.
 
-## Overlapping files awaiting reconciliation
+## Overlapping files — initial reconciliation recorded
 
 - [x] `.github/workflows/pr.yml` — initial reconciliation; CI pending
-- [ ] `CHANGELOG.md`
-- [ ] `README.md`
-- [ ] `docs/live-voice-verification.md`
-- [ ] `docs/master-plan-reconciliation.md`
+- [x] `CHANGELOG.md` — initial reconciliation; CI pending
+- [x] `README.md` — initial reconciliation; CI pending
+- [x] `docs/live-voice-verification.md` — initial reconciliation; CI pending
+- [x] `docs/master-plan-reconciliation.md` — initial reconciliation; CI pending
 - [x] `index.ts` — initial reconciliation; compile and contract checks pending
 - [x] `package.json` — initial reconciliation; CI pending
 - [x] `scripts/check-package.cjs` — initial reconciliation; CI pending
 - [x] `scripts/endurance-worker.cjs` — initial reconciliation; CI pending
-- [ ] `scripts/test-package.cjs`
+- [x] `scripts/test-package.cjs` — initial reconciliation; CI pending
 - [x] `src/core/Manager.ts` — initial reconciliation; compile and contract checks pending
 - [x] `src/entities/Node.ts` — initial reconciliation; CI pending
 - [x] `src/entities/Player.ts` — initial reconciliation; CI pending
@@ -26,7 +26,7 @@ This branch initially applies 83 disjoint file changes from #32 to the integrate
 - [x] `src/players/PlayerMigration.ts` — initial reconciliation; CI pending
 - [x] `src/tracks/TrackResolver.ts` — initial reconciliation; CI pending
 - [x] `src/typings/Interfaces.ts` — initial reconciliation; compile and contract checks pending
-- [ ] `tests/helpers/backend-lab.cjs`
+- [x] `tests/helpers/backend-lab.cjs` — initial reconciliation; CI pending
 - [x] `tests/logger.test.cjs` — initial reconciliation; CI pending
 
 ## Acceptance
@@ -38,3 +38,5 @@ Manager preserves Aurora/legacy mutual exclusion, OTel, performance monitoring a
 REST now uses the #32 overload-preserving proxy for monitor/legacy tracing and one optional Aurora OTel operation per underlying request. Track resolution keeps abort/metadata/session fences and a separate operation span. Migration retains actual failure codes and cancellation guard. Verify classifications and test regressions before merging.
 
 Legacy sink compatibility is retained as a sanitized synchronous adapter alongside the #32 bounded structured pipeline; custom transport and legacy sink configuration are mutually exclusive. Both branches' credential redaction and logger regressions are included. Confirm CodeQL and packed consumer compatibility.
+
+All 22 overlapping files now have an initial reconciliation. The combined branch is not accepted until its build, generated API, tests and CI pass. The original #32 branch remains intact. Do not claim independent review of every conflict resolution until the combined suite is green.
