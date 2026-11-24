@@ -4,6 +4,13 @@ This changelog describes the unreleased NyxLink 5.3 development line and its ver
 
 ## [Unreleased — v5.3]
 
+### Observability and terminal
+
+- Added opt-in Aurora V4 structured events, a bounded terminal coordinator, and an optional host pipeline for Silent, JSON, Pretty, Aurora and Custom logging.
+- Added adaptive branded banners, startup readiness observation, selected-player music snapshots, correlated failover incidents, capability diagnostics and a standalone read-only Ink Inspector.
+- Added optional host OpenTelemetry spans, Pino correlation and explicit OTLP HTTP trace/metric exporters. No SDK or visual dependency is required by the audio core.
+- Added executable simulated scenarios, real Linux PTY transcript tests and a comparative logging benchmark, with initial evidence on Node 22 and 24. Live audio and remaining release gates are separate.
+
 ### Architecture and public API
 
 - Introduced a multi-backend client architecture with explicit Lavalink v4 and NodeLink adapters, capability discovery, connection-scoped inventories, selection constraints and backend-specific contracts.

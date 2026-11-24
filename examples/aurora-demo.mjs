@@ -9,7 +9,12 @@ const scenarios=['startup','music','failover','degraded','recovery-failed','burs
 if(!scenarios.includes(values.scenario)||!['silent','json','pretty','aurora'].includes(values.format))throw new Error('Unsupported demo option');
 const scenario=name=>values.scenario==='all'||values.scenario===name;
 let store;
-const pipeline=createAuroraPipeline({format:values.format,level:values.format==='silent'?'silent':'debug',color:!values.snapshot,onEvent:event=>store?.recordEvent(event)});
+// Inspector owns the terminal; collect canonical events through a custom sink
+// without enabling any other stdout renderer.
+const inspectorTarget=Object.fromEntries(['trace','debug','info','warn','error','fatal'].map(level=>[level,event=>store?.recordEvent(event)]));
+const pipeline=values.inspector
+    ? createAuroraPipeline({format:'custom',level:'debug',target:inspectorTarget})
+    : createAuroraPipeline({format:values.format,level:values.format==='silent'?'silent':'debug',color:!values.snapshot,onEvent:event=>store?.recordEvent(event)});
 const manager=new Manager({nodes:[{identifier:'fixture',host:'localhost',port:2333,password:'fixture',secure:false}],options:{node:{autoMovePlayers:true},aurora:{target:pipeline.target,level:pipeline.level}}});
 store=new AuroraInspectorStore(manager,200);
 const nodeA={backend:{kind:'lavalink'}},nodeB={backend:{kind:'nodelink'}};
