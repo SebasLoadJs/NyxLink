@@ -25,6 +25,8 @@ This changelog describes the unreleased NyxLink 5.3 development line and its ver
 
 ### Playback and reliability
 
+- Hardened telemetry correlation: stale READY/TrackStart events cannot consume newer latency samples, and orphan/duplicate recovery events do not inflate success counters.
+- Enforced provider policy across cross-backend track resolution: blocked sources are not queried or accepted, explicit provider errors (including rate-limit/auth failures) are never bypassed through metadata fallback, and malformed direct responses fail explicitly.
 - Bounded cross-backend metadata fallback to a single elapsed-time deadline shared by all eligible search sources, instead of allowing one timeout per source.
 - Forwarded playback-intent cancellation to destination URI and metadata lookups on new play/stop/migration; regression tests cover pending HTTP requests, queued music and migration ownership.
 - Rejected stale shared-search responses after node/session replacement and checked independent subscriber cancellation.
