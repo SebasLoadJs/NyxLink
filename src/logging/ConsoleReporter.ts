@@ -10,19 +10,22 @@ export type StructuredLogRecord = {
 };
 export type StructuredLogSink = (record: StructuredLogRecord) => void;
 
+export type PinoLogFields = Omit<StructuredLogRecord, 'level' | 'message'> & { nyxlinkLevel: number };
+
 /** Duck-typed adapter: consumers provide their own Pino instance. */
 export type PinoLogTarget = {
-  error: (record: StructuredLogRecord, message: string) => unknown;
-  warn: (record: StructuredLogRecord, message: string) => unknown;
-  info: (record: StructuredLogRecord, message: string) => unknown;
-  debug: (record: StructuredLogRecord, message: string) => unknown;
-  trace: (record: StructuredLogRecord, message: string) => unknown;
+  error: (record: PinoLogFields, message: string) => unknown;
+  warn: (record: PinoLogFields, message: string) => unknown;
+  info: (record: PinoLogFields, message: string) => unknown;
+  debug: (record: PinoLogFields, message: string) => unknown;
+  trace: (record: PinoLogFields, message: string) => unknown;
 };
 export function createPinoSink(target: PinoLogTarget): StructuredLogSink {
   return record => {
     const method = record.level <= 0 ? 'error' : record.level === 1 ? 'warn' :
       record.level <= 3 ? 'info' : record.level === 4 ? 'debug' : 'trace';
-    target[method](record, record.message);
+    const { level, message, ...fields } = record;
+    target[method]({ ...fields, nyxlinkLevel: level }, message);
   };
 }
 

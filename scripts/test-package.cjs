@@ -36,7 +36,9 @@ async function main() {
     const compiler = require('../node_modules/typescript/package.json').version;
     const discord = require('../node_modules/discord.js/package.json').version;
     await fs.writeFile(path.join(consumer, 'package.json'), JSON.stringify({ private: true, packageManager: manifest.packageManager,
-      dependencies: { [manifest.name]: fromRegistry ? manifest.version : `file:${archive}` }, devDependencies: { '@types/node': types, typescript: compiler, 'discord.js': discord } }));
+      dependencies: { [manifest.name]: fromRegistry ? manifest.version : `file:${archive}` }, devDependencies: { '@types/node': types, typescript: compiler, 'discord.js': discord,
+        pino: '10.4.0', 'pino-pretty': '13.2.0', '@opentelemetry/api': '1.9.0',
+        '@opentelemetry/sdk-trace-base': '2.2.0', '@opentelemetry/sdk-metrics': '2.2.0' } }));
     const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
     run(pnpm, ['install', fromRegistry ? '--prefer-offline=false' : '--prefer-offline', ...(fromRegistry ? ['--force'] : []), '--registry=https://registry.npmjs.org/', '--ignore-scripts', '--no-frozen-lockfile'], consumer);
     checks.push(fromRegistry ? 'install exact published version from public npm in isolated consumer' : 'install packed artifact in isolated consumer');
@@ -84,6 +86,11 @@ async function main() {
     const tsc = path.join(consumer, 'node_modules/typescript/bin/tsc');
     run(process.execPath, [tsc, '--noEmit', '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', 'consumer.cts', 'consumer.mts'], consumer);
     checks.push('TypeScript NodeNext CJS/ESM consumers without skipLibCheck');
+    await fs.copyFile(path.join(root, 'tests/fixtures/observability-consumer.cts'), path.join(consumer, 'observability-consumer.cts'));
+    run(process.execPath, [tsc, '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', 'observability-consumer.cts'], consumer);
+    const observability = run(process.execPath, ['observability-consumer.cjs'], consumer);
+    assert.equal(observability.stdout, ''); assert.equal(observability.stderr, '');
+    checks.push('real Pino/Pino Pretty and OpenTelemetry SDK types, runtime, privacy and cleanup');
     for (const file of ['discordjs.ts', 'discordjs.cjs']) await fs.copyFile(path.join(root, 'examples', file), path.join(consumer, file));
     run(process.execPath, [tsc, '--noEmit', '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', 'discordjs.ts'], consumer);
     await fs.writeFile(path.join(consumer, 'example-smoke.cjs'), `const { createMusicClient } = require('./discordjs.cjs'); const fixture = createMusicClient([{host:'127.0.0.1',port:2333,password:'fixture'}]); fixture.close().catch(error=>{console.error(error);process.exitCode=1});`);

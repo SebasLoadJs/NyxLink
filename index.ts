@@ -2,6 +2,8 @@ export type * from './src/typings/Interfaces';
 export { NodeState, VoiceConnectionState, LoadType } from './src/typings/types';
 export const version: string = require("../package.json").version as string;
 export { Logger, ConsoleReporter, createPinoSink, createBanner, formatEntry, formatBox, formatSystemStatus, formatFailover } from './src/logging';
+export { OpenTelemetry } from './src/observability/OpenTelemetry';
+export type { OpenTelemetryOptions, TelemetryMeter, TelemetryTracer } from './src/observability/OpenTelemetry';
 export { PrivateMetricsServer } from './src/observability/PrivateMetricsServer';
 export type { PrivateMetricsOptions, PrivateMetricsSnapshot, PrivateMetricsNode } from './src/observability/PrivateMetricsServer';
 export type { LoggerOptions, NyxLogLevel, AudioNodeStatus, FailoverReport, StructuredLogRecord, StructuredLogSink, PinoLogTarget } from './src/logging';

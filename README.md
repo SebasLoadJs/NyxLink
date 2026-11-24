@@ -355,6 +355,33 @@ resúmenes de nodos y reproductores y métricas Prometheus sin IDs de guild
 ni secretos. No se inicia por defecto. Consulta la
 [guía de métricas privadas](docs/private-metrics.md).
 
+**OpenTelemetry opcional.** Para registrar eventos y tiempos de búsqueda en un
+SDK configurado por tu bot, instala `@opentelemetry/api` en el consumidor:
+
+```js
+const { metrics, trace } = require('@opentelemetry/api');
+const { Manager } = require('nyxlink');
+
+const manager = new Manager({
+  nodes,
+  options: {
+    telemetry: {
+      meter: metrics.getMeter('nyxlink'),
+      tracer: trace.getTracer('nyxlink'),
+    },
+  },
+});
+```
+
+El consumidor debe registrar sus propios providers y exporters antes de crear
+el manager. NyxLink no inicia ningún SDK ni exportador. El contador
+`nyxlink.events` usa etiquetas fijas de evento/backend; el histograma
+`nyxlink.search.duration` (ms) y los spans de búsqueda indican éxito, resultado
+vacío o error. No incluyen queries, títulos, IDs, credenciales ni errores
+originales. Los spans no establecen un contexto activo para solicitudes internas;
+no equivalen a tracing distribuido de extremo a extremo. Los listeners se
+retiran durante `manager.shutdown()`; el SDK pertenece al bot.
+
 El logger está desactivado por defecto. `logging` activa la salida de Consola y `banner: true` muestra el banner de terminal. Los eventos `debug` originales pueden contener credenciales y deben mantenerse privados. La salida del logger aplica redacción de patrones conocidos, no una garantía de anonimización.
 
 Para usar Pino con tu propia configuración, instala `pino` en el bot y proporciona su instancia mediante el adaptador opcional:

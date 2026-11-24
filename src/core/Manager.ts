@@ -21,6 +21,7 @@ import { SpotifySource } from "../sources/spotify";
 import { DeezerSource } from "../sources/deezer";
 import { Logger } from "../logging/Logger";
 import { PrivateMetricsServer, type PrivateMetricsOptions } from '../observability/PrivateMetricsServer';
+import { OpenTelemetry } from '../observability/OpenTelemetry';
 import { GuildOwnership, type GuildOwnershipOptions } from '../cluster/GuildOwnership';
 
 export class Manager extends EventEmitter<IManagerEvents> {
@@ -41,6 +42,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
     public set database(database: DatabaseManager) { this.databaseInstance = database; }
     public readonly logger?: Logger;
     private detachLogging?: () => void;
+    private readonly telemetry?: OpenTelemetry;
     private idleCheckInterval?: NodeJS.Timeout;
     private initializationPromise?: Promise<this>;
     private shutdownPromise?: Promise<void>;
@@ -162,6 +164,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
 
         this.nodes = new (Structure.get("NodeManager"))(this, config.nodes);
         this.players = new (Structure.get("PlayerManager"))(this);
+        if (this.options.telemetry) this.telemetry = new OpenTelemetry(this, this.options.telemetry);
         if (this.options.logging) {
             this.logger = new Logger(this.options.logging);
             this.detachLogging = this.logger.attachManager(this);
@@ -244,6 +247,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
         if (this.shutdownPromise) return this.shutdownPromise;
         this.shuttingDown = true;
         this.searches.close();
+        this.telemetry?.close();
         this.initialized = false;
         if (this.idleCheckInterval) clearInterval(this.idleCheckInterval);
         this.idleCheckInterval = undefined;
@@ -345,7 +349,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
     }
 
     public async search(options: ISearchQuery): Promise<SearchResult> {
-        return this.searches.search(options);
+        return this.telemetry ? this.telemetry.search(() => this.searches.search(options)) : this.searches.search(options);
     }
 
     public async packetUpdate(packet: DiscordGatewayPacket): Promise<void> {
