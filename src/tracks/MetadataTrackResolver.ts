@@ -68,6 +68,12 @@ export async function resolveMetadata(track: Track, node: Node, options: Metadat
                 );
                 signal.throwIfAborted();
                 validateLoadResponse(response);
+                // A backend error (including provider authorization or rate
+                // limits) is not an empty lookup. Never route around it by
+                // silently trying other sources or alternate queries.
+                if (response.loadType === 'error') {
+                    throw new Error('Metadata source rejected the lookup');
+                }
                 const candidates = response.loadType === 'track' ? [response.data] : response.loadType === 'search' ? response.data : [];
                 let selected: ITrack | undefined, best = options.minimumScore ?? 0.8;
                 for (const candidate of candidates.slice(0, options.maxCandidates ?? 10)) {
