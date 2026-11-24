@@ -230,3 +230,33 @@ test('PlaybackGuard invalidates the previous network signal but not the next int
   assert.equal(guard.signal.aborted, false);
   assert.equal(initialSignal.aborted, true);
 });
+
+test('stop aborts a pending cross-backend migration lookup before source cleanup', async t => {
+  const { manager, node: source, player } = createPlayer(t);
+  source.backend = BackendDetector.detect({ version: { semver: '4.2.2' } });
+  const destination = target(manager);
+  const current = createTrack('migration-lookup-abort');
+  current.backend = 'lavalink';
+  player.current = current;
+  const entered = deferred();
+  let signal;
+  destination.rest.loadTracks = async (_uri, options) => {
+    signal = options.signal;
+    entered.resolve();
+    return new Promise((_resolve, reject) => {
+      const abort = () => reject(signal.reason);
+      signal.addEventListener('abort', abort, { once: true });
+      if (signal.aborted) abort();
+    });
+  };
+  let sourceDestroyed = false;
+  source.rest.destroyPlayer = async () => { sourceDestroyed = true; };
+  const moving = player.transferNode(destination);
+  await entered.promise;
+  const stopping = player.stop();
+  assert.equal(signal.aborted, true);
+  assert.equal(await moving, false);
+  await stopping;
+  assert.equal(sourceDestroyed, false, 'cancelled migration must never delete the source player');
+  assert.equal(player.node, source);
+});
