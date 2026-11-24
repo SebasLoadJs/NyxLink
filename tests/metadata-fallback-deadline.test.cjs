@@ -111,3 +111,22 @@ test('metadata deadline consumes a late rejecting transport result', async t => 
   rejectLate(new Error('delayed failure after deadline'));
   await new Promise(resolve => setImmediate(resolve));
 });
+
+test('metadata matching prefers identical ISRC and rejects an explicit conflicting recording', async t => {
+  const { node } = createPlayer(t);
+  const seed = createTrack('isrc-matching');
+  seed.isrc = 'USAAA1234567';
+  const original = seed.toJSON();
+  const conflicting = {
+    ...original, encoded: 'wrong-recording', info: { ...original.info, isrc: 'GBBBB7654321' },
+  };
+  const matching = {
+    ...original, encoded: 'correct-recording', info: { ...original.info, isrc: 'us-aaa-1234567' },
+  };
+  node.rest.loadTracks = async () => ({ loadType: 'search', data: [conflicting, matching] });
+  const result = await resolveMetadata(seed, node, { sources: ['youtube'], minimumScore: 0.8 });
+  assert.equal(result.encoded, 'correct-recording', 'matching titles must not override a different known ISRC');
+
+  node.rest.loadTracks = async () => ({ loadType: 'search', data: [conflicting] });
+  assert.equal(await resolveMetadata(seed, node, { sources: ['youtube'] }), undefined);
+});
