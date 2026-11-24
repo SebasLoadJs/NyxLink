@@ -15,6 +15,7 @@ import type { NodeRequirements } from '../nodes/NodeSelector';
 import type { CircuitBreakerOptions } from '../nodes/NodeCircuitBreaker';
 
 export interface IManagerEvents {
+    extensionError: (name: string, error: import('../extensions/ExtensionHost').ExtensionLifecycleError) => void;
     debug: (message: string) => void;
 
     // Node Events
@@ -139,6 +140,7 @@ export interface IManagerNodeConfig {
 }
 
 export interface IManagerOptionsConfig {
+    recommendations?: import('../autoplay/RecommendationPreference').RecommendationPreferences;
     logging?: LoggerOptions & { banner?: boolean };
     aurora?: AuroraEventOptions;
     telemetry?: OpenTelemetryOptions;
@@ -202,6 +204,10 @@ export interface INodeOptions {
 }
 
 export interface ISearchOptions {
+    /** Share simultaneous backend requests; cancellation remains per caller. Default false. */
+    deduplicate?: boolean;
+    /** Explicit opt-in metadata fallback after direct destination resolution fails. */
+    trackResolution?: import('../tracks/MetadataTrackResolver').MetadataResolutionOptions;
     /** Prefer nodes with fresh, healthy telemetry for recognized text-search sources. */
     sourceHealth?: boolean;
     timeoutMs?: number;
