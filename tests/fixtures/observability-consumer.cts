@@ -7,6 +7,22 @@ import { Manager, SearchResult, createPinoSink } from 'nyxlink';
 
 async function main(): Promise<void> {
     const lines: string[] = [];
+    const auroraLines: string[] = [];
+    const auroraTarget = pino({ level: 'debug' }, { write(line: string) { auroraLines.push(line); } });
+    const auroraManager = new Manager({
+        nodes: [{ host: '127.0.0.1', port: 2333, password: 'fixture', secure: false }],
+        options: { aurora: { target: auroraTarget, level: 'info' } },
+    });
+    try {
+        auroraManager.emit('nodeReady', { backend: { kind: 'nodelink' } } as import('nyxlink').Node, { token: 'private-token' });
+        assert.equal(auroraLines.length, 1);
+        const event = JSON.parse(auroraLines[0]);
+        assert.equal(event.eventCode, 'NODE_READY');
+        assert.equal(event.level, 30);
+        assert.equal(event.sanitizedContext.backend, 'nodelink');
+        assert.doesNotMatch(auroraLines[0], /private-token/);
+    } finally { await auroraManager.shutdown(); }
+
     const logger = pino({ level: 'trace' }, { write(line: string) { lines.push(line); } });
     const spanExporter = new InMemorySpanExporter();
     const traces = new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(spanExporter)] });
