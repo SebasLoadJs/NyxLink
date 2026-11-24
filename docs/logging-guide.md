@@ -39,6 +39,8 @@ Detail, rendering and destination are independent:
 
 Standard keeps node/guild/backend/trace/status/code/duration/position fields concise. Detailed expands the full redacted context; diagnostic adds record identity. JSON destinations receive the complete bounded record regardless of pretty layout.
 
+In pretty mode, the **observed startup, cluster dashboard and diagnostic headings** use the terminal's semantic cyan/violet/red palette only when colors are enabled. `NO_COLOR`, JSON transports and color-disabled clients remain free from decoration. The `compact` dashboard is a short summary of observed node/player/queue counts rather than a multi-line box; it never invents a health verdict. All colorization happens after the plain-text box has been width-calculated.
+
 ## Records, correlation and tracing
 
 Every destination receives the same detached immutable `StructuredLogRecord`: schema version, monotonically ordered sequence, timestamp, level, component, event, message and context. Banners and panels become structured events in JSON mode, with no ANSI escapes or box artwork mixed into JSON.
