@@ -3,6 +3,7 @@ import type { Track } from '../entities/Track';
 import type { ITrack } from '../typings/Interfaces';
 import { validateLoadResponse } from '../backends/ProtocolValidation';
 import { performance } from 'node:perf_hooks';
+import { awaitWithAbort } from './AbortableLookup';
 
 export interface MetadataResolutionOptions {
     sources: readonly ('youtube' | 'youtubemusic' | 'soundcloud')[];
@@ -22,22 +23,6 @@ const isrc = (value: unknown): string | undefined => {
     const normalized = typeof value === 'string' ? value.replaceAll('-', '').toUpperCase() : '';
     return /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/.test(normalized) ? normalized : undefined;
 };
-
-/** Enforce the caller deadline even if a custom REST implementation ignores AbortSignal.
- * Attach both resolution handlers so late failures never become unhandled rejections. */
-function awaitWithAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
-    if (signal.aborted) return Promise.reject(signal.reason ?? new Error('Metadata resolution cancelled'));
-    return new Promise<T>((resolve, reject) => {
-        const cleanup = () => signal.removeEventListener('abort', aborted);
-        const aborted = () => { cleanup(); reject(signal.reason ?? new Error('Metadata resolution cancelled')); };
-        signal.addEventListener('abort', aborted, { once: true });
-        operation.then(
-            value => { cleanup(); resolve(value); },
-            error => { cleanup(); reject(error); },
-        );
-        if (signal.aborted) aborted();
-    });
-}
 
 /** Explicit fallback policy against the destination itself, with no native-provider recursion. */
 export async function resolveMetadata(track: Track, node: Node, options: MetadataResolutionOptions, callerSignal?: AbortSignal): Promise<ITrack | undefined> {
