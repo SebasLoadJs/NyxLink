@@ -57,3 +57,29 @@ test('metadata fallback rejects invalid cumulative time budgets before making re
   }
   assert.equal(calls, 0);
 });
+
+test('metadata fallback stops all source attempts when its caller cancels playback', async t => {
+  const { node } = createPlayer(t);
+  const original = createTrack('metadata-intent-cancelled');
+  const caller = new AbortController();
+  let resolveEntered;
+  const entered = new Promise(resolve => { resolveEntered = resolve; });
+  let calls = 0;
+  node.rest.loadTracks = async (_identifier, { signal }) => {
+    calls++;
+    resolveEntered();
+    return new Promise((_resolve, reject) => {
+      const abort = () => reject(signal.reason);
+      signal.addEventListener('abort', abort, { once: true });
+      if (signal.aborted) abort();
+    });
+  };
+  const pending = resolveMetadata(original, node, {
+    sources: ['youtube', 'soundcloud'], timeoutMs: 10000,
+  }, caller.signal);
+  await entered;
+  const rejected = assert.rejects(pending, /superseded intent/);
+  caller.abort(new Error('superseded intent'));
+  await rejected;
+  assert.equal(calls, 1, 'cancelled request must not try another provider');
+});
