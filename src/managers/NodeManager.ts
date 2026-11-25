@@ -44,7 +44,7 @@ export class NodeManager {
         const node = new (Structure.get("Node"))(this.manager, { ...config, identifier });
         this.nodes.set(identifier, node);
         this.manager.emit("nodeCreate", node);
-        this.manager.emit("debug", `Moonlink.js > NodeManager#add: Node added. Identifier: ${identifier}`);
+        this.manager.emit("debug", `NyxLink > NodeManager#add: Node added. Identifier: ${identifier}`);
     }
 
     public remove(identifier: string): boolean {
