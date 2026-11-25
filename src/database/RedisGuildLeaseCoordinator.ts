@@ -125,7 +125,7 @@ export class RedisGuildLeaseCoordinator {
     const renewed = Number(await this.client.sendCommand(['EVAL', RENEW, '1',
       key, this.expected(lease), String(this.ttlMs)])) === 1;
     if (!renewed && this.ownsHandle(lease)) this.active.delete(lease.guildId);
-    return renewed;
+    return renewed && !this.closed && this.ownsHandle(lease);
   }
 
   public async isCurrent(lease: RedisGuildLease): Promise<boolean> {
@@ -133,7 +133,7 @@ export class RedisGuildLeaseCoordinator {
     const [key] = this.keys(lease.guildId);
     const current = Number(await this.client.sendCommand(['EVAL', CHECK, '1', key, this.expected(lease)])) === 1;
     if (!current && this.ownsHandle(lease)) this.active.delete(lease.guildId);
-    return current;
+    return current && !this.closed && this.ownsHandle(lease);
   }
 
   public async release(lease: RedisGuildLease): Promise<boolean> {
