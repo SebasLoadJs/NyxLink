@@ -50,7 +50,9 @@ export class RecommendationResolver {
             let primary: Pick<ISearchQuery, 'query' | 'source'> | undefined;
             if (source === 'youtube' || source === 'youtubemusic') {
                 if (!validYouTubeId(identifier)) return;
-                primary = youtubeMix(identifier, source === 'youtubemusic');
+                primary = config && supported('youtube')
+                    ? { query: identifier, source: 'ytrec' }
+                    : youtubeMix(identifier, source === 'youtubemusic');
             } else if ((source === 'spotify' || source === 'deezer' || source === 'tidal') && supported(source)) {
                 primary = providerRecommendation(source, identifier);
             } else if (source === 'applemusic' && supported(source)) {
@@ -73,7 +75,12 @@ export class RecommendationResolver {
                     node.manager.emit('debug', 'NyxLink > RecommendationResolver > Provider lookup failed.');
                 }
             };
-            if (primary) await collect(primary);
+            if (primary) {
+                await collect(primary);
+                if (primary.source === 'ytrec' && active() && !signal.aborted && groups.every(group => !group.length)) {
+                    await collect(youtubeMix(identifier, source === 'youtubemusic'));
+                }
+            }
             // Opt-in additional providers; never fabricate IDs from a different catalogue.
             for (const provider of config?.providers ?? []) {
                 if (!active() || signal.aborted) break;
@@ -97,17 +104,19 @@ export class RecommendationResolver {
             const selected: Track[] = [];
             // Interleave provider lists so the primary provider cannot occupy every
             // candidate slot before additional providers reach the preference scorer.
-            const candidates: Track[] = [];
-            for (let index = 0; index < 50; index++) {
-                for (const group of groups) if (group[index]) candidates.push(group[index]);
-            }
-            for (const candidate of candidates) {
-                if (!candidate || !candidate.encoded || disabled.has(recommendationInfo(candidate).sourceName?.toLowerCase() ?? '')) continue;
+            const uniqueGroups = groups.map(group => group.filter(candidate => {
+                if (!candidate || !candidate.encoded || disabled.has(recommendationInfo(candidate).sourceName?.toLowerCase() ?? '')) return false;
                 const keys = recommendationKeys(candidate);
-                if (!keys.length || keys.some(key => seen.has(key))) continue;
+                if (!keys.length || keys.some(key => seen.has(key))) return false;
                 keys.forEach(key => seen.add(key));
-                selected.push(candidate);
-                if (selected.length >= (config?.maxCandidates ?? 50)) break;
+                return true;
+            }));
+            const limit = config?.maxCandidates ?? 50;
+            for (let index = 0; index < 50 && selected.length < limit; index++) {
+                for (const group of uniqueGroups) {
+                    if (group[index]) selected.push(group[index]);
+                    if (selected.length >= limit) break;
+                }
             }
             if (active()) player.recommendations = selected;
         } catch {
