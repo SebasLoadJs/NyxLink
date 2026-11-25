@@ -1,3 +1,4 @@
+import { readSponsorBlockEvent } from '../backends/SponsorBlockEvents';
 import type { NodeLinkDiscoveryOptions } from '../backends/NodeLinkSearchContracts';
 import type { IRESTLoadTracks } from '../typings/Interfaces';
 import type { LavaSearchOptions, LavaSearchResult } from '../backends/LavaSearchContracts';
@@ -1144,6 +1145,11 @@ export class Node {
 
   protected handleEvent(player: any, payload: LavalinkEventPayload): void {
     if (player.destroyed || player.node !== this) return;
+    const sponsor = readSponsorBlockEvent(payload, this.backend?.kind);
+    if (sponsor && sponsor.guildId === player.guildId) {
+        this.manager.emit('sponsorBlockEvent', player, sponsor);
+        return;
+    }
     switch (payload.type) {
         case "TrackStartEvent":
             this.handleTrackStart(player, payload);
