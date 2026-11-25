@@ -41,3 +41,29 @@ The category API requires the SponsorBlock plugin. Valid categories include spon
 The integration laboratory uses pinned Lavalink 4.2.2, LavaLyrics 1.1.0 and SponsorBlock 3.0.1, with verified plugin JAR hashes. REST and startup validation do not certify lyric availability, audible segment skipping or real Discord voice. See [backend compatibility](backend-compatibility.md) and the [public API](api-reference.md).
 
 Upstream: [Lavalink](https://lavalink.dev/) · [LavaLyrics](https://github.com/topi314/LavaLyrics) · [SponsorBlock](https://github.com/topi314/SponsorBlock-Plugin).
+
+
+## LavaDSPX
+
+Install the [LavaDSPX plugin](https://github.com/devoxin/LavaDSPX-Plugin) on the Lavalink node. Its registered plugin name is `lavadspx-plugin`. These are plugin filters, not the native NodeLink controls.
+
+```ts
+if (player.node.backend?.supports('lavadspx')) {
+    player.filters
+        .setLavaDSPX('high-pass', { cutoffFrequency: 80 })
+        .setLavaDSPX('normalization', { maxAmplitude: 0.8, adaptive: true });
+    await player.filters.apply();
+}
+```
+
+The keys are `high-pass`, `low-pass`, `echo` (seconds and decay), and `normalization` (peak amplitude and adaptive flag). Omit the value to remove an effect. Zero decay/amplitude is rejected by the typed helper because the inspected upstream implementation disables those effects. Recovery's compatible-only filter projection omits DSPX-shaped settings on unsupported destinations and preserves the desired settings locally. Generic plugin filters remain extensible and are not all guaranteed portable.
+
+## LavaSrc collection and track metadata
+
+```ts
+const result = await manager.search({ query: url });
+const collection = result.getLavaSrcMetadata();
+const trackMetadata = result.tracks[0]?.getLavaSrcMetadata();
+```
+
+The typed views expose album/artist artwork, preview URL and preview flag, collection type, URL, author and total track count. Unknown fields are preserved in raw `playlistPluginInfo` and track `pluginInfo`. A collection's provider-reported total can differ from the number of tracks returned by a limited search. Metadata does not guarantee direct audio playback. See [LavaSrc](https://github.com/topi314/LavaSrc#plugin-info). Runtime configuration and live plugin acceptance remain separate work.
