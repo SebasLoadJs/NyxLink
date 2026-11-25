@@ -113,7 +113,7 @@ export class Filters implements IFilters {
             const filter = typeof value === "string" ? this.parseString(value) : value;
             this.customDefinitions.set(name, structuredClone(filter));
         }
-        this.player.manager.emit("debug", `Moonlink.js > Filters >> Loaded ${this.customDefinitions.size} global custom filters.`);
+        this.player.manager.emit("debug", `NyxLink > Filters >> Loaded ${this.customDefinitions.size} global custom filters.`);
     }
 
     public get available(): string[] {
@@ -136,7 +136,7 @@ export class Filters implements IFilters {
         validate(name, n => typeof n === "string" && n.length > 0, "Filter name must be a non-empty string.");
         const filter = typeof value === "string" ? this.parseString(value) : value;
         this.customDefinitions.set(name, structuredClone(filter));
-        this.player.manager.emit("debug", `Moonlink.js > Filters >> Custom filter "${name}" defined.`);
+        this.player.manager.emit("debug", `NyxLink > Filters >> Custom filter "${name}" defined.`);
         return this;
     }
 
@@ -185,14 +185,14 @@ export class Filters implements IFilters {
         }
         this.activeFilters.add(name);
         this._updateFilters();
-        this.player.manager.emit("debug", `Moonlink.js > Filters >> Filter "${name}" enabled.`);
+        this.player.manager.emit("debug", `NyxLink > Filters >> Filter "${name}" enabled.`);
         return this;
     }
 
     public disable(name: string): this {
         this.activeFilters.delete(name);
         this._updateFilters();
-        this.player.manager.emit("debug", `Moonlink.js > Filters >> Filter "${name}" disabled.`);
+        this.player.manager.emit("debug", `NyxLink > Filters >> Filter "${name}" disabled.`);
         return this;
     }
 
@@ -419,7 +419,7 @@ export class Filters implements IFilters {
         this.spatial = undefined;
         this.pluginFilters = undefined;
         this.activeFilters.clear();
-        this.player.manager.emit("debug", `Moonlink.js > Filters >> All filters cleared.`);
+        this.player.manager.emit("debug", `NyxLink > Filters >> All filters cleared.`);
         this._updateFilters();
         return this;
     }
