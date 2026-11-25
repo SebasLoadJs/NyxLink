@@ -1,3 +1,4 @@
+import { nodeLinkDiscoveryIdentifier, type NodeLinkDiscoveryOptions } from '../backends/NodeLinkSearchContracts';
 import { hasLavaSearchPlugin, lavaSearchParameters, validateLavaSearch, type LavaSearchOptions, type LavaSearchResult } from '../backends/LavaSearchContracts';
 import { observeOperation } from '../observability/OpenTelemetry';
 import { getManagerLogRoute } from '../logging/ManagerLogRoute';
@@ -332,6 +333,22 @@ export class Rest {
                 throw error;
             }
         }
+    }
+
+    /** Native NodeLink discovery. Returned entities are not guaranteed playable. */
+    public async loadNodeLinkSearch(query: string, options: NodeLinkDiscoveryOptions = {}): Promise<IRESTLoadTracks> {
+        const identifier = nodeLinkDiscoveryIdentifier(query, options);
+        const backend = this.node.backend;
+        if (backend?.kind !== 'nodelink') throw new FeatureUnavailableError('nodelink:discovery', backend?.kind ?? 'unknown');
+        const session = this.node.sessionId;
+        const socket = this.node.socket;
+        options.signal?.throwIfAborted();
+        const result = await this.loadTracks(identifier, { timeoutMs: options.timeoutMs ?? 10000, signal: options.signal });
+        options.signal?.throwIfAborted();
+        if (this.node.destroyed || this.node.backend !== backend || this.node.sessionId !== session || this.node.socket !== socket) {
+            throw new Error('NodeLink discovery session changed');
+        }
+        return result;
     }
 
     public async loadTracks(identifier: string, options?: { timeoutMs: number; signal?: AbortSignal }): Promise<IRESTLoadTracks> {
