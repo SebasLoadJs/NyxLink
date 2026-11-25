@@ -281,7 +281,7 @@ export class Node {
 
     this.manager.emit(
       "debug",
-      `Moonlink.js > Node >> New node initialized. Identifier: ${this.identifier} (${this.host}:${this.port}), UUID: ${this.uuid}`
+      `NyxLink > Node >> New node initialized. Identifier: ${this.identifier} (${this.host}:${this.port}), UUID: ${this.uuid}`
     );
   }
 
@@ -475,7 +475,7 @@ export class Node {
     if (this.destroyed) return;
     this.manager.emit(
       "debug",
-      `Moonlink.js > Node -> Attempting connection to ${this.identifier} (${this.host}:${this.port}).`
+      `NyxLink > Node -> Attempting connection to ${this.identifier} (${this.host}:${this.port}).`
     );
 
     const sessionId = await this.loadStoredSessionId();
@@ -484,7 +484,7 @@ export class Node {
     let headers: Record<string, string> = {
       Authorization: this.password,
       "User-Id": this.manager.clientId,
-      "Client-Name": this.manager.options.clientName || "Moonlink.js",
+      "Client-Name": this.manager.options.clientName || "NyxLink",
     };
     
     if (this.manager.options.resume && sessionId) {
@@ -589,7 +589,7 @@ export class Node {
         if (this.state !== NodeState.READY) {
           this.manager.emit(
             "debug",
-            `Moonlink.js > Node >> Resume window expired for ${this.identifier}, waiting for READY before recovery.`
+            `NyxLink > Node >> Resume window expired for ${this.identifier}, waiting for READY before recovery.`
           );
           return;
         }
@@ -630,7 +630,7 @@ export class Node {
       this.resetResumeUpdateState();
       this.manager.emit(
         "debug",
-        `Moonlink.js > Node > Resume enabled for session ${this.sessionId} on ${this.identifier}.`
+        `NyxLink > Node > Resume enabled for session ${this.sessionId} on ${this.identifier}.`
       );
     } catch (error) {
       if (!active()) return;
@@ -642,7 +642,7 @@ export class Node {
       );
       this.manager.emit(
         "debug",
-        `Moonlink.js > Node > Failed to enable resume for ${this.identifier} (attempt ${attempt}/${this.resumeUpdateMaxAttempts}). Retrying in ${Math.round(
+        `NyxLink > Node > Failed to enable resume for ${this.identifier} (attempt ${attempt}/${this.resumeUpdateMaxAttempts}). Retrying in ${Math.round(
           delay / 1000
         )}s. Error: ${error instanceof Error ? error.message : String(error)}`
       );
@@ -670,7 +670,7 @@ export class Node {
     try {
       notify(() => this.manager.emit(
         "debug",
-        `Moonlink.js > Node >> Session not resumed for node ${this.identifier}. Starting disaster recovery (${reason}).`
+        `NyxLink > Node >> Session not resumed for node ${this.identifier}. Starting disaster recovery (${reason}).`
       ));
       const playersOnNode = this.manager.players.filter(player => player.node === this);
       await Promise.all(playersOnNode.map(async player => {
@@ -799,7 +799,7 @@ export class Node {
     notify(() => this.setState(NodeState.DISCONNECTED));
     this.resetResumeUpdateState();
 
-    notify(() => this.manager.emit("debug", `Moonlink.js > Node <- Disconnected from ${this.identifier}. Code: ${code}, Reason: ${reason}.`));
+    notify(() => this.manager.emit("debug", `NyxLink > Node <- Disconnected from ${this.identifier}. Code: ${code}, Reason: ${reason}.`));
     try { closingSocket?.close(); }
     catch (error) {
       notify(() => this.manager.emit("nodeError", this, error instanceof Error ? error : new Error(String(error))));
@@ -858,7 +858,7 @@ export class Node {
     if (this.authenticationFailed) this.reconnectAttempts = this.retryAmount;
     if (this.reconnectAttempts >= this.retryAmount) {
         if (!moved && orphanedPlayers.length > 0) {
-            this.manager.emit("debug", `Moonlink.js > Node >> Node disconnected permanently. Destroying ${orphanedPlayers.length} players.`);
+            this.manager.emit("debug", `NyxLink > Node >> Node disconnected permanently. Destroying ${orphanedPlayers.length} players.`);
             if (!this.manager.options.node?.failover?.preserveOnFailure) {
               for (const player of orphanedPlayers) {
                 try {
@@ -883,7 +883,7 @@ export class Node {
             this.startResumeWindow();
         }
         if (!moved && orphanedPlayers.length > 0) {
-             this.manager.emit("debug", `Moonlink.js > Node >> Node disconnected (Code ${code}). Attempting reconnect. Keeping ${orphanedPlayers.length} players waiting for resume.`);
+             this.manager.emit("debug", `NyxLink > Node >> Node disconnected (Code ${code}). Attempting reconnect. Keeping ${orphanedPlayers.length} players waiting for resume.`);
         }
         this.reconnect();
     }
@@ -927,7 +927,7 @@ export class Node {
     if (!player && payload.guildId) {
       this.manager.emit(
         "debug",
-        `Moonlink.js > Node >> Payload for non-existent player. GuildId: ${payload.guildId}, OP: ${payload.op}.`
+        `NyxLink > Node >> Payload for non-existent player. GuildId: ${payload.guildId}, OP: ${payload.op}.`
       );
       return;
     }
@@ -978,7 +978,7 @@ export class Node {
             } else {
               this.manager.emit(
                 "debug",
-                `Moonlink.js > Node >> Resume window active for ${this.identifier}; delaying recovery.`
+                `NyxLink > Node >> Resume window active for ${this.identifier}; delaying recovery.`
               );
             }
           }
@@ -1001,7 +1001,7 @@ export class Node {
           };
           this.manager.emit(
             "debug",
-            `Moonlink.js > Node <- Node ${
+            `NyxLink > Node <- Node ${
               this.identifier
             } STATS updated. Stats: ${stringifyWithReplacer(this.stats)}.`
           );
@@ -1047,7 +1047,7 @@ export class Node {
           player.updateActivity();
         }
 
-        let logMessage = `Moonlink.js > Node#handleMessage >> Player ${
+        let logMessage = `NyxLink > Node#handleMessage >> Player ${
           player.guildId
         } state updated. CurrentState: ${stringifyWithReplacer(
           currentState
@@ -1122,11 +1122,11 @@ export class Node {
         }
         this.manager.emit(
           "debug",
-          `Moonlink.js > Node <- Player ${
+          `NyxLink > Node <- Player ${
             player.guildId
           } received event. Type: ${
             payload.type
-          }, Payload: ${stringifyWithReplacer(payload)}.`
+          }.`
         );
         this.handleEvent(player, payload as LavalinkEventPayload);
         loggedByCase = true;
@@ -1135,7 +1135,7 @@ export class Node {
         if (!loggedByCase) {
           this.manager.emit(
             "debug",
-            `Moonlink.js > Node <- Received unhandled payload from ${this.identifier}. OP: ${payload.op}, Data: ${stringifyWithReplacer(payload)}.`
+            `NyxLink > Node <- Received unhandled payload from ${this.identifier}. OP: ${payload.op}.`
           );
         }
         loggedByCase = true;
@@ -1272,7 +1272,7 @@ export class Node {
       player.updateData('current', TrackCodec.serialize(player.current));
     }
     const trackTitle = trackData?.info?.title ?? player.current?.title ?? "Unknown";
-    this.manager.emit("debug", `Moonlink.js > Node#handleTrackStart >> Track started for player ${player.guildId}: "${trackTitle}". Track: ${stringifyWithReplacer(trackData ?? payload.track)}.`);
+    this.manager.emit("debug", `NyxLink > Node#handleTrackStart >> Track started for player ${player.guildId}: "${trackTitle}".`);
     
     player.playing = true;
     const restoring = attempts.isRestoring();
@@ -1286,17 +1286,17 @@ export class Node {
     
     const reconnectAttempts = player.get("reconnectAttempts");
     if (reconnectAttempts && reconnectAttempts > 0) {
-        this.manager.emit("debug", `Moonlink.js > Node#handleTrackStart >> Player ${player.guildId} successfully recovered after ${reconnectAttempts} reconnect attempts.`);
+        this.manager.emit("debug", `NyxLink > Node#handleTrackStart >> Player ${player.guildId} successfully recovered after ${reconnectAttempts} reconnect attempts.`);
         player.set("reconnectAttempts", 0);
     }
 
-    this.manager.emit("debug", `Moonlink.js > Node#handleTrackStart >> Resetting player state (stuckCount, exceptionCount, isResuming) for player ${player.guildId}.`);
+    this.manager.emit("debug", `NyxLink > Node#handleTrackStart >> Resetting player state (stuckCount, exceptionCount, isResuming) for player ${player.guildId}.`);
     player.set("stuckCount", 0);
     player.set("exceptionCount", 0);
     player.isResuming = false;
     
     if (!trackData) {
-        this.manager.emit("debug", `Moonlink.js > Node#handleTrackStart >> Missing track data for player ${player.guildId}. Payload: ${stringifyWithReplacer(payload)}.`);
+        this.manager.emit("debug", `NyxLink > Node#handleTrackStart >> Missing track data for player ${player.guildId}.`);
         return;
     }
 
@@ -1342,18 +1342,18 @@ export class Node {
     if (trackForEvent) {
         this.manager.emit("trackEnd", player, trackForEvent, reason, payload);
     } else {
-        this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> Missing track data for player ${player.guildId}. Payload: ${stringifyWithReplacer(payload)}.`);
+        this.manager.emit("debug", `NyxLink > Node#handleTrackEnd >> Missing track data for player ${player.guildId}.`);
     }
 
     if (player.destroyed) {
-      this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> Player ${player.guildId} is destroyed, skipping end handling.`);
+      this.manager.emit("debug", `NyxLink > Node#handleTrackEnd >> Player ${player.guildId} is destroyed, skipping end handling.`);
       return;
     }
 
     if (!playbackGuard(player).isCurrent(intent)) return;
 
     if (isCrossfadeTransition || isGaplessTransition) {
-      this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> Track ended due to ${reason} for player ${player.guildId}. Skipping queue/autoplay logic.`);
+      this.manager.emit("debug", `NyxLink > Node#handleTrackEnd >> Track ended due to ${reason} for player ${player.guildId}. Skipping queue/autoplay logic.`);
       return;
     }
 
@@ -1365,18 +1365,18 @@ export class Node {
             const maxRetries = trackHandling.maxRetryAttempts ?? 3;
             if (trackToRetry.retries < maxRetries) {
                 trackToRetry.retries++;
-                this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> Track failed to load. Retrying... (Attempt ${trackToRetry.retries}/${maxRetries}) for player ${player.guildId}.`);
+                this.manager.emit("debug", `NyxLink > Node#handleTrackEnd >> Track failed to load. Retrying... (Attempt ${trackToRetry.retries}/${maxRetries}) for player ${player.guildId}.`);
                 player.queue.unshift(trackToRetry);
                 await player.play();
                 return;
             }
-             this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> Track failed to load after ${maxRetries} attempts for player ${player.guildId}.`);
+             this.manager.emit("debug", `NyxLink > Node#handleTrackEnd >> Track failed to load after ${maxRetries} attempts for player ${player.guildId}.`);
         }
     }
 
     // Lavalink marks both reasons as terminal: neither may start the next track.
     if (reason === "stopped" || reason === "cleanup") {
-      this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> Track was ${reason}, skipping queue logic for player ${player.guildId}.`);
+      this.manager.emit("debug", `NyxLink > Node#handleTrackEnd >> Track was ${reason}, skipping queue logic for player ${player.guildId}.`);
       return;
     }
 
@@ -1396,25 +1396,25 @@ export class Node {
     }
 
     if (reason === "finished" && player.loop === "queue" && player.current) {
-      this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> Player ${player.guildId} is in queue loop mode. Adding current track to the end of the queue: ${player.current.title}.`);
+      this.manager.emit("debug", `NyxLink > Node#handleTrackEnd >> Player ${player.guildId} is in queue loop mode. Adding current track to the end of the queue: ${player.current.title}.`);
       // A completed song in queue-loop needs a new playback entry. The
       // original Track may also enter history; sharing the same instance
       // would allow later seeks and retries to mutate that history entry.
       const loopTrack = player.current.clone();
       loopTrack.position = 0;
       player.queue.add(loopTrack);
-      this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd << Queue size is now ${player.queue.size}.`);
+      this.manager.emit("debug", `NyxLink > Node#handleTrackEnd << Queue size is now ${player.queue.size}.`);
     }
     
     if (player.queue.size > 0) {
-      this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd -> Playing next track from queue for player ${player.guildId} (${player.queue.size} tracks remaining).`);
+      this.manager.emit("debug", `NyxLink > Node#handleTrackEnd -> Playing next track from queue for player ${player.guildId} (${player.queue.size} tracks remaining).`);
       await player.play();
       return;
     }
 
-    this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> Queue is empty for player ${player.guildId}. Proceeding to autoplay check.`);
+    this.manager.emit("debug", `NyxLink > Node#handleTrackEnd >> Queue is empty for player ${player.guildId}. Proceeding to autoplay check.`);
     if (player.autoPlay && trackForEvent) {
-        this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd -> Attempting autoPlay for player ${player.guildId}. Previous track: ${trackForEvent.title}.`);
+        this.manager.emit("debug", `NyxLink > Node#handleTrackEnd -> Attempting autoPlay for player ${player.guildId}. Previous track: ${trackForEvent.title}.`);
         const autoplay = this.handleAutoPlay(player, trackForEvent);
         const ticket = playbackGuard(player).ticket;
         const automaticTicket = playbackGuard(player).automaticTicket;
@@ -1424,13 +1424,13 @@ export class Node {
         if (!autoplayed && player.playing && player.current?.encoded !== trackForEvent?.encoded) return;
         
         if (autoplayed) {
-            this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd << AutoPlay was successful for player ${player.guildId}.`);
+            this.manager.emit("debug", `NyxLink > Node#handleTrackEnd << AutoPlay was successful for player ${player.guildId}.`);
             return;
         }
         
-        this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> AutoPlay failed for player ${player.guildId}.`);
+        this.manager.emit("debug", `NyxLink > Node#handleTrackEnd >> AutoPlay failed for player ${player.guildId}.`);
     } else if (player.autoPlay) {
-        this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> AutoPlay skipped for player ${player.guildId} due to missing previous track data.`);
+        this.manager.emit("debug", `NyxLink > Node#handleTrackEnd >> AutoPlay skipped for player ${player.guildId} due to missing previous track data.`);
     }
 
     // A user may have queued a track while the recommendation lookup was pending.
@@ -1450,7 +1450,7 @@ export class Node {
       player.current === track && playbackGuard(player).isCurrent(ticket);
     const thresholdMs = payload.thresholdMs;
     
-    this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck >> Track stuck for player ${player.guildId}: "${track?.title}". Threshold: ${thresholdMs}ms. Payload: ${stringifyWithReplacer(payload)}.`);
+    this.manager.emit("debug", `NyxLink > Node#handleTrackStuck >> Track stuck for player ${player.guildId}: "${track?.title}". Threshold: ${thresholdMs}ms.`);
 
     this.manager.emit("trackStuck", player, track, thresholdMs, payload);
     // There is nothing to recover without an active track. Event listeners may
@@ -1458,12 +1458,12 @@ export class Node {
     if (!track || !unchanged()) return;
 
     if (track && track.duration === -1) {
-        this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck >> Track has -1 duration (stream?), skipping auto-recovery to prevent loops for player ${player.guildId}.`);
+        this.manager.emit("debug", `NyxLink > Node#handleTrackStuck >> Track has -1 duration (stream?), skipping auto-recovery to prevent loops for player ${player.guildId}.`);
         return;
     }
 
     if (this.manager.options.trackHandling?.skipStuckTracks) {
-        this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck >> 'skipStuckTracks' is true, skipping track for player ${player.guildId}.`);
+        this.manager.emit("debug", `NyxLink > Node#handleTrackStuck >> 'skipStuckTracks' is true, skipping track for player ${player.guildId}.`);
         await player.skip();
         return;
     }
@@ -1472,25 +1472,25 @@ export class Node {
     player.set("stuckCount", stuckCount);
 
     if (stuckCount >= 3) {
-        this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck >> Track stuck ${stuckCount} times for player ${player.guildId}, skipping track.`);
+        this.manager.emit("debug", `NyxLink > Node#handleTrackStuck >> Track stuck ${stuckCount} times for player ${player.guildId}, skipping track.`);
         player.set("stuckCount", 0);
         
         if (player.queue.size > 0) {
-            this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck -> Skipping to next track for player ${player.guildId}.`);
+            this.manager.emit("debug", `NyxLink > Node#handleTrackStuck -> Skipping to next track for player ${player.guildId}.`);
             await player.skip();
         } else {
-            this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck -> No tracks in queue, stopping player ${player.guildId}.`);
+            this.manager.emit("debug", `NyxLink > Node#handleTrackStuck -> No tracks in queue, stopping player ${player.guildId}.`);
             await player.stop();
             this.manager.emit("queueEnd", player, track);
         }
     } else {
-        this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck -> Attempting to restart playback for player ${player.guildId} (attempt ${stuckCount}/3).`);
+        this.manager.emit("debug", `NyxLink > Node#handleTrackStuck -> Attempting to restart playback for player ${player.guildId} (attempt ${stuckCount}/3).`);
         
         try {
             const currentPosition = player.current?.position || 0;
-            this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck -> Seeking player ${player.guildId} to position ${currentPosition + 1000}ms.`);
+            this.manager.emit("debug", `NyxLink > Node#handleTrackStuck -> Seeking player ${player.guildId} to position ${currentPosition + 1000}ms.`);
             await player.seek(currentPosition + 1000);
-            this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck >> Seeked forward 1s for player ${player.guildId}.`);
+            this.manager.emit("debug", `NyxLink > Node#handleTrackStuck >> Seeked forward 1s for player ${player.guildId}.`);
         } catch (error) {
             // The failing seek may have been superseded by a user play/stop.
             if (!unchanged()) return;
@@ -1508,14 +1508,14 @@ export class Node {
       player.current === track && playbackGuard(player).isCurrent(ticket);
     const exception = payload.exception;
     
-    this.manager.emit("debug", `Moonlink.js > Node#handleTrackException >> Track exception for player ${player.guildId}: "${track?.title}". Severity: ${exception.severity}. Message: ${exception.message}. Payload: ${stringifyWithReplacer(payload)}.`);
+    this.manager.emit("debug", `NyxLink > Node#handleTrackException >> Track exception for player ${player.guildId}: "${track?.title}". Severity: ${exception.severity}.`);
     this.manager.emit("trackException", player, track, exception, payload);
     // An error from an idle player, or a replaced playback intent, must not
     // consume queued tracks or stop a newer playback session.
     if (!track || !unchanged()) return;
 
     if (this.manager.options.trackHandling?.autoSkipOnError) {
-        this.manager.emit("debug", `Moonlink.js > Node#handleTrackException >> 'autoSkipOnError' is true, skipping track for player ${player.guildId}.`);
+        this.manager.emit("debug", `NyxLink > Node#handleTrackException >> 'autoSkipOnError' is true, skipping track for player ${player.guildId}.`);
         await player.skip();
         return;
     }
@@ -1524,7 +1524,7 @@ export class Node {
     player.set("exceptionCount", exceptionCount);
 
     if (exception.severity === "fault") {
-        this.manager.emit("debug", `Moonlink.js > Node#handleTrackException >> Fatal exception detected for player ${player.guildId}, skipping track.`);
+        this.manager.emit("debug", `NyxLink > Node#handleTrackException >> Fatal exception detected for player ${player.guildId}, skipping track.`);
         
         if (player.queue.size > 0) {
             await player.skip();
@@ -1534,7 +1534,7 @@ export class Node {
         }
         player.set("exceptionCount", 0);
     } else if (exception.severity === "suspicious" && exceptionCount >= 2) {
-        this.manager.emit("debug", `Moonlink.js > Node#handleTrackException >> Suspicious exception repeated ${exceptionCount} times for player ${player.guildId}, skipping track.`);
+        this.manager.emit("debug", `NyxLink > Node#handleTrackException >> Suspicious exception repeated ${exceptionCount} times for player ${player.guildId}, skipping track.`);
         player.set("exceptionCount", 0);
         
         if (player.queue.size > 0) {
@@ -1544,7 +1544,7 @@ export class Node {
             this.manager.emit("queueEnd", player, track);
         }
     } else if (exceptionCount >= 3) {
-        this.manager.emit("debug", `Moonlink.js > Node#handleTrackException >> Track threw ${exceptionCount} exceptions for player ${player.guildId}, skipping track.`);
+        this.manager.emit("debug", `NyxLink > Node#handleTrackException >> Track threw ${exceptionCount} exceptions for player ${player.guildId}, skipping track.`);
         player.set("exceptionCount", 0);
         
         if (player.queue.size > 0) {
@@ -1554,7 +1554,7 @@ export class Node {
             this.manager.emit("queueEnd", player, track);
         }
     } else {
-        this.manager.emit("debug", `Moonlink.js > Node#handleTrackException -> Exception count: ${exceptionCount}/3 for player ${player.guildId}, continuing playback.`);
+        this.manager.emit("debug", `NyxLink > Node#handleTrackException -> Exception count: ${exceptionCount}/3 for player ${player.guildId}, continuing playback.`);
     }
   }
 
@@ -1711,15 +1711,15 @@ export class Node {
 
     if (this.destroyed || player.destroyed || player.node !== this) return;
     if (player.get("voiceCloseRecoveryInProgress")) {
-        this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Voice-close recovery already in progress for player ${player.guildId}, skipping event.`);
+        this.manager.emit("debug", `NyxLink > Node#handleWebSocketClosed >> Voice-close recovery already in progress for player ${player.guildId}, skipping event.`);
         return;
     }
 
-    this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> WebSocket closed for player ${player.guildId}. Code: ${code}, Reason: "${reason}", By Remote: ${byRemote}. Payload: ${stringifyWithReplacer(payload)}.`);
+    this.manager.emit("debug", `NyxLink > Node#handleWebSocketClosed >> WebSocket closed for player ${player.guildId}. Code: ${code}, By Remote: ${byRemote}.`);
 
     const isMoveCloseCode = code === 4014 || code === 4022;
     if (isMoveCloseCode && (player.voice.isMoving || player.voice.wasRecentlyMoved())) {
-        this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Ignoring WebSocket close (${code}) for player ${player.guildId} due to channel move.`);
+        this.manager.emit("debug", `NyxLink > Node#handleWebSocketClosed >> Ignoring WebSocket close (${code}) for player ${player.guildId} due to channel move.`);
         return;
     }
 
@@ -1729,13 +1729,13 @@ export class Node {
     }
 
     if (player.isResuming) {
-        this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Player ${player.guildId} is resuming, ignoring WebSocket close event.`);
+        this.manager.emit("debug", `NyxLink > Node#handleWebSocketClosed >> Player ${player.guildId} is resuming, ignoring WebSocket close event.`);
         return;
     }
 
     const fatalCodes = [4004, 4015];
     if (fatalCodes.includes(code)) {
-        this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Fatal close code ${code} for player ${player.guildId}, destroying player.`);
+        this.manager.emit("debug", `NyxLink > Node#handleWebSocketClosed >> Fatal close code ${code} for player ${player.guildId}, destroying player.`);
         this.manager.emit("socketClosed", player, code, reason, byRemote, payload);
         await player.destroy(`WebSocket closed with fatal code: ${code}`);
         return;
@@ -1743,7 +1743,7 @@ export class Node {
 
     const voiceOptions = this.manager.options.voiceConnection;
     if (!voiceOptions?.autoReconnect || !player.get("userInitiatedConnect")) {
-        this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Auto-reconnect skipped for player ${player.guildId}. (Enabled: ${voiceOptions?.autoReconnect}, UserInitiated: ${player.get("userInitiatedConnect")})`);
+        this.manager.emit("debug", `NyxLink > Node#handleWebSocketClosed >> Auto-reconnect skipped for player ${player.guildId}. (Enabled: ${voiceOptions?.autoReconnect}, UserInitiated: ${player.get("userInitiatedConnect")})`);
         if (!player.get("userInitiatedConnect")) await player.destroy("Disconnected by user/kick");
         return;
     }
@@ -1753,17 +1753,17 @@ export class Node {
     const maxReconnectAttempts = voiceOptions.maxReconnectAttempts ?? 5;
 
     if (reconnectAttempts > maxReconnectAttempts) {
-        this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Max reconnect attempts reached (${maxReconnectAttempts}) for player ${player.guildId}.`);
+        this.manager.emit("debug", `NyxLink > Node#handleWebSocketClosed >> Max reconnect attempts reached (${maxReconnectAttempts}) for player ${player.guildId}.`);
         this.manager.emit("socketClosed", player, code, reason, byRemote, payload);
         await player.destroy("Max reconnect attempts reached");
         return;
     }
 
     player.set("wsReconnectAttempts", reconnectAttempts);
-    this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed -> Attempting reconnect ${reconnectAttempts}/${maxReconnectAttempts} for player ${player.guildId}.`);
+    this.manager.emit("debug", `NyxLink > Node#handleWebSocketClosed -> Attempting reconnect ${reconnectAttempts}/${maxReconnectAttempts} for player ${player.guildId}.`);
 
     const reconnectDelay = voiceOptions.reconnectDelay ?? 5000;
-    this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed -> Reconnect scheduled in ${reconnectDelay}ms for player ${player.guildId}.`);
+    this.manager.emit("debug", `NyxLink > Node#handleWebSocketClosed -> Reconnect scheduled in ${reconnectDelay}ms for player ${player.guildId}.`);
 
     const guard = playbackGuard(player);
     const ticket = guard.ticket;
