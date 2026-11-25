@@ -22,11 +22,13 @@ export interface MigrationStageObservation {
 
 /** Internal restart path: the caller already owns the player's command queue. */
 export const migrationRestart: unique symbol = Symbol('migrationRestart');
-export type RestartOptions = { destroyOnFailure?: boolean; startQueued?: boolean; [migrationRestart]?: boolean };
+export type RestartOptions = { destroyOnFailure?: boolean; startQueued?: boolean; /** @internal */ suspendedFeatures?: string[]; [migrationRestart]?: boolean };
 
 /** Runs entirely within one player command, including rollback and cleanup. */
 export async function migratePlayer(player: Player, target: Node, ticket: number): Promise<boolean> {
     const source = player.node;
+    const suspendedFeatures: string[] = [];
+    let manualPreloadDiscarded = false;
     let currentStage: MigrationStage = 'select-target';
     const observe = (stage: MigrationStage, status: MigrationStageObservation['status']) => {
         currentStage = stage;
@@ -46,6 +48,8 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
     const report = (status: 'in-progress' | 'recovered' | 'failed' | 'cancelled', reason?: string, reasonCode?: FailoverReasonCode) => {
         player.manager.emit('playerNodeFailover', player, {
             source: source.identifier, target: target.identifier, status, positionMs: player.current?.position, reason, ...(reasonCode ? { reasonCode } : {}),
+            ...(status === 'recovered' && suspendedFeatures.length ? { suspendedFeatures: [...new Set(suspendedFeatures)] } : {}),
+            ...(status === 'recovered' && manualPreloadDiscarded ? { manualPreloadDiscarded: true } : {}),
         });
     };
     const cleanup = async (node: Node): Promise<string | undefined> => {
@@ -127,7 +131,7 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
         // Source acknowledgements cannot prove that the destination is synchronized.
         player.set('lastState', undefined);
         observe('restore-player', 'started');
-        if (!await player.restart({ destroyOnFailure: false, startQueued: false, [migrationRestart]: true }) || !active()) {
+        if (!await player.restart({ destroyOnFailure: false, startQueued: false, suspendedFeatures, [migrationRestart]: true }) || !active()) {
             observe('restore-player', active() ? 'failed' : 'cancelled');
             await runRollback();
             report(guard.isCurrent(ticket) ? 'failed' : 'cancelled', undefined, guard.isCurrent(ticket) ? 'restart-rejected' : 'intent-cancelled');
@@ -150,6 +154,9 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
         observe('persist-snapshot', 'acknowledged');
         committed = true;
         rollback = undefined;
+        // Never replay a source-node reservation. Queue-backed preparation is
+        // recalculated on the new node; a manual reservation must be requested again.
+        try { manualPreloadDiscarded = player.completeAudioMigration?.() ?? false; } catch { /* optional preparation cannot roll back committed ownership */ }
         observe('cleanup-source', 'started');
         const reason = await cleanup(source);
         observe('cleanup-source', reason ? 'failed' : 'acknowledged');
