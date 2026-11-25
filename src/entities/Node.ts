@@ -1,3 +1,4 @@
+import type { LavaSearchOptions, LavaSearchResult } from '../backends/LavaSearchContracts';
 import { observeOperation } from '../observability/OpenTelemetry';
 import type { LyricsRequestOptions, SourceHealthResponse, NodeLinkStreamFormats } from '../backends/NodeLinkContracts';
 import type { LavaLyricsData, LavaLyricsOptions } from '../backends/LavaLyricsContracts';
@@ -331,6 +332,11 @@ export class Node {
   }
   public clearLavalinkSponsorBlockCategories(guildId: string): Promise<void> {
     return this.rest.clearLavalinkSponsorBlockCategories(guildId);
+  }
+
+  /** Lavalink LavaSearch plugin; use a provider-supported query prefix. */
+  public loadSearch(query: string, options?: LavaSearchOptions): Promise<LavaSearchResult | null> {
+    return this.rest.loadSearch(query, options);
   }
 
   /** Lavalink LavaLyrics plugin only; NodeLink has a different lyrics contract. */
