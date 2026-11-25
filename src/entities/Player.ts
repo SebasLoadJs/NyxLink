@@ -1,3 +1,4 @@
+import { canSendNativeAudio, projectAdvancedAudio } from '../players/AdvancedAudioRecovery';
 import { observeOperation } from '../observability/OpenTelemetry';
 import { normalizeCrossfade, type CrossfadeOptions, type QueuePreloadOptions } from '../backends/NodeLinkContracts';
 import { preparePlayerUpdate, type PlayerUpdatePayload, type PlayerVoiceUpdate } from '../backends/ProtocolContracts';
@@ -462,6 +463,8 @@ export class Player {
             finalOptions = options;
         }
 
+        if (finalOptions.audioTrackId !== undefined && !canSendNativeAudio(this.node, 'audioTrackId')) return false;
+
         this.manager.emit("debug", `NyxLink > Player#play -> Playback requested for guild ${this.guildId}. Explicit track: ${Boolean(finalOptions.track || finalOptions.encoded)}`);
 
         if (!this.voice.sessionId || !this.voice.endpoint) {
@@ -556,18 +559,11 @@ export class Player {
             volume: this.volume
         };
 
-        if (audioTrackId) {
-            payload.track.audioTrackId = audioTrackId;
-        }
-
-        if (this.fading) payload.fading = this.fading;
-        if (this.crossfade && this.node.isNodeLink) payload.crossfade = this.crossfade;
-        if (this.queuePreload) {
-            if (this.node.isNodeLink) payload.nextTrack = null;
-        } else if (this.nextTrack) payload.nextTrack = this.nextTrack;
-        if (this.loudnessNormalizer !== undefined) {
-            payload.loudnessNormalizer = this.loudnessNormalizer;
-        }
+        projectAdvancedAudio(payload, this.node, {
+            audioTrackId, fading: this.fading, crossfade: this.crossfade,
+            loudnessNormalizer: this.loudnessNormalizer,
+            nextTrack: this.queuePreload ? null : this.nextTrack
+        });
 
         this.manager.emit("playerTriggeredPlay", this, this.current);
         this.manager.emit("debug", `NyxLink > Player#play -> Sending play request to node ${this.node.identifier} for guild ${this.guildId}.`);
@@ -830,6 +826,16 @@ export class Player {
     }
 
     /** @internal Called only after PlaybackAttempt accepts a preloaded TrackStart. */
+    /** @internal Called only after destination ownership and storage are committed. */
+    public completeAudioMigration(): boolean {
+        const manualPreloadDiscarded = !!this.nextTrack && !this.queuePreload;
+        this.nextTrack = undefined;
+        this.queuePreload = undefined;
+        playbackAttempt(this).preload(this.node, null);
+        this.requestQueuePreload();
+        return manualPreloadDiscarded;
+    }
+
     public consumePreloadedTrack(): void {
         const reservation = this.queuePreload;
         this.queuePreload = undefined;
@@ -1359,25 +1365,19 @@ export class Player {
                 volume: this.volume,
                 playing: this.playing,
                 paused: this.paused,
-                filters: this.filters.toPayload()
+                filters: this.filters.toPayload({ compatibleOnly: true, suspended: options.suspendedFeatures })
             };
 
             if (resumePosition > 0 && this.current.getInfo().isSeekable && !isAlreadySync) {
                 payload.position = resumePosition;
             }
 
-            if (this.audioTrackId) {
-                payload.track.audioTrackId = this.audioTrackId;
-            }
-
-            if (this.fading) payload.fading = this.fading;
-            if (this.crossfade && this.node.isNodeLink) payload.crossfade = this.crossfade;
-            if (this.queuePreload) {
-                if (this.node.isNodeLink) payload.nextTrack = null;
-            } else if (this.nextTrack) payload.nextTrack = this.nextTrack;
-            if (this.loudnessNormalizer !== undefined) {
-                payload.loudnessNormalizer = this.loudnessNormalizer;
-            }
+            projectAdvancedAudio(payload, this.node, {
+                audioTrackId: this.audioTrackId, fading: this.fading, crossfade: this.crossfade,
+                loudnessNormalizer: this.loudnessNormalizer,
+                // A source-node preload is not a valid reservation on the destination.
+                nextTrack: options[migrationRestart] ? undefined : this.queuePreload ? null : this.nextTrack
+            }, options.suspendedFeatures);
 
             const restored = await run(async () => {
                 if (this.destroyed || !guard.isCurrent(ticket)) return false;
@@ -1396,7 +1396,11 @@ export class Player {
         } else {
             if (options[migrationRestart]) {
                 if (!await this.restoreVoiceForRestart(ticket)) return false;
-                await this.sendPlayerUpdate({ filters: this.filters.toPayload(), volume: this.volume, paused: this.paused });
+                const payload: PlayerUpdatePayload = { filters: this.filters.toPayload({ compatibleOnly: true, suspended: options.suspendedFeatures }), volume: this.volume, paused: this.paused };
+                projectAdvancedAudio(payload, this.node, {
+                    fading: this.fading, crossfade: this.crossfade, loudnessNormalizer: this.loudnessNormalizer
+                }, options.suspendedFeatures);
+                await this.sendPlayerUpdate(payload);
                 if (this.destroyed || !guard.isCurrent(ticket)) return false;
             }
             this.manager.emit("debug", `Moonlink.js > Player#restart >> No track to restore and queue is empty for guild ${this.guildId}`);
