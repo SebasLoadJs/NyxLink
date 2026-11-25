@@ -1,3 +1,4 @@
+import { canSendNativeAudio, suspendNativeFilters } from '../players/AdvancedAudioRecovery';
 import { Player } from "./Player";
 import { IFilters, IEqualizerBand, IKaraoke, ITimescale, ITremolo, IVibrato, IRotation, IDistortion, IChannelMix, ILowPass, IEcho, IChorus, ICompressor, IHighPass, IPhaser, ISpatial } from "../typings/Interfaces";
 import { nodeLinkOnlyError, validate } from "../Util";
@@ -26,7 +27,7 @@ export class Filters implements IFilters {
     private readonly player: Player;
 
     private assertNodeLinkFeature(feature: string): void {
-        if (!this.player.node.isNodeLink) {
+        if (!canSendNativeAudio(this.player.node, `filter:${feature}`)) {
             throw nodeLinkOnlyError(`filter:${feature}`);
         }
     }
@@ -411,7 +412,7 @@ export class Filters implements IFilters {
         return this.clear();
     }
 
-    public toPayload(): IFilters {
+    public toPayload(options: { compatibleOnly?: boolean; suspended?: string[] } = {}): IFilters {
         let payload: IFilters = {};
 
         for (const name of this.activeFilters) {
@@ -448,9 +449,9 @@ export class Filters implements IFilters {
         for (const key of Object.keys(directFilters) as (keyof IFilters)[]) assign(key);
 
         // Validate the effective payload, including fields originating from presets.
-        if (!this.player.node.isNodeLink && (payload.echo || payload.chorus || payload.compressor || payload.highpass || payload.phaser || payload.spatial)) {
-            throw nodeLinkOnlyError("filters");
-        }
+        const suspended = suspendNativeFilters(payload, this.player.node);
+        if (suspended.length && !options.compatibleOnly) throw nodeLinkOnlyError("filters");
+        options.suspended?.push(...suspended);
         if (payload.equalizer !== undefined) payload.equalizer = this.normalizeBands(payload.equalizer);
         if (payload.volume !== undefined && (!Number.isFinite(payload.volume) || payload.volume < 0 || payload.volume > 5)) {
             throw new RangeError("Filter volume must be between 0 and 5");
@@ -474,8 +475,8 @@ export class Filters implements IFilters {
         return [...unique.values()].sort((a, b) => a.band - b.band);
     }
 
-    public async apply(): Promise<Player> {
-        const payload = this.toPayload();
+    public async apply(options: { compatibleOnly?: boolean } = {}): Promise<Player> {
+        const payload = this.toPayload(options);
 
         this.player.manager.emit("debug", "NyxLink > Filters > Applying filters");
         const updatedPlayer = await this.player.updatePlayer({ filters: payload });
