@@ -8,17 +8,17 @@ class SearchResult {
     tracks;
     playlistInfo;
     exception;
-    constructor(response, requester, playlistLoadLimit, partialTrackOptions) {
+    constructor(response, requester, playlistLoadLimit) {
         switch (response.loadType) {
             case "track":
                 this.loadType = types_1.LoadType.TRACK;
-                this.tracks = [new Track_1.Track(response.data, requester, undefined, partialTrackOptions)];
+                this.tracks = [new Track_1.Track(response.data, requester)];
                 break;
             case "playlist":
                 this.loadType = types_1.LoadType.PLAYLIST;
                 this.tracks = response.data.tracks
                     .slice(0, playlistLoadLimit)
-                    .map((track) => new Track_1.Track(track, requester, undefined, partialTrackOptions));
+                    .map(track => new Track_1.Track(track, requester));
                 this.playlistInfo = {
                     duration: response.data.tracks.reduce((acc, cur) => acc + (cur.info.length || 0), 0),
                     name: response.data.info.name,
@@ -27,7 +27,7 @@ class SearchResult {
                 break;
             case "search":
                 this.loadType = types_1.LoadType.SEARCH;
-                this.tracks = response.data.map((track) => new Track_1.Track(track, requester, undefined, partialTrackOptions));
+                this.tracks = response.data.map(track => new Track_1.Track(track, requester));
                 break;
             case "empty":
                 this.loadType = types_1.LoadType.EMPTY;

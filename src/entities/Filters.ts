@@ -1,3 +1,6 @@
+import { normalizeLavaDSPX, supportsLavaDSPX, suspendLavaDSPX, type LavaDSPXKey, type LavaDSPXFilters } from '../backends/LavaDSPXContracts';
+import { FeatureUnavailableError } from '../errors/FeatureUnavailableError';
+import { canSendNativeAudio, suspendNativeFilters } from '../players/AdvancedAudioRecovery';
 import { Player } from "./Player";
 import { IFilters, IEqualizerBand, IKaraoke, ITimescale, ITremolo, IVibrato, IRotation, IDistortion, IChannelMix, ILowPass, IEcho, IChorus, ICompressor, IHighPass, IPhaser, ISpatial } from "../typings/Interfaces";
 import { nodeLinkOnlyError, validate } from "../Util";
@@ -26,7 +29,7 @@ export class Filters implements IFilters {
     private readonly player: Player;
 
     private assertNodeLinkFeature(feature: string): void {
-        if (!this.player.node.isNodeLink) {
+        if (!canSendNativeAudio(this.player.node, `filter:${feature}`)) {
             throw nodeLinkOnlyError(`filter:${feature}`);
         }
     }
@@ -110,7 +113,7 @@ export class Filters implements IFilters {
             const filter = typeof value === "string" ? this.parseString(value) : value;
             this.customDefinitions.set(name, structuredClone(filter));
         }
-        this.player.manager.emit("debug", `Moonlink.js > Filters >> Loaded ${this.customDefinitions.size} global custom filters.`);
+        this.player.manager.emit("debug", `NyxLink > Filters >> Loaded ${this.customDefinitions.size} global custom filters.`);
     }
 
     public get available(): string[] {
@@ -133,7 +136,7 @@ export class Filters implements IFilters {
         validate(name, n => typeof n === "string" && n.length > 0, "Filter name must be a non-empty string.");
         const filter = typeof value === "string" ? this.parseString(value) : value;
         this.customDefinitions.set(name, structuredClone(filter));
-        this.player.manager.emit("debug", `Moonlink.js > Filters >> Custom filter "${name}" defined.`);
+        this.player.manager.emit("debug", `NyxLink > Filters >> Custom filter "${name}" defined.`);
         return this;
     }
 
@@ -182,14 +185,14 @@ export class Filters implements IFilters {
         }
         this.activeFilters.add(name);
         this._updateFilters();
-        this.player.manager.emit("debug", `Moonlink.js > Filters >> Filter "${name}" enabled.`);
+        this.player.manager.emit("debug", `NyxLink > Filters >> Filter "${name}" enabled.`);
         return this;
     }
 
     public disable(name: string): this {
         this.activeFilters.delete(name);
         this._updateFilters();
-        this.player.manager.emit("debug", `Moonlink.js > Filters >> Filter "${name}" disabled.`);
+        this.player.manager.emit("debug", `NyxLink > Filters >> Filter "${name}" disabled.`);
         return this;
     }
 
@@ -377,6 +380,20 @@ export class Filters implements IFilters {
         return this;
     }
 
+    /** Set or remove a typed Lavalink LavaDSPX effect without overwriting other plugin filters. */
+    public setLavaDSPX<K extends LavaDSPXKey>(key: K, value?: NonNullable<LavaDSPXFilters[K]>): this {
+        if (!['high-pass', 'low-pass', 'echo', 'normalization'].includes(key)) throw new TypeError('Unknown LavaDSPX filter');
+        if (value !== undefined && !supportsLavaDSPX(this.player.node.backend)) {
+            throw new FeatureUnavailableError('lavadspx', this.player.node.backend?.kind ?? 'unknown');
+        }
+        const filters = { ...this.pluginFilters };
+        if (value === undefined) delete filters[key];
+        else filters[key] = normalizeLavaDSPX(key, value);
+        this.pluginFilters = filters;
+        this._updateFilters();
+        return this;
+    }
+
     public setPluginFilters(filters: Record<string, any>): this {
         this.pluginFilters = structuredClone(filters);
         this._updateFilters();
@@ -402,7 +419,7 @@ export class Filters implements IFilters {
         this.spatial = undefined;
         this.pluginFilters = undefined;
         this.activeFilters.clear();
-        this.player.manager.emit("debug", `Moonlink.js > Filters >> All filters cleared.`);
+        this.player.manager.emit("debug", `NyxLink > Filters >> All filters cleared.`);
         this._updateFilters();
         return this;
     }
@@ -411,7 +428,7 @@ export class Filters implements IFilters {
         return this.clear();
     }
 
-    public toPayload(): IFilters {
+    public toPayload(options: { compatibleOnly?: boolean; suspended?: string[] } = {}): IFilters {
         let payload: IFilters = {};
 
         for (const name of this.activeFilters) {
@@ -448,9 +465,15 @@ export class Filters implements IFilters {
         for (const key of Object.keys(directFilters) as (keyof IFilters)[]) assign(key);
 
         // Validate the effective payload, including fields originating from presets.
-        if (!this.player.node.isNodeLink && (payload.echo || payload.chorus || payload.compressor || payload.highpass || payload.phaser || payload.spatial)) {
-            throw nodeLinkOnlyError("filters");
+        const suspended = suspendNativeFilters(payload, this.player.node);
+        if (payload.pluginFilters) {
+            payload.pluginFilters = { ...payload.pluginFilters };
+            const dspxSuspended = suspendLavaDSPX(payload.pluginFilters, this.player.node.backend);
+            if (dspxSuspended.length && !options.compatibleOnly) throw new FeatureUnavailableError('lavadspx', this.player.node.backend?.kind ?? 'unknown');
+            suspended.push(...dspxSuspended);
         }
+        if (suspended.length && !options.compatibleOnly) throw nodeLinkOnlyError("filters");
+        options.suspended?.push(...suspended);
         if (payload.equalizer !== undefined) payload.equalizer = this.normalizeBands(payload.equalizer);
         if (payload.volume !== undefined && (!Number.isFinite(payload.volume) || payload.volume < 0 || payload.volume > 5)) {
             throw new RangeError("Filter volume must be between 0 and 5");
@@ -474,8 +497,8 @@ export class Filters implements IFilters {
         return [...unique.values()].sort((a, b) => a.band - b.band);
     }
 
-    public async apply(): Promise<Player> {
-        const payload = this.toPayload();
+    public async apply(options: { compatibleOnly?: boolean } = {}): Promise<Player> {
+        const payload = this.toPayload(options);
 
         this.player.manager.emit("debug", "NyxLink > Filters > Applying filters");
         const updatedPlayer = await this.player.updatePlayer({ filters: payload });

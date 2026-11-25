@@ -1,12 +1,19 @@
 # Changelog
 
-This changelog describes the unreleased NyxLink 5.3 development line and its verified scope. **No GitHub `v5.3.0` tag or npm `5.3.0` stable package has been published.** The first release candidate is prepared in the release-stabilization branch; tagging and publication remain subject to acceptance.
+This changelog describes the prepared NyxLink 5.3.0-rc.2 source candidate. The candidate is not a claim of publication or audible acceptance.
 
-## [5.3.0-rc.1 — candidate, not yet published]
+## [5.3.0-rc.2 — candidate, pending acceptance]
 
-- Kept Aurora terminal and Inspector tools opt-in so core consumers using React 19 or different CLI package versions can install NyxLink without unrelated peer dependency conflicts.
+### Backend parity and stabilization
+
+- Added typed LavaSearch and NodeLink discovery, international provider routing, Holo and LavaSrc metadata, and LavaDSPX plugin filters.
+- Added optional multi-provider recommendation discovery, normalized SponsorBlock and chapter events, native audio preference projection and opt-in mixer reconstruction on migration.
+- Hardened stale-session cancellation, backend identity fencing, REST session paths, provider alias handling and search-cache invalidation.
+- Updated Aurora events and public API declarations. Preserved the release-branch dependency isolation fix without adding a core UI dependency.
 
 ### Observability and terminal
+
+- Ported the release-branch package isolation fix: Aurora presentation and host telemetry tools are development dependencies installed explicitly by consumers of those subpaths, not root SDK peer constraints. Core-only applications can use React 19 independently of the optional Ink 5 Inspector.
 
 - Canonical diagnostic event/Inspector normalization now ignores inherited values and accessors and rejects proxy objects without triggering traps; invalid prototype-named severity levels are rejected.
 

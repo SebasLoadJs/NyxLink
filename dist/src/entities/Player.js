@@ -1,9 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Player = void 0;
-const OpenTelemetry_1 = require("../observability/OpenTelemetry");
-const NodeLinkContracts_1 = require("../backends/NodeLinkContracts");
-const ProtocolContracts_1 = require("../backends/ProtocolContracts");
 const PlayerMigration_1 = require("../players/PlayerMigration");
 const PlayerCommandQueue_1 = require("../players/PlayerCommandQueue");
 const PlaybackGuard_1 = require("../players/PlaybackGuard");
@@ -16,9 +13,6 @@ const TrackCodec_1 = require("../tracks/TrackCodec");
 const TrackResolver_1 = require("../tracks/TrackResolver");
 const VoiceReceiver_1 = require("./VoiceReceiver");
 const PlayerSnapshot_1 = require("../database/PlayerSnapshot");
-const NodeLinkMixContracts_1 = require("../backends/NodeLinkMixContracts");
-const PlayerOperationCancelledError_1 = require("../errors/PlayerOperationCancelledError");
-const QueuePreload_1 = require("../players/QueuePreload");
 class Player {
     manager;
     node;
@@ -47,19 +41,11 @@ class Player {
     historySize = 10;
     lastActivityTime = Date.now();
     commands = new PlayerCommandQueue_1.PlayerCommandQueue();
-    get pendingCommands() { return this.commands.pending; }
     destructionPromise;
-    pendingPlayTicket;
-    lastSuccessfulExplicitPlayTicket;
     volumeRevision = 0;
     optimisticVolumeRevision = 0;
     fading;
-    crossfade;
     nextTrack;
-    preloadOptions;
-    queuePreload;
-    preloadScheduler = new QueuePreload_1.QueuePreloadScheduler();
-    get preloadJob() { return this.preloadScheduler.pending; }
     audioTrackId;
     loudnessNormalizer;
     endTime;
@@ -98,7 +84,10 @@ class Player {
         this.voice = new Voice_1.Voice(this);
         if (config.current) {
             this.current = TrackCodec_1.TrackCodec.restore(config.current);
-            this.lastPosition = this.current.getInfo().position;
+            if (config.current.position) {
+                this.current.position = config.current.position;
+                this.lastPosition = this.current.position;
+            }
         }
         if (config.queue && Array.isArray(config.queue)) {
             for (const track of config.queue) {
@@ -137,7 +126,7 @@ class Player {
             const currentPosition = this.current.position ?? 0;
             const positionDelta = Math.abs(currentPosition - this.lastPosition);
             const timeDelta = now - this.lastPositionTime;
-            if (positionDelta < 1000 && timeDelta > 30000 && !this.current.getInfo().isStream) {
+            if (positionDelta < 1000 && timeDelta > 30000 && !this.current.isStream) {
                 this.stuckDetectionCount++;
                 this.manager.emit("debug", `Moonlink.js > Player#healthCheck >> Player ${this.guildId} appears stuck. Position: ${currentPosition}, Delta: ${positionDelta}, Stuck count: ${this.stuckDetectionCount}/${maxStuckCount}`);
                 if (this.stuckDetectionCount >= maxStuckCount) {
@@ -181,7 +170,7 @@ class Player {
         let ticket = (0, PlaybackGuard_1.playbackGuard)(this).ticket;
         this.manager.emit("playerRecoveryStarted", this);
         try {
-            if (this.current && this.current.getInfo().isSeekable) {
+            if (this.current && this.current.isSeekable) {
                 const seekPos = Math.max(0, (this.current.position ?? 0) + 2000);
                 this.manager.emit("debug", `Moonlink.js > Player#recoverFromStuck >> Seeking forward 2s for player ${this.guildId}.`);
                 await this.seek(seekPos);
@@ -298,22 +287,33 @@ class Player {
             return track;
         throw new Error("Invalid track input. Provide a Track instance or encoded string.");
     }
-    async sendPlayerUpdate(payload, noReplace, reservedTrack) {
-        await this.manager.guildOwnership?.assertCurrent(this.guildId);
-        const finalPayload = this.node.backend
-            ? this.node.backend.preparePlayerUpdate(payload, this.voiceChannelId)
-            : (0, ProtocolContracts_1.preparePlayerUpdate)(this.node.isNodeLink ? 'nodelink' : 'unknown', payload, this.voiceChannelId);
+    async sendPlayerUpdate(payload, noReplace) {
+        const hasNodeLinkExtras = Boolean(payload?.fading ||
+            payload?.nextTrack ||
+            payload?.track?.audioTrackId ||
+            payload?.loudnessNormalizer !== undefined ||
+            payload?.endTime !== undefined);
+        if (!this.node.isNodeLink && hasNodeLinkExtras) {
+            throw (0, Util_1.nodeLinkOnlyError)("updatePlayer extras");
+        }
+        const finalPayload = { ...payload };
+        if (payload.voice) {
+            const voicePayload = { ...payload.voice };
+            if (this.node.isNodeLink && (!voicePayload.sessionId || !voicePayload.token || !voicePayload.endpoint)) {
+                throw new Error("voice payload requires sessionId, token, and endpoint.");
+            }
+            if (!voicePayload.channelId && this.voiceChannelId) {
+                voicePayload.channelId = this.voiceChannelId;
+            }
+            finalPayload.voice = voicePayload;
+        }
         const attempts = (0, PlaybackAttempt_1.playbackAttempt)(this);
-        const attempt = typeof payload.track?.encoded === 'string' ? attempts.begin(this.node, { ...payload.track, encoded: payload.track.encoded }, typeof payload.paused === 'boolean') : undefined;
+        const attempt = typeof payload.track?.encoded === 'string' ? attempts.begin(this.node, payload.track, typeof payload.paused === 'boolean') : undefined;
         if (attempt)
             finalPayload.track = attempt.track;
         const preload = typeof payload.nextTrack?.encoded === 'string' || payload.nextTrack === null ? attempts.preload(this.node, payload.nextTrack) : undefined;
         if (preload)
             finalPayload.nextTrack = preload.track;
-        const previousReservation = this.queuePreload;
-        const reservation = reservedTrack ? { track: reservedTrack, node: this.node, session: this.node.sessionId } : undefined;
-        if (preload)
-            this.queuePreload = reservation;
         let acknowledged = false;
         try {
             const response = await this.node.rest.updatePlayer(this.guildId, finalPayload, noReplace);
@@ -322,22 +322,12 @@ class Player {
             acknowledged = true;
             if (attempt && !attempt.accepted(response))
                 throw new Error("Backend did not accept the requested track");
-            if (preload && !this.destroyed) {
-                if (payload.nextTrack === null)
-                    this.nextTrack = undefined;
-                else if (preload.pending() && payload.nextTrack)
-                    this.nextTrack = structuredClone(payload.nextTrack);
-            }
             return response;
         }
         catch (error) {
             attempt?.rollback();
-            if (!acknowledged) {
-                const restoreReservation = preload && this.queuePreload === reservation && (!reservation || preload.pending());
+            if (!acknowledged)
                 preload?.rollback();
-                if (restoreReservation)
-                    this.queuePreload = previousReservation;
-            }
             throw error;
         }
     }
@@ -354,8 +344,6 @@ class Player {
         return this.sendPlayerUpdate({ voice }, true);
     }
     async connect({ selfDeaf, selfMute } = {}) {
-        await this.manager.guildOwnership?.assertCurrent(this.guildId);
-        this.node.cancelVoiceReconnect?.(this);
         const connectStack = new Error().stack?.split("\n").slice(2, 8).join("\n");
         this.manager.emit("debug", `Moonlink.js > Player#connect -> Connect requested for guild ${this.guildId}. Stack: ${connectStack || "unavailable"}`);
         this.set("userInitiatedConnect", true);
@@ -367,7 +355,6 @@ class Player {
         return this;
     }
     async disconnect() {
-        this.node.cancelVoiceReconnect?.(this);
         const disconnectStack = new Error().stack?.split("\n").slice(2, 8).join("\n");
         this.manager.emit("debug", `Moonlink.js > Player#disconnect -> Disconnect requested for guild ${this.guildId}. Stack: ${disconnectStack || "unavailable"}`);
         this.set("userInitiatedConnect", false);
@@ -376,47 +363,20 @@ class Player {
     }
     async play(options = {}) {
         const ticket = (0, PlaybackGuard_1.playbackGuard)(this).invalidate();
-        this.pendingPlayTicket = ticket;
-        return this.commands.enqueue(async () => {
-            const played = await (0, OpenTelemetry_1.observeOperation)(this.manager, 'nyxlink.player.play', () => this.playNext(options, ticket), result => result ? 'success' : 'resolved');
-            if (played)
-                this.lastSuccessfulExplicitPlayTicket = ticket;
-            return played;
-        }).finally(() => {
-            if (this.pendingPlayTicket === ticket)
-                this.pendingPlayTicket = undefined;
-        });
+        return this.commands.enqueue(() => this.playNext(options, ticket));
     }
     async playAutoPlay(track, ticket, automaticTicket) {
-        return this.commands.enqueue(async () => {
-            if (this.queue.size > 0)
-                return false;
-            let automaticTrackQueued = false;
-            const markAutomaticQueue = (queued) => { automaticTrackQueued = queued; };
-            try {
-                return await (0, OpenTelemetry_1.observeOperation)(this.manager, 'nyxlink.autoplay', () => this.playNext({ track }, ticket, () => this.autoPlay && (0, PlaybackGuard_1.playbackGuard)(this).isAutoCurrent(automaticTicket) &&
-                    (automaticTrackQueued
-                        ? this.queue.size === 1 && this.queue.first === track
-                        : this.queue.size === 0), markAutomaticQueue), result => result ? 'success' : 'resolved');
-            }
-            finally {
-                if (automaticTrackQueued) {
-                    const index = this.queue.tracks.indexOf(track);
-                    if (index >= 0)
-                        this.queue.remove(index);
-                }
-            }
-        });
+        return this.commands.enqueue(() => this.playNext({ track }, ticket, () => this.autoPlay && (0, PlaybackGuard_1.playbackGuard)(this).isAutoCurrent(automaticTicket)));
     }
-    async playNext(options, ticket, allowed = () => true, onInjectedQueueChange, suppressHistory = false) {
+    async playNext(options, ticket, allowed = () => true) {
         try {
-            return await this.applyPlayback(options, ticket, allowed, onInjectedQueueChange, suppressHistory);
+            return await this.applyPlayback(options, ticket, allowed);
         }
         finally {
             (0, PlaybackAttempt_1.playbackAttempt)(this).retain(ticket);
         }
     }
-    async applyPlayback(options, ticket, allowed, onInjectedQueueChange, suppressHistory = false) {
+    async applyPlayback(options, ticket, allowed) {
         const guard = (0, PlaybackGuard_1.playbackGuard)(this);
         if (this.destroyed || !guard.isCurrent(ticket) || !allowed())
             return false;
@@ -431,7 +391,7 @@ class Player {
         else {
             finalOptions = options;
         }
-        this.manager.emit("debug", `NyxLink > Player#play -> Playback requested for guild ${this.guildId}. Explicit track: ${Boolean(finalOptions.track || finalOptions.encoded)}`);
+        this.manager.emit("debug", `Moonlink.js > Player#play -> play() called for guild ${this.guildId} with options: ${JSON.stringify(options)}`);
         if (!this.voice.sessionId || !this.voice.endpoint) {
             this.manager.emit("debug", `Moonlink.js > Player#play >> Voice not ready for guild ${this.guildId}, attempting to connect...`);
             try {
@@ -448,7 +408,7 @@ class Player {
         if (finalOptions.encoded) {
             try {
                 const decoded = (0, Util_1.decodeTrack)(finalOptions.encoded);
-                track = new Track_1.Track(decoded, finalOptions.requester, undefined, this.manager.options.trackPartial ?? []);
+                track = new Track_1.Track(decoded, finalOptions.requester);
             }
             catch (e) {
                 this.manager.emit("debug", `Moonlink.js > Player#play >> Error decoding track for guild ${this.guildId}. Error: ${e}`);
@@ -457,7 +417,7 @@ class Player {
         }
         if (track && !(track instanceof Track_1.Track)) {
             try {
-                track = new Track_1.Track(track, finalOptions.requester, undefined, this.manager.options.trackPartial ?? []);
+                track = new Track_1.Track(track, finalOptions.requester);
             }
             catch (e) {
                 this.manager.emit("debug", `Moonlink.js > Player#play >> Invalid track object for guild ${this.guildId}. Error: ${e}`);
@@ -466,7 +426,6 @@ class Player {
         }
         if (track) {
             this.queue.unshift(track);
-            onInjectedQueueChange?.(true);
             this.manager.emit("debug", `Moonlink.js > Player#play >> Added track "${track.title}" to front of queue for guild ${this.guildId}`);
         }
         if (this.queue.size === 0) {
@@ -476,27 +435,22 @@ class Player {
         const previousTrack = this.current;
         const queuedTrack = this.queue.first;
         let nextTrack = queuedTrack;
-        if (!queuedTrack || !nextTrack || !nextTrack.encoded) {
-            this.manager.emit("debug", `NyxLink > Player#play >> Invalid track data for guild ${this.guildId}.`);
+        if (!nextTrack || !nextTrack.encoded) {
+            this.manager.emit("debug", `Moonlink.js > Player#play >> Invalid track data for guild ${this.guildId}. Next track is ${JSON.stringify(nextTrack)}`);
             return false;
         }
-        let selectedPlaybackTrack;
         try {
-            nextTrack = await TrackResolver_1.TrackResolver.resolve(nextTrack, this.node, undefined, guard.signal);
-            selectedPlaybackTrack = nextTrack instanceof Track_1.Track ? nextTrack :
-                new Track_1.Track(nextTrack, undefined, undefined, this.manager.options.trackPartial ?? []);
+            nextTrack = await TrackResolver_1.TrackResolver.resolve(nextTrack, this.node);
         }
         catch (error) {
-            this.manager.emit('debug', `NyxLink > TrackResolver > ${error instanceof Error ? error.message : String(error)}`);
+            this.manager.emit('debug', `NyxLink > TrackResolver > ${error.message}`);
             return false;
         }
         if (this.destroyed || !guard.isCurrent(ticket) || !allowed() || this.queue.first !== queuedTrack)
             return false;
         this.queue.shift();
-        onInjectedQueueChange?.(false);
         const oldTrackTitle = this.current?.title ?? "null";
-        const positionBeforePlayback = selectedPlaybackTrack.position;
-        this.current = selectedPlaybackTrack;
+        this.current = nextTrack instanceof Track_1.Track ? nextTrack : new Track_1.Track(nextTrack);
         this.current.position = finalOptions.position || 0;
         this.updateData("current", TrackCodec_1.TrackCodec.serialize(this.current));
         this.manager.emit("debug", `Moonlink.js > Player#play >> Player state changed: current track: ${oldTrackTitle} -> ${this.current.title}`);
@@ -520,19 +474,13 @@ class Player {
         }
         if (this.fading)
             payload.fading = this.fading;
-        if (this.crossfade && this.node.isNodeLink)
-            payload.crossfade = this.crossfade;
-        if (this.queuePreload) {
-            if (this.node.isNodeLink)
-                payload.nextTrack = null;
-        }
-        else if (this.nextTrack)
+        if (this.nextTrack)
             payload.nextTrack = this.nextTrack;
         if (this.loudnessNormalizer !== undefined) {
             payload.loudnessNormalizer = this.loudnessNormalizer;
         }
         this.manager.emit("playerTriggeredPlay", this, this.current);
-        this.manager.emit("debug", `NyxLink > Player#play -> Sending play request to node ${this.node.identifier} for guild ${this.guildId}.`);
+        this.manager.emit("debug", `Moonlink.js > Player#play -> Sending play request to node ${this.node.identifier} for guild ${this.guildId}. Payload: ${JSON.stringify(payload)}`);
         try {
             const response = await this.sendPlayerUpdate(payload, finalOptions.noReplace ?? this.manager.options.noReplace);
             if (response == null)
@@ -545,16 +493,11 @@ class Player {
             this.manager.emit("debug", `Moonlink.js > Player#play >> CRITICAL: Failed to send play request for guild ${this.guildId}. Reverting state. Error: ${e.message}`);
             this.playing = oldPlaying;
             this.paused = oldPaused;
-            selectedPlaybackTrack.position = positionBeforePlayback;
             this.current = previousTrack;
-            this.updateData("current", previousTrack ? TrackCodec_1.TrackCodec.serialize(previousTrack) : null);
-            this.updateData("playing", oldPlaying);
-            this.updateData("paused", oldPaused);
-            this.queue.unshift(queuedTrack);
-            onInjectedQueueChange?.(true);
+            this.queue.unshift(nextTrack);
             return false;
         }
-        if (previousTrack && !suppressHistory && !this.get("isBackPlay")) {
+        if (previousTrack && !this.get("isBackPlay")) {
             this.previous.push(previousTrack);
             const historyLimit = this.manager.options.queue?.historyLimit ?? this.historySize;
             if (this.previous.length > historyLimit) {
@@ -573,47 +516,24 @@ class Player {
     async addMix(track, options) {
         this.assertNodeLinkFeature("mix:add");
         const encoded = this.resolveEncodedTrack(track);
-        const body = (0, NodeLinkMixContracts_1.mixCreateBody)({
+        return this.node.rest.addMixLayer(this.guildId, {
             track: { encoded, userData: options?.userData },
             volume: options?.volume
         });
-        return this.mixCommand('mix:add', node => node.rest.addMixLayer(this.guildId, body));
     }
     async getMixes() {
         this.assertNodeLinkFeature("mix:list");
-        return this.mixCommand('mix:list', node => node.rest.getMixLayers(this.guildId));
+        return this.node.rest.getMixLayers(this.guildId);
     }
     async updateMixVolume(mixId, volume) {
         this.assertNodeLinkFeature("mix:update");
-        await this.mixCommand('mix:update', node => node.rest.updateMixLayerVolume(this.guildId, mixId, volume));
+        await this.node.rest.updateMixLayerVolume(this.guildId, mixId, volume);
         return this;
     }
     async removeMix(mixId) {
         this.assertNodeLinkFeature("mix:remove");
-        await this.mixCommand('mix:remove', node => node.rest.removeMixLayer(this.guildId, mixId));
+        await this.node.rest.removeMixLayer(this.guildId, mixId);
         return this;
-    }
-    mixCommand(operation, execute) {
-        const node = this.node, session = node.sessionId, socket = node.socket, backend = node.backend;
-        const guard = (0, PlaybackGuard_1.playbackGuard)(this), ticket = guard.ticket;
-        const active = () => !this.destroyed && !this.manager.destroyed && !node.destroyed && node.connected &&
-            this.node === node && node.sessionId === session && node.socket === socket && node.backend === backend && guard.isCurrent(ticket);
-        return this.commands.enqueue(async () => {
-            if (!active())
-                throw new PlayerOperationCancelledError_1.PlayerOperationCancelledError(operation);
-            let result;
-            try {
-                result = await execute(node);
-            }
-            catch (error) {
-                if (!active())
-                    throw new PlayerOperationCancelledError_1.PlayerOperationCancelledError(operation);
-                throw error;
-            }
-            if (!active())
-                throw new PlayerOperationCancelledError_1.PlayerOperationCancelledError(operation);
-            return result;
-        });
     }
     async subscribeLyrics(options) {
         this.assertNodeLinkFeature("lyrics:subscribe");
@@ -658,39 +578,16 @@ class Player {
         return this.node.getDirectStream(target, itag);
     }
     async setFading(fading) {
-        const config = structuredClone(fading);
-        return this.commands.enqueue(async () => {
-            if (this.destroyed)
-                throw new Error("Cannot update a destroyed player");
-            this.assertNodeLinkFeature("fading");
-            await this.sendPlayerUpdate({ fading: config });
-            if (!this.destroyed)
-                this.fading = config;
-            return this;
-        });
+        this.assertNodeLinkFeature("fading");
+        this.fading = fading;
+        await this.sendPlayerUpdate({ fading });
+        return this;
     }
     async clearFading() {
-        return this.setFading({ enabled: false });
-    }
-    getCrossfade() {
-        return this.crossfade ? { ...this.crossfade } : undefined;
-    }
-    async setCrossfade(options) {
-        const config = (0, NodeLinkContracts_1.normalizeCrossfade)(options);
-        return this.commands.enqueue(async () => {
-            if (this.destroyed)
-                throw new Error("Cannot update a destroyed player");
-            this.assertNodeLinkFeature("crossfade");
-            await (0, OpenTelemetry_1.observeOperation)(this.manager, 'nyxlink.crossfade', () => this.sendPlayerUpdate({ crossfade: config }));
-            if (!this.destroyed) {
-                this.crossfade = config;
-                this.requestQueuePreload();
-            }
-            return this;
-        });
-    }
-    async clearCrossfade() {
-        return this.setCrossfade({ enabled: false });
+        this.assertNodeLinkFeature("fading");
+        this.fading = undefined;
+        await this.sendPlayerUpdate({ fading: { enabled: false } });
+        return this;
     }
     async setNextTrack(track, userData) {
         const encoded = this.resolveEncodedTrack(track);
@@ -700,6 +597,7 @@ class Player {
             this.assertNodeLinkFeature("nextTrack");
             const nextTrack = { encoded, userData: userData ?? (track instanceof Track_1.Track ? track.userData : undefined) };
             await this.sendPlayerUpdate({ nextTrack });
+            this.nextTrack = nextTrack;
             return this;
         });
     }
@@ -709,74 +607,9 @@ class Player {
                 throw new Error("Cannot update a destroyed player");
             this.assertNodeLinkFeature("nextTrack");
             await this.sendPlayerUpdate({ nextTrack: null });
+            this.nextTrack = undefined;
             return this;
         });
-    }
-    getNextTrack() {
-        return this.nextTrack ? structuredClone(this.nextTrack) : undefined;
-    }
-    setQueuePreload(options) {
-        if (!options || typeof options.enabled !== 'boolean' ||
-            options.leadMs !== undefined && (!Number.isSafeInteger(options.leadMs) || options.leadMs < 1000 || options.leadMs > 120000)) {
-            throw new TypeError('Invalid queue preload options');
-        }
-        this.preloadOptions = { enabled: options.enabled, leadMs: options.leadMs ?? 35000 };
-        this.requestQueuePreload();
-        return this;
-    }
-    requestQueuePreload() {
-        if (this.destroyed || this.manager.destroyed || (!this.preloadOptions?.enabled && !this.queuePreload))
-            return;
-        const ticket = (0, PlaybackGuard_1.playbackGuard)(this).ticket;
-        const node = this.node;
-        const session = node.sessionId;
-        const active = () => !this.destroyed && !this.manager.destroyed && this.node === node &&
-            node.connected && !node.destroyed && node.sessionId === session && (0, PlaybackGuard_1.playbackGuard)(this).isCurrent(ticket);
-        const desired = () => active() ? (0, QueuePreload_1.desiredPreload)(this, this.preloadOptions, !!this.crossfade?.enabled) : undefined;
-        this.preloadScheduler.request(operation => this.commands.enqueue(operation), async () => {
-            if (!active())
-                return;
-            const reservation = this.queuePreload;
-            if (reservation && (reservation.node !== node || reservation.session !== session)) {
-                this.queuePreload = undefined;
-                this.nextTrack = undefined;
-            }
-            if (!node.isNodeLink)
-                return;
-            let candidate = desired();
-            if (this.queuePreload) {
-                if (this.queuePreload.track === candidate)
-                    return;
-                await this.sendPlayerUpdate({ nextTrack: null });
-                candidate = desired();
-            }
-            if (!candidate || this.paused || this.nextTrack)
-                return;
-            const current = this.current;
-            const resolved = await TrackResolver_1.TrackResolver.resolve(candidate, node, undefined, (0, PlaybackGuard_1.playbackGuard)(this).signal);
-            if (this.current !== current || desired() !== candidate || this.paused || this.nextTrack)
-                return;
-            await this.sendPlayerUpdate({ nextTrack: { encoded: resolved.encoded, userData: resolved.userData } }, undefined, candidate);
-        }, () => {
-            this.manager.emit('debug', 'NyxLink > Queue preload request failed');
-        }, () => this.requestQueuePreload());
-    }
-    consumePreloadedTrack() {
-        const reservation = this.queuePreload;
-        this.queuePreload = undefined;
-        this.nextTrack = undefined;
-        if (reservation && reservation.node === this.node && reservation.session === this.node.sessionId) {
-            const index = this.queue.tracks.indexOf(reservation.track);
-            if (index !== -1)
-                this.queue.remove(index);
-            if (this.current) {
-                this.previous.push(this.current);
-                const limit = this.manager.options.queue?.historyLimit ?? this.historySize;
-                if (this.previous.length > limit)
-                    this.previous.shift();
-                this.updateData('previous', this.previous.map(track => TrackCodec_1.TrackCodec.serialize(track)));
-            }
-        }
     }
     setAudioTrackId(audioTrackId) {
         this.assertNodeLinkFeature("audioTrackId");
@@ -784,17 +617,10 @@ class Player {
         return this;
     }
     async setLoudnessNormalizer(enabled) {
-        if (typeof enabled !== 'boolean')
-            throw new TypeError('Invalid loudness normalizer state');
-        return this.commands.enqueue(async () => {
-            if (this.destroyed)
-                throw new Error("Cannot update a destroyed player");
-            this.assertNodeLinkFeature("loudnessNormalizer");
-            await this.sendPlayerUpdate({ loudnessNormalizer: enabled });
-            if (!this.destroyed)
-                this.loudnessNormalizer = enabled;
-            return this;
-        });
+        this.assertNodeLinkFeature("loudnessNormalizer");
+        this.loudnessNormalizer = enabled;
+        await this.sendPlayerUpdate({ loudnessNormalizer: enabled });
+        return this;
     }
     createVoiceReceiver(options) {
         this.assertNodeLinkFeature("voiceReceive");
@@ -875,13 +701,13 @@ class Player {
     async forward(ms) {
         if (!this.current)
             return this;
-        const newPosition = Math.min(this.current.getInfo().length, this.current.getInfo().position + ms);
+        const newPosition = Math.min(this.current.duration, this.current.position + ms);
         return this.seek(newPosition);
     }
     async rewind(ms) {
         if (!this.current)
             return this;
-        const newPosition = Math.max(0, this.current.getInfo().position - ms);
+        const newPosition = Math.max(0, this.current.position - ms);
         return this.seek(newPosition);
     }
     async setVoiceState(state) {
@@ -910,27 +736,21 @@ class Player {
     }
     async stop() {
         (0, PlaybackGuard_1.playbackGuard)(this).invalidate();
-        return this.commands.enqueue(() => (0, OpenTelemetry_1.observeOperation)(this.manager, 'nyxlink.player.stop', () => this.stopPlayback()));
+        return this.commands.enqueue(() => this.stopPlayback());
     }
     async stopPlayback() {
         if (this.destroyed)
             return this;
         this.manager.emit("debug", `Moonlink.js > Player#stop -> Sending stop request to node ${this.node.identifier} for guild ${this.guildId}`);
         this.manager.emit("playerTriggeredStop", this);
-        await this.sendPlayerUpdate({
-            track: { encoded: null },
-            ...(this.node.isNodeLink && this.nextTrack ? { nextTrack: null } : {})
-        });
+        await this.sendPlayerUpdate({ track: { encoded: null } });
         const oldPlaying = this.playing;
-        const oldPaused = this.paused;
-        const oldTrackTitle = this.current?.title ?? "null";
         this.playing = false;
-        this.paused = false;
+        this.updateData("playing", this.playing);
+        this.manager.emit("debug", `Moonlink.js > Player#stop >> Player state changed: playing: ${oldPlaying} -> ${this.playing}`);
+        const oldTrackTitle = this.current?.title ?? "null";
         this.current = null;
-        await this.updateData("playing", false);
-        await this.updateData("paused", false);
-        await this.updateData("current", null);
-        this.manager.emit("debug", `NyxLink > Player#stop >> State changed: playing: ${oldPlaying} -> ${this.playing}, paused: ${oldPaused} -> ${this.paused}`);
+        this.updateData("current", this.current);
         this.manager.emit("debug", `Moonlink.js > Player#stop >> Player state changed: current: ${oldTrackTitle} -> null`);
         this.manager.emit("debug", `Moonlink.js > Player#stop >> Player stopped for guild ${this.guildId}`);
         this.manager.emit("playerStop", this);
@@ -953,38 +773,8 @@ class Player {
                     this.manager.emit("playerTriggeredSkip", this, this.current, track, position);
                     if (this.destroyed || !guard.isCurrent(ticket) || this.queue.get(position) !== track)
                         return false;
-                    let playbackTrack;
-                    try {
-                        playbackTrack = track instanceof Track_1.Track ? track :
-                            new Track_1.Track(track, undefined, undefined, this.manager.options.trackPartial ?? []);
-                    }
-                    catch (error) {
-                        this.manager.emit("debug", `NyxLink > Player#skip >> Invalid queued track: ${error instanceof Error ? error.name : "unknown"}`);
-                        return false;
-                    }
-                    const selected = this.queue.remove(position);
-                    if (!selected)
-                        return false;
-                    const originalPosition = playbackTrack.position;
-                    let injectedTrackQueued = false;
-                    let played = false;
-                    try {
-                        played = await this.playNext({ track: playbackTrack }, ticket, () => true, queued => { injectedTrackQueued = queued; });
-                        return played;
-                    }
-                    finally {
-                        if (!played) {
-                            playbackTrack.position = originalPosition;
-                            if (injectedTrackQueued) {
-                                const injectedIndex = this.queue.tracks.indexOf(playbackTrack);
-                                if (injectedIndex >= 0)
-                                    this.queue.remove(injectedIndex);
-                            }
-                            if (!this.destroyed && !this.manager.destroyed) {
-                                this.queue.insert(Math.min(position, this.queue.size), selected);
-                            }
-                        }
-                    }
+                    this.queue.remove(position);
+                    return await this.playNext({ track: track instanceof Track_1.Track ? track : new Track_1.Track(track) }, ticket);
                 }
                 finally {
                     (0, PlaybackAttempt_1.playbackAttempt)(this).retain(ticket);
@@ -1005,39 +795,28 @@ class Player {
             return true;
         }
         const nextTrack = this.queue.first;
-        if (!nextTrack)
-            return false;
         this.manager.emit("playerTriggeredSkip", this, oldTrack, nextTrack, 0);
         this.manager.emit("debug", `Moonlink.js > Player#skip -> Skipping to next track in queue for guild ${this.guildId}`);
         return await this.play();
     }
     async seek(position) {
-        const ticket = (0, PlaybackGuard_1.playbackGuard)(this).ticket;
-        const track = this.current;
-        const afterPendingPlay = this.pendingPlayTicket === ticket;
-        return this.commands.enqueue(() => (0, OpenTelemetry_1.observeOperation)(this.manager, 'nyxlink.player.seek', () => this.seekPlayback(position, ticket, track, afterPendingPlay)));
+        return this.commands.enqueue(() => this.seekPlayback(position));
     }
-    async seekPlayback(position, ticket, track, afterPendingPlay) {
+    async seekPlayback(position) {
         if (this.destroyed)
             return this;
-        (0, Util_1.validate)(position, (v) => typeof v === "number" && Number.isFinite(v) && v >= 0, "Player#seek > Position must be a valid number.");
-        const guard = (0, PlaybackGuard_1.playbackGuard)(this);
-        if (!guard.isCurrent(ticket) ||
-            (afterPendingPlay && this.lastSuccessfulExplicitPlayTicket !== ticket) ||
-            (!afterPendingPlay && track !== null && this.current !== track))
-            return this;
-        const activeTrack = this.current;
-        this.manager.emit("debug", `NyxLink > Player#seek -> Seeking to position ${position}ms for guild ${this.guildId}`);
+        (0, Util_1.validate)(position, (v) => typeof v === "number" && !isNaN(v) && v >= 0, "Player#seek > Position must be a valid number.");
+        this.manager.emit("debug", `Moonlink.js > Player#seek -> Seeking to position ${position}ms for guild ${this.guildId}`);
         this.manager.emit("playerTriggeredSeek", this, position);
         await this.sendPlayerUpdate({ position });
-        if (guard.isCurrent(ticket) && !this.destroyed && this.current === activeTrack && activeTrack) {
-            activeTrack.position = position;
+        if (this.current) {
+            this.current.position = position;
         }
-        this.manager.emit("debug", `NyxLink > Player#seek >> Sent seek request to node ${this.node.identifier}`);
+        this.manager.emit("debug", `Moonlink.js > Player#seek >> Sent seek request to node ${this.node.identifier}`);
         return this;
     }
     setVolume(volume) {
-        (0, Util_1.validate)(volume, (v) => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1000, "Player#setVolume > Volume must be between 0 and 1000.");
+        (0, Util_1.validate)(volume, (v) => typeof v === "number" && !isNaN(v) && v >= 0 && v <= 1000, "Player#setVolume > Volume must be between 0 and 1000.");
         this.optimisticVolumeRevision = ++this.volumeRevision;
         const oldVolume = this.volume;
         this.volume = volume;
@@ -1061,21 +840,7 @@ class Player {
         return this.commands.enqueue(async () => {
             if (this.destroyed)
                 throw new Error("Cannot update volume on a destroyed player");
-            const node = this.node, session = node.sessionId, socket = node.socket, backend = node.backend;
-            const active = () => !this.destroyed && !this.manager.destroyed && !node.destroyed && node.connected &&
-                this.node === node && node.sessionId === session && node.socket === socket && node.backend === backend;
-            if (!active())
-                throw new PlayerOperationCancelledError_1.PlayerOperationCancelledError('volume');
-            try {
-                await this.sendPlayerUpdate({ volume });
-            }
-            catch (error) {
-                if (!active())
-                    throw new PlayerOperationCancelledError_1.PlayerOperationCancelledError('volume');
-                throw error;
-            }
-            if (!active())
-                throw new PlayerOperationCancelledError_1.PlayerOperationCancelledError('volume');
+            await this.sendPlayerUpdate({ volume });
             if (this.optimisticVolumeRevision > revision)
                 return this;
             const oldVolume = this.volume;
@@ -1132,15 +897,8 @@ class Player {
         }
         (0, PlaybackGuard_1.playbackGuard)(this).invalidate();
         this.destroyed = true;
-        this.node.cancelVoiceReconnect?.(this);
-        const leased = this.manager.guildOwnership?.localLease(this.guildId);
-        this.destructionPromise = this.commands.enqueue(() => this.destroyPlayback(reason))
-            .finally(async () => {
-            if (leased)
-                await this.manager.guildOwnership?.release(this.guildId, leased);
-        });
-        if (!this.manager.guildOwnership)
-            this.voice.destroy();
+        this.destructionPromise = this.commands.enqueue(() => this.destroyPlayback(reason));
+        this.voice.destroy();
         this.stopHealthCheck();
         return this.destructionPromise;
     }
@@ -1157,34 +915,24 @@ class Player {
         this.manager.emit("debug", `Moonlink.js > Player#destroy -> Destroying player for guild ${this.guildId}. Reason: ${destroyReason}`);
         this.playing = false;
         this.paused = false;
-        const owner = !this.manager.guildOwnership ||
-            await this.manager.guildOwnership.isCurrent(this.guildId);
-        if (owner)
-            try {
-                await this.disconnect();
-            }
-            catch (e) {
-                this.manager.emit("debug", `Moonlink.js > Player#destroy >> Voice disconnection failed for guild ${this.guildId}: ${e.message}`);
-            }
-        if (owner)
-            try {
-                await this.node.rest.destroyPlayer(this.guildId);
-            }
-            catch (e) {
-                this.manager.emit("debug", `Moonlink.js > Player#destroy >> Failed to destroy player on node: ${e.message}`);
-            }
+        try {
+            await this.disconnect();
+        }
+        catch (e) {
+            this.manager.emit("debug", `Moonlink.js > Player#destroy >> Voice disconnection failed for guild ${this.guildId}: ${e.message}`);
+        }
+        try {
+            await this.node.rest.destroyPlayer(this.guildId);
+        }
+        catch (e) {
+            this.manager.emit("debug", `Moonlink.js > Player#destroy >> Failed to destroy player on node: ${e.message}`);
+        }
         this.current = null;
         this.queue.clear();
         this.previous = [];
-        if (owner)
-            this.updateData("previous", []);
-        if (this.manager.players.get(this.guildId) === this) {
-            this.manager.players.players.delete(this.guildId);
-        }
-        if (owner && (!this.manager.guildOwnership ||
-            await this.manager.guildOwnership.isCurrent(this.guildId))) {
-            await this.manager.database.remove(`players.${this.guildId}`);
-        }
+        this.updateData("previous", []);
+        this.manager.players.players.delete(this.guildId);
+        await this.manager.database.remove(`players.${this.guildId}`);
         this.manager.emit('playerDestroyed', this, reason);
         this.manager.emit("debug", `Moonlink.js > Player#destroy >> Player destroyed for guild ${this.guildId}.`);
     }
@@ -1196,8 +944,6 @@ class Player {
             return false;
         this.manager.emit("debug", `Moonlink.js > Player#restart -> Restarting player for guild ${this.guildId}`);
         this.manager.emit("playerResuming", this);
-        if (this.destroyed || !guard.isCurrent(ticket))
-            return false;
         if (!this.voiceChannelId) {
             this.manager.emit("debug", `Moonlink.js > Player#restart >> Cannot restart player without a voiceChannelId for guild ${this.guildId}`);
             return false;
@@ -1220,14 +966,13 @@ class Player {
             const lastState = this.get("lastState");
             const currentLavalinkPos = lastState?.position ?? 0;
             const isResumedSync = this.node.resumed && this.playing && currentLavalinkPos > 0;
-            const isAlreadySync = !options[PlayerMigration_1.migrationRestart] && (isResumedSync || (lastState?.connected && Math.abs(currentLavalinkPos - (this.current.position ?? 0)) < 2000));
+            const isAlreadySync = isResumedSync || (lastState?.connected && Math.abs(currentLavalinkPos - (this.current.position ?? 0)) < 2000);
             if (isAlreadySync && this.playing) {
                 this.manager.emit("debug", `Moonlink.js > Player#restart >> Player already in sync for guild ${this.guildId}, skipping track restoration. (Resumed: ${this.node.resumed}, Sync: ${isAlreadySync})`);
                 this.manager.emit("playerResumed", this);
                 return true;
             }
-            const observed = this.current.position ?? 0;
-            const resumePosition = options[PlayerMigration_1.migrationRestart] ? observed : Math.max(Number.isFinite(lastKnownPosition) ? lastKnownPosition : 0, Number.isFinite(currentLavalinkPos) ? currentLavalinkPos : 0, observed);
+            const resumePosition = Math.max(typeof lastKnownPosition === "number" ? lastKnownPosition : 0, currentLavalinkPos, this.current.position ?? 0);
             this.manager.emit("debug", `Moonlink.js > Player#restart -> Restoring current track "${this.current.title}" for guild ${this.guildId} at ${resumePosition}ms. AlreadySync: ${isAlreadySync}`);
             const payload = {
                 track: { encoded: this.current.encoded, userData: this.current.userData },
@@ -1236,7 +981,7 @@ class Player {
                 paused: this.paused,
                 filters: this.filters.toPayload()
             };
-            if (resumePosition > 0 && this.current.getInfo().isSeekable && !isAlreadySync) {
+            if (resumePosition > 0 && this.current.isSeekable && !isAlreadySync) {
                 payload.position = resumePosition;
             }
             if (this.audioTrackId) {
@@ -1244,13 +989,7 @@ class Player {
             }
             if (this.fading)
                 payload.fading = this.fading;
-            if (this.crossfade && this.node.isNodeLink)
-                payload.crossfade = this.crossfade;
-            if (this.queuePreload) {
-                if (this.node.isNodeLink)
-                    payload.nextTrack = null;
-            }
-            else if (this.nextTrack)
+            if (this.nextTrack)
                 payload.nextTrack = this.nextTrack;
             if (this.loudnessNormalizer !== undefined) {
                 payload.loudnessNormalizer = this.loudnessNormalizer;
@@ -1286,8 +1025,7 @@ class Player {
             this.manager.emit("debug", `Moonlink.js > Player#restart >> No track to restore and queue is empty for guild ${this.guildId}`);
             return true;
         }
-        if (!options[PlayerMigration_1.migrationRestart])
-            this.manager.emit("playerResumed", this);
+        this.manager.emit("playerResumed", this);
         return true;
     }
     async restoreVoiceForRestart(ticket) {
@@ -1301,9 +1039,8 @@ class Player {
     }
     async transferNode(node) {
         const targetNode = typeof node === "string" ? this.manager.nodes.nodes.get(node) : node;
-        if (this.destroyed || !targetNode || targetNode.manager !== this.manager || !NodeSelector_1.NodeSelector.matches(targetNode, this.nodeSelection) || targetNode.identifier === this.node.identifier)
+        if (this.destroyed || !targetNode || !NodeSelector_1.NodeSelector.matches(targetNode, this.nodeSelection) || targetNode.identifier === this.node.identifier)
             return false;
-        this.node.cancelVoiceReconnect?.(this);
         const ticket = (0, PlaybackGuard_1.playbackGuard)(this).invalidate();
         return this.commands.enqueue(() => (0, PlayerMigration_1.migratePlayer)(this, targetNode, ticket));
     }
@@ -1313,7 +1050,6 @@ class Player {
             this.manager.emit("debug", `Moonlink.js > Player#setVoiceChannelId >> Voice channel already set to ${voiceChannelId} for guild ${this.guildId}`);
             return this;
         }
-        this.node.cancelVoiceReconnect?.(this);
         const oldChannel = this.voiceChannelId;
         this.voiceChannelId = voiceChannelId;
         this.updateData("voiceChannelId", this.voiceChannelId);
@@ -1335,82 +1071,45 @@ class Player {
         return this;
     }
     async replay() {
-        if (!this.current?.encoded || this.destroyed)
+        if (!this.current?.encoded) {
+            this.manager.emit("debug", `Moonlink.js > Player#replay >> No current track to replay for guild ${this.guildId}`);
             return false;
-        const guard = (0, PlaybackGuard_1.playbackGuard)(this);
-        const ticket = guard.invalidate();
-        this.pendingPlayTicket = ticket;
-        return this.commands.enqueue(async () => {
-            if (this.destroyed || !guard.isCurrent(ticket))
-                return false;
-            const original = this.current;
-            if (!original?.encoded)
-                return false;
-            const copy = new Track_1.Track(original.toJSON(), original.requester, original.origin, this.manager.options.trackPartial ?? []);
-            let injectedTrackQueued = false;
-            try {
-                const played = await this.playNext({ track: copy, position: 0 }, ticket, () => true, queued => { injectedTrackQueued = queued; }, true);
-                if (played)
-                    this.lastSuccessfulExplicitPlayTicket = ticket;
-                return played;
-            }
-            finally {
-                if (injectedTrackQueued) {
-                    const index = this.queue.tracks.indexOf(copy);
-                    if (index >= 0)
-                        this.queue.remove(index);
-                }
-            }
-        }).finally(() => {
-            if (this.pendingPlayTicket === ticket)
-                this.pendingPlayTicket = undefined;
+        }
+        this.manager.emit("debug", `Moonlink.js > Player#replay -> Replaying track "${this.current.title}" for guild ${this.guildId}`);
+        return await this.play({
+            track: this.current,
+            position: 0,
         });
     }
     async back() {
-        if (this.destroyed || this.previous.length === 0)
+        if (this.previous.length === 0) {
+            this.manager.emit("debug", `Moonlink.js > Player#back >> No previous tracks available for guild ${this.guildId}`);
             return false;
-        const guard = (0, PlaybackGuard_1.playbackGuard)(this);
-        const ticket = guard.invalidate();
-        return this.commands.enqueue(async () => {
-            if (this.destroyed || !guard.isCurrent(ticket))
-                return false;
-            const lastTrack = this.previous.at(-1);
-            if (!lastTrack)
-                return false;
-            const outgoing = this.current;
-            const priorBackFlag = this.get("isBackPlay") ?? false;
-            const originalPreviousPosition = lastTrack.position;
-            let injectedTrackQueued = false;
-            let played = false;
-            let committed = false;
-            this.set("isBackPlay", true);
-            try {
-                played = await this.playNext({ track: lastTrack, position: 0 }, ticket, () => true, queued => { injectedTrackQueued = queued; });
-                if (!played || !guard.isCurrent(ticket) || this.destroyed)
-                    return false;
-                const index = this.previous.lastIndexOf(lastTrack);
-                if (index >= 0) {
-                    this.previous.splice(index, 1);
-                    this.updateData("previous", this.previous.map(track => TrackCodec_1.TrackCodec.serialize(track)));
-                }
-                if (outgoing)
-                    this.queue.unshift(outgoing);
-                committed = true;
-                this.manager.emit("playerTriggeredBack", this, lastTrack);
-                return true;
-            }
-            finally {
-                if (injectedTrackQueued) {
-                    const index = this.queue.tracks.indexOf(lastTrack);
-                    if (index >= 0)
-                        this.queue.remove(index);
-                }
-                if (!committed) {
-                    lastTrack.position = originalPreviousPosition;
-                    this.set("isBackPlay", priorBackFlag);
-                }
-            }
+        }
+        const lastTrack = this.previous.pop();
+        if (!lastTrack) {
+            this.manager.emit("debug", `Moonlink.js > Player#back >> Popped an invalid track from history for guild ${this.guildId}`);
+            return false;
+        }
+        this.manager.emit("debug", `Moonlink.js > Player#back -> Going back to previous track "${lastTrack.title}" for guild ${this.guildId}`);
+        if (this.current) {
+            this.queue.unshift(this.current);
+            this.manager.emit("debug", `Moonlink.js > Player#back >> Pushed current track "${this.current.title}" to the front of the queue.`);
+        }
+        this.current = lastTrack;
+        this.set("isBackPlay", true);
+        const played = await this.play({
+            track: this.current,
+            position: 0
         });
+        if (played) {
+            this.manager.emit("playerTriggeredBack", this, lastTrack);
+            this.manager.emit("debug", `Moonlink.js > Player#back >> Successfully went back for guild ${this.guildId}`);
+        }
+        else {
+            this.manager.emit("debug", `Moonlink.js > Player#back >> Failed to play previous track for guild ${this.guildId}.`);
+        }
+        return played;
     }
 }
 exports.Player = Player;

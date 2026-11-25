@@ -1,11 +1,9 @@
-import type { SourceHealthSnapshotEvent, SourceHealthChangeEvent } from '../backends/NodeLinkContracts';
 import { Node } from "../entities/Node";
 import { Player } from "../entities/Player";
 import { Track } from "../entities/Track";
 import { Filters } from "../entities/Filters";
 import { NodeState, PlayerLoop, TrackEndReason, NodeSortStrategy, TPartialTrackProperties } from "./types";
-import type { AuroraEventOptions } from '../logging/AuroraEvents';
-import type { OpenTelemetryOptions } from '../observability/OpenTelemetry';
+import type { LoggerOptions } from '../logging/Logger';
 import type { FailoverOptions } from '../nodes/NodeFailover';
 import type { StorageAdapter } from '../database/StorageAdapter';
 import type { BackendKind } from '../backends/BackendAdapter';
@@ -13,7 +11,6 @@ import type { TrackSnapshot } from '../tracks/TrackCodec';
 import type { NodeRequirements } from '../nodes/NodeSelector';
 import type { CircuitBreakerOptions } from '../nodes/NodeCircuitBreaker';
 export interface IManagerEvents {
-    extensionError: (name: string, error: import('../extensions/ExtensionHost').ExtensionLifecycleError) => void;
     debug: (message: string) => void;
     nodeCreate: (node: Node) => void;
     nodeReady: (node: Node, payload: any) => void;
@@ -26,8 +23,6 @@ export interface IManagerEvents {
     nodeDestroy: (identifier: string) => void;
     nodeRaw: (node: Node, payload: any) => void;
     nodeStateChange: (node: Node, oldState: NodeState, newState: NodeState) => void;
-    sourceHealthSnapshot: (node: Node, event: SourceHealthSnapshotEvent) => void;
-    sourceHealthChange: (node: Node, event: SourceHealthChangeEvent) => void;
     playerCreate: (player: Player) => void;
     playerDestroy: (player: Player, reason?: string) => void;
     playerUpdate: (player: Player, track: Track | null, payload: any) => void;
@@ -60,7 +55,6 @@ export interface IManagerEvents {
     playerRecoveryStarted: (player: Player) => void;
     playerRecoverySuccess: (player: Player) => void;
     playerRecoveryFailed: (player: Player) => void;
-    guildOwnershipLost: (guildId: string, fencingToken: number, reason: string) => void;
     playersMoved: (players: Player[], oldNode: Node, newNode: Node) => void;
     playersOrphaned: (players: Player[], deadNode: Node) => void;
     playerNodeFailover: (player: Player, report: INodeFailoverReport) => void;
@@ -68,7 +62,7 @@ export interface IManagerEvents {
     playerTriggeredPause: (player: Player) => void;
     playerTriggeredResume: (player: Player) => void;
     playerTriggeredStop: (player: Player) => void;
-    playerTriggeredSkip: (player: Player, oldTrack: Track | null, currentTrack: Track, position: number) => void;
+    playerTriggeredSkip: (player: Player, oldTrack: Record<string, any>, currentTrack: Track, position: number) => void;
     playerTriggeredSeek: (player: Player, position: number) => void;
     playerTriggeredShuffle: (player: Player, oldQueue: Record<string, any>, currentQueue: Track[]) => void;
     playerTriggeredBack: (player: Player, track: Track) => void;
@@ -96,14 +90,12 @@ export interface IManagerEvents {
     eternalBoxInfo: (player: Player, payload?: any) => void;
     eternalBoxJump: (player: Player, payload?: any) => void;
 }
-export type FailoverReasonCode = 'source-cleanup-failed' | 'intent-cancelled' | 'restart-rejected' | 'migration-error';
 export interface INodeFailoverReport {
     source: string;
     target: string;
     status: 'in-progress' | 'recovered' | 'failed' | 'cancelled';
     positionMs?: number;
     reason?: string;
-    reasonCode?: FailoverReasonCode;
 }
 export interface IManagerNodeConfig {
     readyTimeoutMs?: number;
@@ -120,9 +112,9 @@ export interface IManagerNodeConfig {
     priority?: number;
 }
 export interface IManagerOptionsConfig {
-    recommendations?: import('../autoplay/RecommendationPreference').RecommendationPreferences;
-    logging?: AuroraEventOptions;
-    telemetry?: OpenTelemetryOptions;
+    logging?: LoggerOptions & {
+        banner?: boolean;
+    };
     clientName?: string;
     userAgent?: string;
     noReplace?: boolean;
@@ -142,7 +134,7 @@ export interface IManagerOptionsConfig {
     playerHealth?: IPlayerHealthOptions;
     trackPartial?: TPartialTrackProperties[];
     database?: {
-        type: 'memory' | 'local' | 'external';
+        type: 'memory' | 'local';
         adapter?: StorageAdapter;
         options?: any;
     };
@@ -179,9 +171,6 @@ export interface INodeOptions {
     autoRebalance?: boolean;
 }
 export interface ISearchOptions {
-    deduplicate?: boolean;
-    trackResolution?: import('../tracks/MetadataTrackResolver').MetadataResolutionOptions;
-    sourceHealth?: boolean;
     timeoutMs?: number;
     fallbackPlatforms?: string[];
     cache?: {

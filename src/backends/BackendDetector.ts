@@ -1,3 +1,4 @@
+import { hasLavaDSPXPlugin } from './LavaDSPXContracts';
 import type { BackendAdapter, BackendPlugin } from './BackendAdapter';
 import { LavalinkAdapter } from './LavalinkAdapter';
 import { NodeLinkAdapter } from './NodeLinkAdapter';
@@ -43,6 +44,11 @@ export class BackendDetector {
         // Presence of the flag advertises the diagnostic endpoint, even when monitoring is disabled.
         if (nodeLink && typeof object(data.sourceHealth)?.enabled === 'boolean') capabilities.add('source-health');
         const metadata = [...plugins.values()];
+        if (!nodeLink) {
+            if (hasLavaDSPXPlugin(metadata)) capabilities.add('lavadspx');
+            if (metadata.some(plugin => ['lavasrc', 'lavasrc-plugin'].includes(plugin.name.toLowerCase()))) capabilities.add('lavasrc');
+            // Plugin installation alone does not establish optional HTTP endpoint availability.
+        }
         return nodeLink ? new NodeLinkAdapter(version, capabilities, metadata) : new LavalinkAdapter(version, capabilities, metadata);
     }
 }

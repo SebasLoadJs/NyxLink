@@ -88,6 +88,7 @@ export interface IManagerEvents {
     trackEnd: (player: Player, track: Track, reason: TrackEndReason, payload?: any) => void;
     trackStuck: (player: Player, track: Track, threshold: number, payload?: any) => void;
     trackException: (player: Player, track: Track, exception: any, payload?: any) => void;
+    sponsorBlockEvent: (player: Player, observation: import('../backends/SponsorBlockEvents').SponsorBlockObservation) => void;
     mixStart: (player: Player, mixId: string, track: Track, volume: number, payload?: any) => void;
     mixEnd: (player: Player, mixId: string, reason: string, payload?: any) => void;
     lyricsNotFound: (player: Player, payload?: any) => void;
@@ -121,6 +122,12 @@ export interface INodeFailoverReport {
     positionMs?: number;
     reason?: string;
     reasonCode?: FailoverReasonCode;
+    /** Remembered native controls that could not be sent to the destination. */
+    suspendedFeatures?: readonly string[];
+    /** A manual source-node preload must be requested again. */
+    manualPreloadDiscarded?: boolean;
+    /** Optional explicit mixer reconstruction; never claims seamless layer resume. */
+    mixRecovery?: import('../players/MixRecovery').MixRecoveryReport;
 }
 
 export interface IManagerNodeConfig {
@@ -140,6 +147,7 @@ export interface IManagerNodeConfig {
 
 export interface IManagerOptionsConfig {
     recommendations?: import('../autoplay/RecommendationPreference').RecommendationPreferences;
+    recommendationDiscovery?: import('../autoplay/RecommendationDiscovery').RecommendationDiscoveryOptions;
     /** Canonical Aurora logging; absent or silent means no output. */
     logging?: AuroraEventOptions;
     telemetry?: OpenTelemetryOptions;
@@ -191,6 +199,7 @@ export interface INodeOptions {
     recoveryQueueLimit?: number;
     circuitBreaker?: CircuitBreakerOptions | false;
     failover?: FailoverOptions;
+    mixRecovery?: import('../players/MixRecovery').MixRecoveryOptions;
     maxStatsAgeMs?: number;
     selectionStrategy?: NodeSortStrategy;
     retryDelay?: number;

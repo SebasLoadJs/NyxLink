@@ -8,40 +8,23 @@ const DatabaseManager_1 = require("../managers/DatabaseManager");
 const __1 = require("../..");
 const spotify_1 = require("../sources/spotify");
 const deezer_1 = require("../sources/deezer");
-const AuroraEvents_1 = require("../logging/AuroraEvents");
-const ManagerLogRoute_1 = require("../logging/ManagerLogRoute");
-const OpenTelemetry_1 = require("../observability/OpenTelemetry");
-const ExtensionHost_1 = require("../extensions/ExtensionHost");
-const PrivateMetricsServer_1 = require("../observability/PrivateMetricsServer");
-const PerformanceMonitor_1 = require("../observability/PerformanceMonitor");
-const GuildOwnership_1 = require("../cluster/GuildOwnership");
+const Logger_1 = require("../logging/Logger");
 class Manager extends Util_1.EventEmitter {
     initialized = false;
     options;
-    missingSend = () => { throw new Error('No Discord gateway sender configured'); };
     send;
-    clientId = "";
+    clientId;
     nodes;
     players;
-    guildOwnership;
-    databaseInstance;
-    get database() {
-        if (!this.databaseInstance)
-            throw new Error('Manager database is not initialized');
-        return this.databaseInstance;
-    }
-    set database(database) { this.databaseInstance = database; }
-    aurora;
-    telemetry;
-    performanceMonitor;
-    extensionHost;
+    database;
+    logger;
+    detachLogging;
     idleCheckInterval;
     initializationPromise;
     shutdownPromise;
     shuttingDown = false;
     connectors = new Set();
     searches;
-    privateMetricsServers = new Set();
     get destroyed() { return this.shuttingDown; }
     spotifySource;
     deezerSource;
@@ -56,7 +39,7 @@ class Manager extends Util_1.EventEmitter {
         (0, Util_1.validate)(config, (value) => value != null, "Manager constructor requires a config object.");
         (0, Util_1.validate)(config.nodes, (value) => Array.isArray(value) && value.length > 0, "Manager config requires a non-empty nodes array.");
         (0, Util_1.validate)(config.options, (value) => value == null || (typeof value === "object" && !Array.isArray(value)), "Manager config 'options' must be a plain object if provided.");
-        this.send = config.send ?? this.missingSend;
+        this.send = config.send || null;
         this.options = {
             clientName: `NyxLink/${__1.version} (https://github.com/SebasLoadJs/NyxLink)`,
             userAgent: `NyxLink/${__1.version} (https://github.com/SebasLoadJs/NyxLink)`,
@@ -142,66 +125,26 @@ class Manager extends Util_1.EventEmitter {
                 ...config.options?.database
             }
         };
-        if (Object.hasOwn(config.options ?? {}, 'aurora'))
-            throw new TypeError('Use options.logging for Aurora');
-        const canonicalLogging = this.options.logging;
-        if (canonicalLogging && Object.keys(canonicalLogging).some(key => !['level', 'target', 'categories', 'traceContext'].includes(key)))
-            throw new TypeError('Unsupported logging option: use the canonical Aurora configuration');
         this.searches = new SearchService_1.SearchService(this, query => this.resolveNativeSource(query));
         Util_1.Structure.setManager(this);
         this.nodes = new (Util_1.Structure.get("NodeManager"))(this, config.nodes);
         this.players = new (Util_1.Structure.get("PlayerManager"))(this);
-        if (this.options.telemetry)
-            this.telemetry = new OpenTelemetry_1.OpenTelemetry(this, this.options.telemetry);
-        if (canonicalLogging) {
-            this.aurora = new AuroraEvents_1.AuroraEvents(canonicalLogging);
-            this.aurora.attach(this);
+        if (this.options.logging) {
+            this.logger = new Logger_1.Logger(this.options.logging);
+            this.detachLogging = this.logger.attachManager(this);
+            if (this.options.logging.banner)
+                this.logger.banner();
         }
-    }
-    useGuildLeases(options) {
-        if (this.destroyed || this.guildOwnership || this.players.size > 0) {
-            throw new Error('Guild leases must be enabled once, before creating players');
-        }
-        this.guildOwnership = new GuildOwnership_1.GuildOwnership(this, options);
-        return this;
-    }
-    async startPrivateMetricsServer(options) {
-        if (this.destroyed)
-            throw new Error('Manager is shut down');
-        const endpoint = new PrivateMetricsServer_1.PrivateMetricsServer(this, options);
-        await endpoint.listen();
-        if (this.destroyed) {
-            await endpoint.close();
-            throw new Error('Manager is shut down');
-        }
-        this.privateMetricsServers.add(endpoint);
-        return endpoint;
     }
     detachLogger() {
-        (0, ManagerLogRoute_1.getManagerLogRoute)(this)?.close();
-    }
-    startPerformanceMonitor(options) {
-        if (this.destroyed)
-            throw new Error('Manager is shut down');
-        if (this.performanceMonitor?.running)
-            return this.performanceMonitor;
-        this.performanceMonitor = new PerformanceMonitor_1.PerformanceMonitor(this, options).start();
-        return this.performanceMonitor;
-    }
-    useExtension(extension, options) {
-        if (this.destroyed)
-            return Promise.reject(new Error('Manager is shut down'));
-        this.extensionHost ??= new ExtensionHost_1.ExtensionHost(this);
-        return this.extensionHost.register(extension, options);
-    }
-    removeExtension(name) {
-        return this.extensionHost?.remove(name) ?? Promise.resolve(false);
+        this.detachLogging?.();
+        this.detachLogging = undefined;
     }
     use(connector, client) {
         if (this.destroyed)
             throw new Error('Manager is shut down');
         connector.setManager(this);
-        if (!this.send || this.send === this.missingSend)
+        if (!this.send)
             this.send = connector.send.bind(connector);
         this.connectors.add(connector);
         connector.listen(client);
@@ -228,7 +171,6 @@ class Manager extends Util_1.EventEmitter {
                 if (this.options.playerDestruction?.autoDestroyOnIdle)
                     this.startIdleMonitoring();
                 this.initialized = true;
-                (0, ManagerLogRoute_1.getManagerLogRoute)(this)?.recordInitialized();
                 this.emit('debug', `Moonlink.js > Manager >> Initialized. ClientId: ${this.clientId}`);
                 return this;
             }
@@ -242,7 +184,7 @@ class Manager extends Util_1.EventEmitter {
                 cleanup.push(await this.database.shutdown().then(() => ({ status: 'fulfilled', value: undefined }), reason => ({ status: 'rejected', reason })));
                 const errors = cleanup.filter(result => result.status === 'rejected').map(result => result.reason);
                 if (errors.length)
-                    throw new AggregateError([error, ...errors], `Initialization failed: ${error instanceof Error ? error.message : String(error)}`);
+                    throw new AggregateError([error, ...errors], `Initialization failed: ${error.message}`);
                 throw error;
             }
         });
@@ -256,7 +198,6 @@ class Manager extends Util_1.EventEmitter {
             return this.shutdownPromise;
         this.shuttingDown = true;
         this.searches.close();
-        this.telemetry?.close();
         this.initialized = false;
         if (this.idleCheckInterval)
             clearInterval(this.idleCheckInterval);
@@ -271,23 +212,18 @@ class Manager extends Util_1.EventEmitter {
                     errors.push(error);
                 }
             };
-            await Promise.all([...this.privateMetricsServers].map(endpoint => attempt(() => endpoint.close())));
-            await attempt(() => this.extensionHost?.close());
-            await attempt(() => this.performanceMonitor?.close());
-            this.privateMetricsServers.clear();
             if (this.initializationPromise)
                 await attempt(() => this.initializationPromise);
             await Promise.all(this.players.all.map(player => attempt(() => player.destroy('Manager shutdown'))));
             this.players.players.clear();
-            await attempt(() => this.guildOwnership?.close());
             await Promise.all([...this.nodes.nodes.values()].map(node => attempt(() => node.destroy())));
             this.nodes.nodes.clear();
             for (const connector of this.connectors)
                 await attempt(() => connector.dispose?.());
             this.connectors.clear();
             await attempt(() => this.detachLogger());
-            if (this.databaseInstance)
-                await attempt(() => this.databaseInstance?.shutdown());
+            if (this.database)
+                await attempt(() => this.database.shutdown());
             if (Util_1.Structure.getManager() === this)
                 Util_1.Structure.setManager(undefined);
             if (errors.length)
@@ -310,7 +246,7 @@ class Manager extends Util_1.EventEmitter {
                         await player.destroy('Idle timeout');
                     }
                     catch (error) {
-                        this.emit('debug', `NyxLink > Manager > Idle cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+                        this.emit('debug', `NyxLink > Manager > Idle cleanup failed: ${error.message}`);
                     }
                 }
             }
@@ -374,11 +310,7 @@ class Manager extends Util_1.EventEmitter {
         return null;
     }
     async search(options) {
-        this.performanceMonitor?.recordSearch();
-        const search = () => this.searches.search(options);
-        const route = (0, ManagerLogRoute_1.getManagerLogRoute)(this);
-        const run = () => route ? route.observe('search', search, {}, result => result.isError ? 'failed' : result.tracks.length ? 'completed' : 'empty') : search();
-        return this.telemetry ? this.telemetry.search(run) : run();
+        return this.searches.search(options);
     }
     async packetUpdate(packet) {
         await VoicePacketHandler_1.VoicePacketHandler.handle(this, packet);

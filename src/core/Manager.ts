@@ -248,7 +248,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
             if (this.options.playerDestruction?.autoDestroyOnIdle) this.startIdleMonitoring();
             this.initialized = true;
             getManagerLogRoute(this)?.recordInitialized();
-            this.emit('debug', `Moonlink.js > Manager >> Initialized. ClientId: ${this.clientId}`);
+            this.emit('debug', `NyxLink > Manager >> Initialized. ClientId: ${this.clientId}`);
             return this;
             } catch (error) {
                 this.initialized = false;
@@ -310,7 +310,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
             for (const player of this.players.all) {
                 if (this.destroyed) return;
                 if ((!player.playing || player.paused) && now - player.lastActivityTime >= idleTimeout) {
-                    this.emit("debug", `Moonlink.js > Manager >> Player ${player.guildId} has been idle for ${idleTimeout}ms. Auto-destroying...`);
+                    this.emit("debug", `NyxLink > Manager >> Player ${player.guildId} has been idle for ${idleTimeout}ms. Auto-destroying...`);
                     try { await player.destroy('Idle timeout'); }
                     catch (error) { this.emit('debug', `NyxLink > Manager > Idle cleanup failed: ${error instanceof Error ? error.message : String(error)}`); }
                 }

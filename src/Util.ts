@@ -68,7 +68,7 @@ export function validate<T>(
   errorMessage: string
 ) {
   if (!validator(prop)) {
-    throw new TypeError(`Moonlink.js > ${errorMessage}`);
+    throw new TypeError(`NyxLink > ${errorMessage}`);
   }
 }
 
@@ -609,6 +609,8 @@ export function stringifyWithReplacer(obj: any): string {
 /** NodeLink-only search prefixes. See https://github.com/PerformanC/NodeLink */
 export const nodeLinkSources = new Set([
   "admsearch",
+  "azsearch",
+  "slsearch",
   "amsearch",
   "audiomack",
   "bcsearch",
@@ -629,6 +631,8 @@ export const nodeLinkSources = new Set([
   "spsearch",
   "szsearch",
   "tdsearch",
+  "tdrec",
+  "ytrec",
   "vksearch",
 ]);
 
@@ -638,6 +642,8 @@ export const sources = {
   soundcloud: "scsearch",
   local: "local",
   admsearch: "admsearch",
+  azsearch: "azsearch",
+  slsearch: "slsearch",
   amsearch: "amsearch",
   audiomack: "audiomack",
   bcsearch: "bcsearch",
@@ -658,6 +664,8 @@ export const sources = {
   spsearch: "spsearch",
   szsearch: "szsearch",
   tdsearch: "tdsearch",
+  tdrec: "tdrec",
+  ytrec: "ytrec",
   vksearch: "vksearch",
 };
 

@@ -1,3 +1,4 @@
+import { captureMixRecovery, restoreMixRecovery, type MixRecoveryReport } from './MixRecovery';
 import type { FailoverReasonCode } from '../typings/Interfaces';
 import type { Player } from '../entities/Player';
 import type { Node } from '../entities/Node';
@@ -22,11 +23,14 @@ export interface MigrationStageObservation {
 
 /** Internal restart path: the caller already owns the player's command queue. */
 export const migrationRestart: unique symbol = Symbol('migrationRestart');
-export type RestartOptions = { destroyOnFailure?: boolean; startQueued?: boolean; [migrationRestart]?: boolean };
+export type RestartOptions = { destroyOnFailure?: boolean; startQueued?: boolean; /** @internal */ suspendedFeatures?: string[]; [migrationRestart]?: boolean };
 
 /** Runs entirely within one player command, including rollback and cleanup. */
 export async function migratePlayer(player: Player, target: Node, ticket: number): Promise<boolean> {
     const source = player.node;
+    const suspendedFeatures: string[] = [];
+    let manualPreloadDiscarded = false;
+    let mixRecovery: MixRecoveryReport | undefined;
     let currentStage: MigrationStage = 'select-target';
     const observe = (stage: MigrationStage, status: MigrationStageObservation['status']) => {
         currentStage = stage;
@@ -38,18 +42,32 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
     // If an object is registered, however, it must keep that exact registry identity.
     const registeredTarget = player.manager.nodes.nodes.get(target.identifier);
     const registeredPlayer = player.manager.players.get(player.guildId);
+    const identity = (node: Node) => ({ session: node.sessionId, socket: node.socket, backend: node.backend, registered: player.manager.nodes.nodes.get(node.identifier) });
+    const sourceIdentity = identity(source), targetIdentity = identity(target);
+    const matchesIdentity = (node: Node, expected: ReturnType<typeof identity>): boolean =>
+        node.sessionId === expected.session && node.socket === expected.socket &&
+        node.backend === expected.backend && player.manager.nodes.nodes.get(node.identifier) === expected.registered;
     const active = () => !player.destroyed && !player.manager.destroyed && target.manager === player.manager &&
         (!registeredTarget || registeredTarget === target) && (!registeredPlayer || registeredPlayer === player) &&
         player.manager.nodes.nodes.get(target.identifier) === registeredTarget &&
         player.manager.players.get(player.guildId) === registeredPlayer &&
-        guard.isCurrent(ticket) && NodeSelector.matches(target, player.nodeSelection);
+        guard.isCurrent(ticket) && matchesIdentity(target, targetIdentity) && NodeSelector.matches(target, player.nodeSelection);
     const report = (status: 'in-progress' | 'recovered' | 'failed' | 'cancelled', reason?: string, reasonCode?: FailoverReasonCode) => {
         player.manager.emit('playerNodeFailover', player, {
             source: source.identifier, target: target.identifier, status, positionMs: player.current?.position, reason, ...(reasonCode ? { reasonCode } : {}),
+            ...(status === 'recovered' && suspendedFeatures.length ? { suspendedFeatures: [...new Set(suspendedFeatures)] } : {}),
+            ...(status === 'recovered' && manualPreloadDiscarded ? { manualPreloadDiscarded: true } : {}),
+            ...(status === 'recovered' && mixRecovery ? { mixRecovery } : {}),
         });
     };
     const cleanup = async (node: Node): Promise<string | undefined> => {
-        try { await node.rest.destroyPlayer(player.guildId, { timeoutMs: 10000 }); }
+        try {
+            // Never delete a player belonging to a replacement backend/session.
+            if (!matchesIdentity(node, node === source ? sourceIdentity : targetIdentity)) {
+                throw new Error('Migration cleanup skipped: backend identity changed');
+            }
+            await node.rest.destroyPlayer(player.guildId, { timeoutMs: 10000 });
+        }
         catch (error) {
             const failure = error instanceof Error ? error : new Error(String(error));
             // A user-supplied event listener must not abort rollback or re-enter
@@ -69,6 +87,9 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
         if (!active() || source === target) return false;
         report('in-progress');
         observe('select-target', 'acknowledged');
+        if (!active()) { report('cancelled', undefined, 'intent-cancelled'); return false; }
+        const mixOptions = player.manager.options.node?.mixRecovery;
+        const mixes = mixOptions && source.isNodeLink ? await captureMixRecovery(player, source, mixOptions, active, guard.signal) : undefined;
         if (!active()) { report('cancelled', undefined, 'intent-cancelled'); return false; }
         const original = player.current;
         observe('resolve-track', 'started');
@@ -127,7 +148,7 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
         // Source acknowledgements cannot prove that the destination is synchronized.
         player.set('lastState', undefined);
         observe('restore-player', 'started');
-        if (!await player.restart({ destroyOnFailure: false, startQueued: false, [migrationRestart]: true }) || !active()) {
+        if (!await player.restart({ destroyOnFailure: false, startQueued: false, suspendedFeatures, [migrationRestart]: true }) || !active()) {
             observe('restore-player', active() ? 'failed' : 'cancelled');
             await runRollback();
             report(guard.isCurrent(ticket) ? 'failed' : 'cancelled', undefined, guard.isCurrent(ticket) ? 'restart-rejected' : 'intent-cancelled');
@@ -150,9 +171,19 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
         observe('persist-snapshot', 'acknowledged');
         committed = true;
         rollback = undefined;
+        // Never replay a source-node reservation. Queue-backed preparation is
+        // recalculated on the new node; a manual reservation must be requested again.
+        try { manualPreloadDiscarded = player.completeAudioMigration?.() ?? false; } catch { /* optional preparation cannot roll back committed ownership */ }
         observe('cleanup-source', 'started');
         const reason = await cleanup(source);
         observe('cleanup-source', reason ? 'failed' : 'acknowledged');
+        if (mixes) {
+            mixRecovery = mixes.report;
+            if (!reason && active()) {
+                try { mixRecovery = await restoreMixRecovery(player, source, target, mixes, active, guard.signal); }
+                catch { /* layer recovery is optional; never roll back committed main playback */ }
+            }
+        }
         // The destination is already committed. Observer exceptions must not
         // turn a successful transfer into a rejected operation or a retry.
         const notify = (callback: () => void): void => {
@@ -160,7 +191,7 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
         };
         notify(() => player.manager.emit('playerSwitchedNode', player, source, target));
         notify(() => report('recovered', reason, reason === undefined ? undefined : 'source-cleanup-failed'));
-        if (original && !player.destroyed && guard.isCurrent(ticket) && player.node === target) {
+        if (original && active() && player.node === target) {
             notify(() => player.manager.emit('playerResumed', player));
         }
         return true;

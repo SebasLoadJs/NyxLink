@@ -3,28 +3,21 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.NodeSelector = void 0;
 const types_1 = require("../typings/types");
 const NodeHealthMonitor_1 = require("./NodeHealthMonitor");
-const NodeScoring_1 = require("./NodeScoring");
 const measured = (value, fallback = Infinity) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback;
 class NodeSelector {
     static validate(selection = {}) {
         const strings = (value) => Array.isArray(value) &&
             Array.from(value).every(item => typeof item === 'string' && item.trim().length > 0);
         if (!selection || typeof selection !== 'object' || Array.isArray(selection) ||
-            selection.preferredNode !== undefined && (typeof selection.preferredNode !== 'string' || !selection.preferredNode.trim()) ||
-            selection.minimumScoreImprovement !== undefined && (!Number.isFinite(selection.minimumScoreImprovement) || selection.minimumScoreImprovement < 0 || !selection.preferredNode) ||
             selection.backend !== undefined && !['lavalink', 'nodelink'].includes(selection.backend) ||
             selection.requiredCapabilities !== undefined && !strings(selection.requiredCapabilities) ||
             selection.exclude !== undefined && !strings(selection.exclude) ||
             selection.allowUnhealthyFallback !== undefined && typeof selection.allowUnhealthyFallback !== 'boolean' ||
             selection.region !== undefined && (typeof selection.region !== 'string' || !selection.region.trim()) ||
             selection.regionPolicy !== undefined && !['prefer', 'require'].includes(selection.regionPolicy) ||
-            selection.regionPolicy === 'require' && selection.region === undefined ||
-            selection.preferSource !== undefined && (typeof selection.preferSource !== 'string' || !/^[\w.-]+$/.test(selection.preferSource)) ||
-            selection.sourceHealthMaxAgeMs !== undefined && (!Number.isSafeInteger(selection.sourceHealthMaxAgeMs) || selection.sourceHealthMaxAgeMs < 1 || selection.sourceHealthMaxAgeMs > 3600000)) {
+            selection.regionPolicy === 'require' && selection.region === undefined) {
             throw new TypeError('Invalid node selection requirements');
         }
-        if (selection.scoreWeights !== undefined)
-            (0, NodeScoring_1.validateScoreWeights)(selection.scoreWeights);
     }
     static rejection(node, selection) {
         const reasons = [];
@@ -94,37 +87,10 @@ class NodeSelector {
         }
         if (!candidates.length)
             return undefined;
-        if (selection.preferSource) {
-            const source = selection.preferSource;
-            const now = Date.now();
-            const maxAge = selection.sourceHealthMaxAgeMs ?? 120000;
-            const rank = (node) => {
-                const entry = node.sourceHealth?.get(source);
-                if (!entry || entry.receivedAt > now || now - entry.receivedAt > maxAge)
-                    return 1;
-                if (entry.health.circuitBreaker === 'OPEN')
-                    return 3;
-                switch (entry.health.status) {
-                    case 'healthy': return 0;
-                    case 'degraded': return 2;
-                    case 'unavailable':
-                    case 'rate_limited':
-                    case 'restricted':
-                    case 'misconfigured': return 3;
-                    default: return 1;
-                }
-            };
-            const ranks = candidates.map(node => rank(node));
-            const best = ranks.reduce((a, b) => Math.min(a, b), Infinity);
-            candidates = candidates.filter((_node, index) => ranks[index] === best);
-        }
         const strategy = options.selectionStrategy ?? 'leastLoad';
-        if (strategy === 'random' && !selection.scoreWeights)
+        if (strategy === 'random')
             return candidates[Math.floor(Math.random() * candidates.length)];
-        const now = Date.now();
         const score = (node) => {
-            if (selection.scoreWeights)
-                return (0, NodeScoring_1.weightedNodeScore)(node, selection.scoreWeights, options.maxStatsAgeMs ?? 120000, now);
             const stats = node.stats;
             switch (strategy) {
                 case 'players':
@@ -138,13 +104,7 @@ class NodeSelector {
                 default: return measured(stats?.players) + measured(stats?.cpu?.systemLoad) * 100;
             }
         };
-        const costs = new Map(candidates.map(node => [node, score(node)]));
-        const best = candidates.reduce((best, node) => costs.get(node) < costs.get(best) ? node : best);
-        const preferred = candidates.find(node => node.identifier === selection.preferredNode);
-        if (preferred && Number.isFinite(costs.get(preferred)) &&
-            costs.get(preferred) - costs.get(best) <= (selection.minimumScoreImprovement ?? 0))
-            return preferred;
-        return best;
+        return candidates.reduce((best, node) => score(node) < score(best) ? node : best);
     }
 }
 exports.NodeSelector = NodeSelector;

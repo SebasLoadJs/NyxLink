@@ -137,3 +137,22 @@ test('canonical normalization ignores inherited fields and never executes access
  assert.equal(touched,0);
  for(const level of ['constructor','toString','__proto__','invalid'])assert.throws(()=>new AuroraEvents({level}),/Invalid Aurora log level/);
 });
+
+test('Aurora distinguishes acknowledged player recovery from incomplete optional audio recovery', async () => {
+    const { manager, events } = fixture();
+    const player = { node: { backend: { kind: 'lavalink' } } };
+    try {
+        manager.emit('mixStart', player, 'private-mix', { title: 'private-track' }, 0.5);
+        manager.emit('sponsorBlockEvent', player, { backend: 'lavalink', kind: 'chaptersLoaded', chapters: [{ name: 'private-chapter' }] });
+        manager.emit('playerNodeFailover', player, { status: 'in-progress' });
+        manager.emit('playerNodeFailover', player, { status: 'recovered', suspendedFeatures: ['private-feature'], mixRecovery: {
+            status: 'partial', captured: 3, restored: [{ sourceId: 'private-source', targetId: 'private-target' }], failed: 1, skipped: 1
+        } });
+        assert.deepEqual(events.map(x => x.event.eventCode), ['MIX_STARTED','CHAPTERS_LOADED','FAILOVER_STARTED','FAILOVER_RECOVERED','AUDIO_FEATURES_SUSPENDED','MIX_RECOVERY_PARTIAL']);
+        assert.equal(events[1].event.sanitizedContext.chapterCount, 1);
+        assert.equal(events[4].event.sanitizedContext.suspendedCount, 1);
+        assert.deepEqual(events[5].event.sanitizedContext, { backend: 'lavalink', mixCaptured: 3, mixRestored: 1, mixFailed: 1, mixSkipped: 1 });
+        assert.equal(events[2].event.operationId, events[5].event.operationId);
+        assert.doesNotMatch(JSON.stringify(events), /private-/);
+    } finally { await manager.shutdown(); }
+});

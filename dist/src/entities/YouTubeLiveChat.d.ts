@@ -45,7 +45,6 @@ export declare class YouTubeLiveChat extends EventEmitter<YouTubeLiveChatEvents>
     private readonly reconnectDelay;
     private readonly maxReconnectAttempts;
     private closedByUser;
-    private reconnectTimer?;
     constructor(node: Node, identifier: string, options?: YouTubeLiveChatOptions);
     connect(): this;
     close(code?: number, reason?: string): void;

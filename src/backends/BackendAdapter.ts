@@ -1,6 +1,6 @@
 import { CapabilityRegistry, type CapabilityDescription, type CapabilityState } from './CapabilityRegistry';
-import { preparePlayerUpdate, type PlayerUpdatePayload } from './ProtocolContracts';
-import { resolveExtensionRoute, type ExtensionOperation, type ExtensionRouteParameters, type ExtensionRoute } from './ExtensionRoutes';
+import { nodeLinkPlayerFeatures, preparePlayerUpdate, type PlayerUpdatePayload } from './ProtocolContracts';
+import { nodeLinkExtensionFeatures, resolveExtensionRoute, type ExtensionOperation, type ExtensionRouteParameters, type ExtensionRoute } from './ExtensionRoutes';
 export type { CapabilityState } from './CapabilityRegistry';
 export type BackendKind = 'lavalink' | 'nodelink';
 export type BackendPlugin = Readonly<{ name: string; version: string }>;
@@ -12,8 +12,16 @@ export abstract class BackendAdapter {
     public readonly registry: CapabilityRegistry;
     public readonly plugins: readonly BackendPlugin[];
 
-    constructor(public readonly version: string, public readonly capabilities: Set<string>, plugins: readonly BackendPlugin[] = []) {
-        this.registry = new CapabilityRegistry(capabilities);
+    constructor(public readonly version: string, public readonly capabilities: Set<string>, plugins: readonly BackendPlugin[] = [], kind?: BackendKind) {
+        const native = new Set<string>([
+            ...nodeLinkPlayerFeatures, ...nodeLinkExtensionFeatures,
+            'nodelink:discovery', 'voiceReceiver', 'youtubeLiveChat',
+            'filter:echo', 'filter:chorus', 'filter:compressor', 'filter:highpass', 'filter:phaser', 'filter:spatial'
+        ]);
+        const pluginsOnly = new Set(['lavasearch', 'lavalyrics', 'lavalink:sponsorblock', 'lavadspx', 'lavasrc']);
+        const known = new Set([...native, ...pluginsOnly]);
+        const unavailable = kind === 'lavalink' ? native : kind === 'nodelink' ? pluginsOnly : new Set<string>();
+        this.registry = new CapabilityRegistry(capabilities, known, unavailable);
         this.plugins = Object.freeze(plugins.map(plugin => Object.freeze({ ...plugin })));
     }
 

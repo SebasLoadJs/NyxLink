@@ -5,5 +5,5 @@ export declare class TrackResolutionError extends Error {
     constructor(message: string);
 }
 export declare class TrackResolver {
-    static resolve(track: Track, target: Node, source?: Node, signal?: AbortSignal): Promise<Track>;
+    static resolve(track: Track, target: Node, source?: Node): Promise<Track>;
 }

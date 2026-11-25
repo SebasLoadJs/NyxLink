@@ -63,6 +63,7 @@ test('a real HTTP Retry-After header reaches the error and suppresses further pl
   const node = new Node(manager, { identifier: 'limited', host: '127.0.0.1', port: server.address().port, password: 'test', secure: false });
   node.connected = true;
   node.state = NodeState.READY;
+  node.sessionId = 'retry-after-fixture-session';
   t.after(async () => {
     await node.destroy();
     server.closeAllConnections();

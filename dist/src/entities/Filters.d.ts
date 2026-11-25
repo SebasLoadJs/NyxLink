@@ -65,7 +65,6 @@ export declare class Filters implements IFilters {
     clear(): this;
     reset(): this;
     toPayload(): IFilters;
-    private normalizeBands;
     apply(): Promise<Player>;
     private mergeFilters;
     private parseString;

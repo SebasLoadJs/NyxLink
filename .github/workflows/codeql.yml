@@ -19,6 +19,11 @@ on:
   schedule:
     - cron: '15 2 * * 0'
 
+# Supersede only automatic development pushes; preserve manual, PR and release checks.
+concurrency:
+  group: codeql-${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' && 'dev-push' || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
+
 jobs:
   analyze:
     name: Analyze

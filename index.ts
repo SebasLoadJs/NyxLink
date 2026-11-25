@@ -1,3 +1,8 @@
+export { readSponsorBlockEvent } from './src/backends/SponsorBlockEvents';
+export type { SponsorBlockObservation, SponsorSegment, SponsorChapter } from './src/backends/SponsorBlockEvents';
+export type { LavaDSPXFilters, LavaDSPXKey, LavaDSPXPassFilter, LavaDSPXEchoFilter, LavaDSPXNormalizationFilter } from './src/backends/LavaDSPXContracts';
+export { readLavaSrcTrackMetadata, readLavaSrcPlaylistMetadata } from './src/backends/LavaSrcMetadata';
+export type { LavaSrcTrackMetadata, LavaSrcPlaylistMetadata, LavaSrcPlaylistType } from './src/backends/LavaSrcMetadata';
 export type * from './src/typings/Interfaces';
 export { NodeState, VoiceConnectionState, LoadType } from './src/typings/types';
 export const version: string = require("../package.json").version as string;
@@ -5,9 +10,12 @@ export { createBanner, formatEntry, formatBox, formatSystemStatus, formatFailove
 export type { DiagnosticContext } from './src/logging';
 export { PerformanceMonitor } from './src/observability/PerformanceMonitor';
 export type { PerformanceMetric, PerformanceMonitorOptions, PerformanceSnapshot, DurationSummary } from './src/observability/PerformanceMonitor';
+export { recommendationProviders } from './src/autoplay/RecommendationDiscovery';
+export type { RecommendationProvider, RecommendationDiscoveryOptions } from './src/autoplay/RecommendationDiscovery';
 export type { RecommendationCandidate, RecommendationPreferences } from './src/autoplay/RecommendationPreference';
 export type { MetadataResolutionOptions } from './src/tracks/MetadataTrackResolver';
 export { diagnoseError } from './src/logging';
+export type { MixRecoveryOptions, MixRecoveryReport } from './src/players/MixRecovery';
 export type { MigrationStage, MigrationStageObservation } from './src/players/PlayerMigration';
 export type { ErrorDiagnostic } from './src/logging';
 export { TerminalDashboard } from './src/observability/TerminalDashboard';
@@ -24,6 +32,12 @@ export type { CapabilityDescription, CapabilityEvidence } from './src/backends/C
 export type { BackendInventoryEntry } from './src/backends/BackendInventory';
 export { ProtocolResponseError } from './src/backends/ProtocolValidation';
 export type { LyricsRequestOptions, SourceHealthStatus, SourceHealthEntry, SourceHealthResponse, SourceHealthEvent, SourceHealthSnapshotEvent, SourceHealthChangeEvent, CrossfadeOptions, QueuePreloadOptions } from './src/backends/NodeLinkContracts';
+export { readHoloTrackMetadata } from './src/backends/HoloTrackMetadata';
+export type { HoloTrackMetadata, HoloAudioTrack } from './src/backends/HoloTrackMetadata';
+export { nodeLinkDiscoveryTypes } from './src/backends/NodeLinkSearchContracts';
+export type { NodeLinkDiscoveryType, NodeLinkDiscoveryOptions } from './src/backends/NodeLinkSearchContracts';
+export { lavaSearchTypes } from './src/backends/LavaSearchContracts';
+export type { LavaSearchType, LavaSearchOptions, LavaSearchCollection, LavaSearchText, LavaSearchResult } from './src/backends/LavaSearchContracts';
 export type { LavaLyricsData, LavaLyricsLine, LavaLyricsOptions } from './src/backends/LavaLyricsContracts';
 export { lavalinkSponsorBlockCategories } from './src/backends/LavalinkSponsorBlockContracts';
 export type { LavalinkSponsorBlockCategory } from './src/backends/LavalinkSponsorBlockContracts';

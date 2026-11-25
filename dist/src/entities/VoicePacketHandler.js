@@ -18,13 +18,13 @@ class VoicePacketHandler {
                 return;
             if (d.channel_id !== null && (typeof d.session_id !== 'string' || !d.session_id))
                 return;
-            manager.emit('debug', `NyxLink > Manager <- Received VOICE_STATE_UPDATE. Guild: ${d.guild_id}, Channel: ${d.channel_id}`);
+            manager.emit('debug', `Moonlink.js > Manager <- Received VOICE_STATE_UPDATE. Guild: ${d.guild_id}, Data: ${JSON.stringify(d)}`);
             await player.voice.handleStateUpdate(d);
         }
         else {
             if (typeof d.token !== 'string' || !d.token || !(d.endpoint === null || typeof d.endpoint === 'string' && d.endpoint.length > 0))
                 return;
-            manager.emit('debug', `NyxLink > Manager <- Received VOICE_SERVER_UPDATE. Guild: ${d.guild_id}, Endpoint available: ${d.endpoint !== null}`);
+            manager.emit('debug', `Moonlink.js > Manager <- Received VOICE_SERVER_UPDATE. Guild: ${d.guild_id}, Data: ${JSON.stringify(d)}`);
             player.voice.handleServerUpdate(d);
         }
     }

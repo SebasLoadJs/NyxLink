@@ -1,12 +1,7 @@
-import type { LyricsRequestOptions, SourceHealthResponse, NodeLinkStreamFormats } from '../backends/NodeLinkContracts';
-import type { LavaLyricsData, LavaLyricsOptions } from '../backends/LavaLyricsContracts';
-import type { LavalinkSponsorBlockCategory } from '../backends/LavalinkSponsorBlockContracts';
-import { SourceHealthMonitor } from '../nodes/SourceHealthMonitor';
 import type { BackendAdapter } from "../backends/BackendAdapter";
 import { NodeCircuitBreaker } from '../nodes/NodeCircuitBreaker';
 import { IManagerNodeConfig, INodeStats, ITrack, ILyricsData, IFilters } from "../typings/Interfaces";
 import type { Manager } from "../core/Manager";
-import type { Player } from "./Player";
 import { Rest } from "./Rest";
 import { type NodeLinkResponse } from "../Util";
 import { WebSocket } from "../services/WebSocket";
@@ -161,7 +156,7 @@ export declare class Node {
     secure: boolean;
     sessionId: string;
     priority?: number;
-    socket?: WebSocket | null;
+    socket: WebSocket;
     stats?: INodeStats;
     statsReceivedAt?: number;
     info?: any;
@@ -169,14 +164,9 @@ export declare class Node {
     isNodeLink: boolean;
     backend?: BackendAdapter;
     private backendReady;
-    private backendGeneration;
-    readonly sourceHealth: SourceHealthMonitor;
-    private backendRefresh?;
-    backendRefreshedAt?: number;
     private authenticationFailed;
     private connecting;
     private readyTimeout?;
-    private readonly voiceReconnectTimers;
     private readonly readyTimeoutMs;
     url: string;
     rest: Rest;
@@ -192,43 +182,12 @@ export declare class Node {
     getPenalties(): number;
     ping(): Promise<number>;
     createYouTubeLiveChat(identifier: string, options?: YouTubeLiveChatOptions): YouTubeLiveChat;
-    getLavalinkSponsorBlockCategories(guildId: string): Promise<LavalinkSponsorBlockCategory[]>;
-    setLavalinkSponsorBlockCategories(guildId: string, categories: LavalinkSponsorBlockCategory[]): Promise<void>;
-    clearLavalinkSponsorBlockCategories(guildId: string): Promise<void>;
-    getLavaLyrics(track: string | ITrack | Track | {
-        encoded?: string;
-    }, options?: LavaLyricsOptions): Promise<LavaLyricsData | null>;
     loadLyrics(track: string | ITrack | Track | {
         encoded?: string;
-    }, options?: string | LyricsRequestOptions): Promise<NodeLinkResponse<ILyricsData | Record<string, any>> | null>;
-    getSourceHealth(): Promise<SourceHealthResponse>;
-    getStreamFormats(track: string | ITrack | Track | {
-        encoded?: string;
-    }, options?: {
-        itag?: number;
-        signal?: AbortSignal;
-        timeoutMs?: number;
-    }): Promise<NodeLinkStreamFormats>;
-    loadSourceStream(track: string | ITrack | Track | {
-        encoded?: string;
-    }, options?: {
-        itag?: number;
-        position?: number;
-        range?: string;
-        signal?: AbortSignal;
-        timeoutMs?: number;
-    }): Promise<{
-        stream: NodeJS.ReadableStream;
-        headers: Record<string, any>;
-        statusCode: number;
-    }>;
+    }, lang?: string): Promise<NodeLinkResponse<ILyricsData | Record<string, any>> | null>;
     loadDirectStream(track: string | ITrack | Track | {
         encoded?: string;
-    }, volume?: number, position?: number, filters?: IFilters | Record<string, any>, options?: {
-        signal?: AbortSignal;
-        timeoutMs?: number;
-        seekMode?: 'server' | 'pcm-trim';
-    }): Promise<{
+    }, volume?: number, position?: number, filters?: IFilters | Record<string, any>): Promise<{
         stream: NodeJS.ReadableStream;
         headers: Record<string, any>;
     }>;
@@ -237,8 +196,6 @@ export declare class Node {
     }, itag?: number | null): Promise<any | null>;
     get address(): string;
     setState(state: NodeState): void;
-    private get sessionStoragePath();
-    private loadStoredSessionId;
     connect(): Promise<void>;
     private calculateReconnectDelay;
     probe(): Promise<boolean>;
@@ -249,16 +206,13 @@ export declare class Node {
     private scheduleResumeUpdateRetry;
     private enableResumeWithRetry;
     private startDisasterRecovery;
-    private invalidateBackendRefresh;
-    private clearBackendMetadata;
-    refreshBackend(): Promise<boolean>;
     protected open(): Promise<void>;
     protected close(event: {
-        code: number;
+        code: any;
         reason: string;
     }): Promise<void>;
     protected message({ data }: {
-        data: string | Buffer;
+        data: any;
     }): Promise<void>;
     protected handleEvent(player: any, payload: LavalinkEventPayload): void;
     private handleWorkerFailed;
@@ -283,15 +237,12 @@ export declare class Node {
     private handleLyricsFound;
     private handleLyricsLine;
     private handleLyricsNotFound;
-    cancelVoiceReconnect(player: Player): void;
-    private clearVoiceReconnects;
-    private recoverSpecialVoiceClose;
     private handleWebSocketClosed;
     updateRecommendations(player: any, track?: Track): Promise<void>;
     handleAutoPlay(player: any, previousTrack: any): Promise<boolean>;
     private handleQueueEnd;
     protected error({ error }: {
-        error: unknown;
+        error: any;
     }): void;
     destroy(): Promise<void>;
     private _resumePlayers;

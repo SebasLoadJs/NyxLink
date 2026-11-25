@@ -8,30 +8,19 @@ const node_fs_1 = require("node:fs");
 const node_path_1 = __importDefault(require("node:path"));
 const Memory_1 = require("./Memory");
 class Local extends Memory_1.Memory {
-    paths;
-    get snapshotPath() {
-        if (!this.paths)
-            throw new Error('Local database is not initialized');
-        return this.paths.snapshot;
-    }
-    get logPath() {
-        if (!this.paths)
-            throw new Error('Local database is not initialized');
-        return this.paths.log;
-    }
+    snapshotPath;
+    logPath;
     tail = Promise.resolve();
     closing = false;
-    initialized = false;
     shutdownPromise;
     compactionTimer;
     async init(manager, options) {
-        if (this.closing || this.paths)
-            throw new Error('Local database cannot be initialized twice');
-        if (typeof manager.clientId !== 'string' || !/^[\w-]+$/.test(manager.clientId))
+        if (!/^[\w-]+$/.test(manager.clientId))
             throw new TypeError('Invalid local database client ID');
         const directory = options?.path ?? manager.options.database?.options?.path
             ?? process.env.MOONLINK_DB_PATH ?? node_path_1.default.join(process.cwd(), '.moonlink', 'data');
-        this.paths = { snapshot: node_path_1.default.join(directory, `data.${manager.clientId}.json`), log: node_path_1.default.join(directory, `data.${manager.clientId}.wal`) };
+        this.snapshotPath = node_path_1.default.join(directory, `data.${manager.clientId}.json`);
+        this.logPath = node_path_1.default.join(directory, `data.${manager.clientId}.wal`);
         await node_fs_1.promises.mkdir(directory, { recursive: true });
         try {
             const snapshot = JSON.parse(await node_fs_1.promises.readFile(this.snapshotPath, 'utf8'));
@@ -40,12 +29,9 @@ class Local extends Memory_1.Memory {
             this.store = snapshot.data;
         }
         catch (error) {
-            if (error instanceof SyntaxError || error instanceof TypeError) {
+            if (error.code !== 'ENOENT') {
                 await node_fs_1.promises.rename(this.snapshotPath, `${this.snapshotPath}.corrupted.${Date.now()}`);
                 manager.emit('debug', `NyxLink > Local > Invalid snapshot preserved; replaying WAL: ${error.message}`);
-            }
-            else if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) {
-                throw error;
             }
             this.store = Object.create(null);
         }
@@ -54,7 +40,7 @@ class Local extends Memory_1.Memory {
             wal = await node_fs_1.promises.readFile(this.logPath, 'utf8');
         }
         catch (error) {
-            if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT'))
+            if (error.code !== 'ENOENT')
                 throw error;
         }
         for (const line of wal.split('\n')) {
@@ -82,9 +68,6 @@ class Local extends Memory_1.Memory {
             }
         }
         await node_fs_1.promises.appendFile(this.logPath, wal && !wal.endsWith('\n') ? '\n' : '', { mode: 0o600 });
-        if (this.closing)
-            throw new Error('Local database is shutting down');
-        this.initialized = true;
         this.compactionTimer = setInterval(() => {
             void this.enqueue(() => this.compact()).catch(error => manager.emit('debug', `NyxLink > Local > Compaction failed: ${error.message}`));
         }, 60000);
@@ -93,8 +76,6 @@ class Local extends Memory_1.Memory {
     enqueue(operation) {
         if (this.closing)
             return Promise.reject(new Error('Local database is shutting down'));
-        if (!this.initialized)
-            return Promise.reject(new Error('Local database is not initialized'));
         const result = this.tail.then(operation);
         this.tail = result.catch(() => undefined);
         return result;
@@ -160,7 +141,7 @@ class Local extends Memory_1.Memory {
             this.closing = true;
             if (this.compactionTimer)
                 clearInterval(this.compactionTimer);
-            this.shutdownPromise = this.tail.then(() => this.initialized ? this.compact() : undefined);
+            this.shutdownPromise = this.tail.then(() => this.compact());
         }
         return this.shutdownPromise;
     }

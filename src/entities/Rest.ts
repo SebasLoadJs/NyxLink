@@ -1,3 +1,6 @@
+import { sessionPath, playerPath } from '../backends/SessionPath';
+import { nodeLinkDiscoveryIdentifier, type NodeLinkDiscoveryOptions } from '../backends/NodeLinkSearchContracts';
+import { hasLavaSearchPlugin, lavaSearchParameters, validateLavaSearch, type LavaSearchOptions, type LavaSearchResult } from '../backends/LavaSearchContracts';
 import { observeOperation } from '../observability/OpenTelemetry';
 import { getManagerLogRoute } from '../logging/ManagerLogRoute';
 import { requireGroupId, requireGuildId, groupCreateBody, groupPatchBody, validateGroup, validateGroups, validateGroupPatch, sponsorOptionsBody, sponsorSegmentsBody, validateSponsorState, type PlayerGroup, type GroupCreate, type GroupPatch, type GroupPatchResult, type SponsorBlockOptions, type SponsorBlockSegment, type SponsorBlockState } from '../backends/NodeLinkOrchestration';
@@ -251,7 +254,7 @@ export class Rest {
     }
 
     public async getPlayers(): Promise<IRESTGetPlayers[] | null> {
-        const res = await this.request<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}/players`, {
+        const res = await this.request<unknown>(`${this.url}${sessionPath(this.node.sessionId)}/players`, {
             method: "GET",
             headers: this.authHeaders
         });
@@ -266,7 +269,7 @@ export class Rest {
     }
 
     public async getPlayer(guildId: string): Promise<IRESTGetPlayers | null> {
-        const res = await this.request<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}`, {
+        const res = await this.request<unknown>(`${this.url}${playerPath(this.node.sessionId, guildId)}`, {
             method: "GET",
             headers: this.authHeaders
         });
@@ -280,7 +283,14 @@ export class Rest {
     }
 
     private async updatePlayerRequest(guildId: string, data: PlayerUpdatePayload, noReplace: boolean): Promise<PlayerUpdateAcknowledgement | null> {
+        requireGuildId(guildId);
+        const requestSession = this.node.sessionId;
+        const requestBackend = this.node.backend;
+        const requestSocket = this.node.socket;
+        playerPath(requestSession, guildId);
         await this.node.manager.guildOwnership?.assertCurrent(guildId);
+        if (this.node.destroyed || this.node.sessionId !== requestSession ||
+            this.node.backend !== requestBackend || this.node.socket !== requestSocket) throw new Error('Player update session changed');
         const payload = this.node.backend ? this.node.backend.preparePlayerUpdate(data) : preparePlayerUpdate(this.node.isNodeLink ? 'nodelink' : 'unknown', data);
         const params = new URLSearchParams();
         if (noReplace) {
@@ -291,12 +301,14 @@ export class Rest {
         const session = this.node.sessionId;
 
         try {
-            const res = await this.node.circuit.run(() => this.request<unknown>(`${this.url}/v4/sessions/${session}/players/${guildId}?${params.toString()}`, {
+            const res = await this.node.circuit.run(() => this.request<unknown>(`${this.url}${playerPath(session, guildId)}?${params.toString()}`, {
                 method: "PATCH",
                 headers: this.jsonHeaders,
                 body: payload,
                 throwOnError: true
             }, undefined, 0));
+            if (this.node.destroyed || this.node.sessionId !== requestSession ||
+                this.node.backend !== requestBackend || this.node.socket !== requestSocket) throw new Error('Player update session changed');
             if (res === undefined || res === null) return null;
             validatePlayerAcknowledgement(res, guildId);
             return res;
@@ -304,6 +316,7 @@ export class Rest {
             if (error instanceof HttpError && error.statusCode === 404 &&
                 owner && !owner.destroyed && !this.node.destroyed && owner.node === this.node &&
                 this.node.manager.players.get(guildId) === owner && this.node.sessionId === session &&
+                this.node.backend === requestBackend && this.node.socket === requestSocket &&
                 playbackGuard(owner).isCurrent(intent!) && !this.sessionRecoveries.has(owner)) {
                 this.sessionRecoveries.add(owner);
                 void this.triggerPlayerRecovery(owner)
@@ -315,22 +328,39 @@ export class Rest {
     }
 
     public async destroyPlayer(guildId: string, options?: { timeoutMs?: number; signal?: AbortSignal }): Promise<void> {
+        requireGuildId(guildId);
+        const session = this.node.sessionId, backend = this.node.backend, socket = this.node.socket;
+        const path = playerPath(session, guildId);
         await this.node.manager.guildOwnership?.assertCurrent(guildId);
+        if (this.node.sessionId !== session || this.node.backend !== backend || this.node.socket !== socket) throw new Error('Player cleanup session changed');
         const timeout = options?.timeoutMs ?? 10000;
         if (options && (!Number.isFinite(timeout) || timeout <= 0 || timeout > 60000)) throw new TypeError('Cleanup timeout must be within 1..60000 ms');
         try {
-            await this.request(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}`, {
+            await this.request(`${this.url}${path}`, {
                 method: "DELETE",
                 headers: this.authHeaders,
                 signal: options?.signal,
                 throwOnError: options !== undefined
             }, options ? timeout : undefined, options ? 0 : undefined);
         } catch (error) {
-            const err = error as Error;
-            if (!err.message.includes('status 404')) {
-                throw error;
-            }
+            if (!(error instanceof HttpError) || error.statusCode !== 404) throw error;
         }
+    }
+
+    /** Native NodeLink discovery. Returned entities are not guaranteed playable. */
+    public async loadNodeLinkSearch(query: string, options: NodeLinkDiscoveryOptions = {}): Promise<IRESTLoadTracks> {
+        const identifier = nodeLinkDiscoveryIdentifier(query, options);
+        const backend = this.node.backend;
+        if (backend?.kind !== 'nodelink') throw new FeatureUnavailableError('nodelink:discovery', backend?.kind ?? 'unknown');
+        const session = this.node.sessionId;
+        const socket = this.node.socket;
+        options.signal?.throwIfAborted();
+        const result = await this.loadTracks(identifier, { timeoutMs: options.timeoutMs ?? 10000, signal: options.signal });
+        options.signal?.throwIfAborted();
+        if (this.node.destroyed || this.node.backend !== backend || this.node.sessionId !== session || this.node.socket !== socket) {
+            throw new Error('NodeLink discovery session changed');
+        }
+        return result;
     }
 
     public async loadTracks(identifier: string, options?: { timeoutMs: number; signal?: AbortSignal }): Promise<IRESTLoadTracks> {
@@ -443,7 +473,7 @@ export class Rest {
     }
 
     public async updateSession(resuming: boolean, timeout: number): Promise<SessionUpdateResponse | null> {
-        const res = await this.request<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}`, {
+        const res = await this.request<unknown>(`${this.url}${sessionPath(this.node.sessionId)}`, {
             method: "PATCH",
             headers: this.jsonHeaders,
             body: {
@@ -511,6 +541,36 @@ export class Rest {
      * The 204 No Content response maps to null; this method does not subscribe
      * to live lyric events or guarantee that a provider has lyrics.
      */
+    /** Advanced Lavalink search; distinct from NodeLink's source modifiers. */
+    public async loadSearch(query: string, options: LavaSearchOptions = {}): Promise<LavaSearchResult | null> {
+        const params = lavaSearchParameters(query, options);
+        const backend = this.node.backend;
+        if (backend?.kind !== 'lavalink' || !hasLavaSearchPlugin(backend.plugins) ||
+            backend.featureStatus('lavasearch') === 'unavailable') {
+            throw new FeatureUnavailableError('lavasearch', backend?.kind ?? 'unknown');
+        }
+        const socket = this.node.socket;
+        const session = this.node.sessionId;
+        const current = () => !this.node.destroyed && this.node.backend === backend &&
+            this.node.socket === socket && this.node.sessionId === session;
+        options.signal?.throwIfAborted();
+        const result = await this.node.circuit.run(async () => {
+            try {
+                return await this.request<unknown>(this.url + '/v4/loadsearch?' + params.toString(), {
+                    method: 'GET', headers: this.authHeaders, throwOnError: true,
+                    noContentAsNull: true, signal: options.signal
+                }, options.timeoutMs ?? 10000, 0);
+            } catch (error) {
+                this.featureError('lavasearch', error, backend, current);
+            }
+        });
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('LavaSearch backend session changed');
+        if (result !== null) validateLavaSearch(result);
+        backend.recordFeature('lavasearch', 'available');
+        return result;
+    }
+
     public async getLavaLyrics(encodedTrack: string, options?: LavaLyricsOptions): Promise<LavaLyricsData | null> {
         const params = lavaLyricsParameters(encodedTrack, options);
         const backend = this.node.backend;

@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ansi = ansi;
-exports.redactSecrets = redactSecrets;
 exports.formatValue = formatValue;
 exports.formatArgs = formatArgs;
 exports.formatBox = formatBox;
@@ -13,63 +12,15 @@ const LogLevels_1 = require("./LogLevels");
 function ansi(text, code, enabled) {
     return enabled ? `\x1b[${code}m${text}\x1b[0m` : text;
 }
-function redactUrlCredentials(value) {
-    const isLetter = (code) => (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
-    const isDigit = (code) => code >= 48 && code <= 57;
-    const isScheme = (code) => isLetter(code) || isDigit(code) ||
-        code === 43 || code === 45 || code === 46;
-    const isWord = (code) => isLetter(code) || isDigit(code) || code === 95;
-    let from = 0;
-    let copied = 0;
-    let output = '';
-    while (true) {
-        const separator = value.indexOf('://', from);
-        if (separator < 0)
-            break;
-        let start = separator;
-        while (start > 0 && isScheme(value.charCodeAt(start - 1)))
-            start--;
-        if (start === separator || !isLetter(value.charCodeAt(start)) ||
-            (start > 0 && isWord(value.charCodeAt(start - 1)))) {
-            from = separator + 3;
-            continue;
-        }
-        let end = separator + 3;
-        let credentialSeparator = -1;
-        while (end < value.length) {
-            const code = value.charCodeAt(end);
-            if (code === 47 || code === 64 || code <= 32 || code === 127)
-                break;
-            if (code === 58 && credentialSeparator < 0)
-                credentialSeparator = end;
-            end++;
-        }
-        if (value.charCodeAt(end) === 64 && credentialSeparator > separator + 3 &&
-            credentialSeparator < end - 1) {
-            output += value.slice(copied, separator + 3) + '[REDACTED]@';
-            copied = end + 1;
-            from = end + 1;
-        }
-        else {
-            from = separator + 3;
-        }
-    }
-    return output + value.slice(copied);
-}
-const secretKey = /^(?:authorization|password|passwd|passphrase|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|session[_-]?id|token)$/i;
-const assignment = /((?:^|[^a-z0-9_-])(?:["']?)(?:authorization|password|passwd|passphrase|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|session[_-]?id|token)(?:["']?)\s*[:=]\s*)(\[(?:REDACTED)\]|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|\x60(?:\\[\s\S]|[^\x60\\])*\x60|(?:Bearer\s+)?[^\s,}\]&]+)/gi;
-function redactSecrets(value) {
-    return redactUrlCredentials(value).replace(assignment, (_match, prefix) => prefix + '[REDACTED]')
-        .replace(/\bBearer\s+[A-Za-z0-9._~+\/=-]+/gi, 'Bearer [REDACTED]');
-}
 function formatValue(value) {
-    const raw = typeof value === 'string' ? value :
-        (0, node_util_1.inspect)(value, { depth: 5, colors: false, compact: true, breakLength: 110,
-            customInspect: false, getters: false });
-    return redactSecrets(raw);
+    if (value instanceof Error)
+        return value.stack || value.message;
+    if (typeof value === 'string')
+        return value;
+    return (0, node_util_1.inspect)(value, { depth: 5, colors: false, compact: true, breakLength: 110 });
 }
 function formatArgs(args) {
-    return redactSecrets(args.map(formatValue).join(' '));
+    return args.map(formatValue).join(' ');
 }
 function padRight(text, length) {
     return text + ' '.repeat(Math.max(0, length - [...text].length));
@@ -95,11 +46,11 @@ function splitToWidth(text, width) {
     return output;
 }
 function formatBox(title, details = {}, width = 70) {
-    const innerWidth = Math.max(16, Math.min(108, Math.floor(Number.isFinite(width) ? width : 70) - 4));
-    const lines = [redactSecrets(title).toUpperCase(), ''];
+    const innerWidth = Math.max(30, Math.min(108, Math.floor(width) - 4));
+    const lines = [title.toUpperCase(), ''];
     for (const [key, value] of Object.entries(details)) {
-        const label = redactSecrets(key).padEnd(13, ' ');
-        lines.push(`${label}: ${secretKey.test(key.trim()) ? '[REDACTED]' : formatValue(value)}`);
+        const label = key.padEnd(13, ' ');
+        lines.push(`${label}: ${formatValue(value)}`);
     }
     const inner = lines.flatMap((line) => splitToWidth(line, innerWidth));
     const output = [`┌${'─'.repeat(innerWidth + 2)}┐`];
@@ -110,9 +61,9 @@ function formatBox(title, details = {}, width = 70) {
 }
 function formatEntry(entry, options = {}) {
     const color = options.color ?? false;
-    const type = redactSecrets(entry.type || 'log').toUpperCase();
+    const type = (entry.type || 'log').toUpperCase();
     const time = options.timestamps === false ? '' : `[${(entry.date ?? new Date()).toLocaleTimeString('en-GB', { hour12: false })}] `;
-    const tag = entry.tag ? `[${redactSecrets(entry.tag)}] ` : '';
+    const tag = entry.tag ? `[${entry.tag}] ` : '';
     const label = type.padEnd(7, ' ');
     const prefix = `${ansi(time, 90, color)}${ansi(label, LogLevels_1.logColors[type] ?? 37, color)} ${ansi(tag, 36, color)}`;
     const msg = formatArgs(entry.args);
@@ -124,10 +75,9 @@ function formatEntry(entry, options = {}) {
     return prefix + msg.split(/\r?\n/).join(`\n${indent}`);
 }
 function panel(title, content, width) {
-    const w = Math.max(20, Math.min(106, Math.floor(Number.isFinite(width) ? width : 72)));
+    const w = Math.max(44, Math.min(106, Math.floor(width)));
     const lineWidth = w - 4;
-    const visibleTitle = [...title].slice(0, w - 5).join('');
-    const header = `┌─ ${visibleTitle} ${'─'.repeat(Math.max(0, w - [...visibleTitle].length - 5))}┐`;
+    const header = `┌─ ${title} ${'─'.repeat(Math.max(0, w - title.length - 5))}┐`;
     const rows = content.flatMap(x => splitToWidth(x, lineWidth)).map(s => `│ ${padRight(s, lineWidth)} │`);
     return [header, ...rows, `└${'─'.repeat(w - 2)}┘`].join('\n');
 }
@@ -149,10 +99,10 @@ function formatSystemStatus(nodes, options = {}) {
     if (!nodes.length)
         lines.push('No audio nodes configured');
     for (const node of nodes) {
-        lines.push(`${redactSecrets(node.backend).toUpperCase()} · ${redactSecrets(node.name)}`);
+        lines.push(`${node.backend.toUpperCase()} · ${node.name}`);
         const latency = node.latencyMs == null ? 'latency --' : `${node.latencyMs}ms`;
         const players = node.players == null ? 'players --' : `${node.players} players`;
-        lines.push(`  ${redactSecrets(node.state).toUpperCase()}   ${latency} · ${players}`);
+        lines.push(`  ${node.state.toUpperCase()}   ${latency} · ${players}`);
         lines.push('');
     }
     if (lines[lines.length - 1] === '')
@@ -173,11 +123,11 @@ function formatFailover(event, options = {}) {
         recovered: 'Recovered', failed: 'Failed', 'in-progress': 'In progress', cancelled: 'Cancelled'
     };
     const lines = [
-        `Source       ${redactSecrets(event.source)}`,
-        `Target       ${redactSecrets(event.target)}`,
+        `Source       ${event.source}`,
+        `Target       ${event.target}`,
         ...event.positionMs === undefined ? [] : [`Position     ${formatDuration(event.positionMs)}`],
-        ...event.guildId ? [`Guild        ${redactSecrets(event.guildId)}`] : [],
-        ...event.reason ? [`Reason       ${redactSecrets(event.reason)}`] : [],
+        ...event.guildId ? [`Guild        ${event.guildId}`] : [],
+        ...event.reason ? [`Reason       ${event.reason}`] : [],
         `Status       ${states[event.status]}`,
     ];
     let output = panel('NYXLINK • NODE FAILOVER', lines, options.width ?? 72);

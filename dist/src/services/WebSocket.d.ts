@@ -9,8 +9,6 @@ export declare class WebSocket extends EventEmitter {
     private buffer;
     private fragmentedPayload;
     private fragmentedOpCode;
-    private fragmentedBytes;
-    private readonly MAX_MESSAGE_BYTES;
     private redirectCount;
     private readonly MAX_REDIRECTS;
     private pingInterval;
@@ -27,7 +25,6 @@ export declare class WebSocket extends EventEmitter {
     });
     private connectBun;
     private connectNode;
-    private failConnection;
     private nextPingPayload;
     private startHeartbeat;
     private stopHeartbeat;

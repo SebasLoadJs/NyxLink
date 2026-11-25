@@ -56,6 +56,8 @@ async function main() {
     assert.equal(actual.name, manifest.name); assert.equal(actual.version, manifest.version); assert.equal(actual.private, manifest.private);
     assert.deepEqual(actual.publishConfig, manifest.publishConfig);
     assert.deepEqual(actual.dependencies, manifest.dependencies);
+    assert.equal(actual.peerDependencies, undefined, 'Core consumers must not inherit optional Aurora tooling constraints');
+    assert.equal(actual.peerDependenciesMeta, undefined);
     const license = await fs.readFile(path.join(installed, 'LICENSE'));
     assert.deepEqual(license, await fs.readFile(path.join(root, 'LICENSE')));
     const attribution = await fs.readFile(path.join(installed, 'NOTICE.md'), 'utf8');

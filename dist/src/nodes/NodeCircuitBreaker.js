@@ -68,16 +68,8 @@ class NodeCircuitBreaker {
         }
         catch (error) {
             if (generation === this.generation) {
-                if (this.status === 'half-open') {
-                    const cancelled = error?.name === 'AbortError' ||
-                        error?.code === 'ABORT_ERR';
-                    if (cancelled) {
-                        this.status = 'open';
-                        this.generation++;
-                    }
-                    else
-                        this.open(error);
-                }
+                if (this.status === 'half-open')
+                    this.open(error);
                 else if (this.failure(error)) {
                     if (this.serverDelay(error) !== undefined) {
                         this.open(error);

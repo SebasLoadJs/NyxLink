@@ -70,7 +70,7 @@ class SpotifySource {
         if (this.tokenInitialized && this.getActiveToken())
             return true;
         if (this.options.accessToken) {
-            this.setAccessToken(this.options.accessToken, this.options.accessTokenExpiresAt ?? undefined);
+            this.setAccessToken(this.options.accessToken, this.options.accessTokenExpiresAt ?? null);
             this.tokenInitialized = true;
             return true;
         }

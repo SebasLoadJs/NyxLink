@@ -17,30 +17,6 @@ class PlayerManager {
     create(options) {
         return this.createOnNode(options, false);
     }
-    async createOwned(options) {
-        return this.createWithLease(options, false);
-    }
-    async restoreOwned(options) {
-        return this.createWithLease(options, true);
-    }
-    async createWithLease(options, restoring) {
-        const ownership = this.manager.guildOwnership;
-        if (!ownership)
-            throw new Error('Call manager.useGuildLeases() before createOwned or restoreOwned');
-        if (this.players.has(options.guildId) && !ownership.localLease(options.guildId)) {
-            throw new Error('A local player exists without a valid guild lease');
-        }
-        const lease = await ownership.acquire(options.guildId);
-        try {
-            return this.createOnNode(options, restoring);
-        }
-        catch (error) {
-            if (!this.players.has(options.guildId)) {
-                await ownership.release(options.guildId, lease);
-            }
-            throw error;
-        }
-    }
     restore(options) {
         (0, Util_1.validate)(options.node, value => typeof value === 'string' && value.length > 0, 'Session restoration requires a node identifier');
         return this.createOnNode(options, true);
@@ -50,7 +26,6 @@ class PlayerManager {
             throw new Error('Manager is shut down');
         (0, Util_1.validate)(options.guildId, (v) => typeof v === "string" && /^\d{17,20}$/.test(v), "IPlayerConfig#guildId must be a valid Discord Snowflake string.");
         (0, Util_1.validate)(options.voiceChannelId, (v) => typeof v === "string" && /^\d{17,20}$/.test(v), "IPlayerConfig#voiceChannelId must be a valid Discord Snowflake string.");
-        this.manager.guildOwnership?.assertLocal(options.guildId);
         if (options.textChannelId) {
             (0, Util_1.validate)(options.textChannelId, (v) => typeof v === "string" && /^\d{17,20}$/.test(v), "IPlayerConfig#textChannelId must be a valid Discord Snowflake string.");
         }

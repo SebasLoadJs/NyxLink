@@ -6,9 +6,14 @@ const coreFeatures = ['tracks:load', 'tracks:decode', 'player:update', 'session:
 
 export class CapabilityRegistry {
     private readonly observations = new Map<string, CapabilityState>();
-    constructor(private readonly advertised: ReadonlySet<string>) {}
+    constructor(
+        private readonly advertised: ReadonlySet<string>,
+        private readonly known: ReadonlySet<string> = new Set(),
+        private readonly unavailable: ReadonlySet<string> = new Set(),
+    ) {}
 
     public describe(feature: string): CapabilityDescription {
+        if (this.unavailable.has(feature)) return { feature, state: 'unavailable', evidence: 'protocol' };
         const observed = this.observations.get(feature);
         if (observed !== undefined) return { feature, state: observed, evidence: 'observed' };
         if (coreFeatures.some(core => core === feature)) return { feature, state: 'available', evidence: 'protocol' };
@@ -25,7 +30,7 @@ export class CapabilityRegistry {
 
     /** A detached, deterministic snapshot; mutations cannot alter routing decisions. */
     public list(): CapabilityDescription[] {
-        const features = new Set<string>([...coreFeatures, ...this.advertised, ...this.observations.keys()]);
+        const features = new Set<string>([...coreFeatures, ...this.known, ...this.unavailable, ...this.advertised, ...this.observations.keys()]);
         return [...features].sort().map(feature => this.describe(feature));
     }
 }

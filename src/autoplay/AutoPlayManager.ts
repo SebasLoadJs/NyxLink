@@ -24,7 +24,7 @@ export class AutoPlayManager {
         }
         if (!active() || player.queue.size > 0) return false;
 
-        const candidates = preferredRecommendations(player.recommendations.slice(0, 10), previous, player.guildId, player.manager.options.recommendations);
+        const candidates = preferredRecommendations(player.recommendations.slice(0, player.manager.options.recommendationDiscovery?.maxCandidates ?? 10), previous, player.guildId, player.manager.options.recommendations);
         if (!active() || player.queue.size > 0) return false;
         const selected = candidates[Math.floor(Math.random() * candidates.length)];
         if (!selected) return false;

@@ -18,7 +18,7 @@ class NodeHealthMonitor {
         const stats = node.stats;
         if (!stats)
             return { state: 'unknown', reason: 'No statistics received' };
-        if (node.statsReceivedAt !== undefined && (!Number.isFinite(node.statsReceivedAt) || now - node.statsReceivedAt > (options.maxStatsAgeMs ?? 120000))) {
+        if (node.statsReceivedAt && now - node.statsReceivedAt > (options.maxStatsAgeMs ?? 120000)) {
             return { state: 'unknown', reason: 'Statistics are stale' };
         }
         const cpu = stats.cpu?.systemLoad;

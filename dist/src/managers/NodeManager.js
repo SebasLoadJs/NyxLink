@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.NodeManager = void 0;
-const OpenTelemetry_1 = require("../observability/OpenTelemetry");
 const NodeFailover_1 = require("../nodes/NodeFailover");
 const NodeSelector_1 = require("../nodes/NodeSelector");
 const NodeHealthMonitor_1 = require("../nodes/NodeHealthMonitor");
@@ -12,7 +11,6 @@ class NodeManager {
     nodes = new Map();
     nodeConfigs;
     drains = new WeakMap();
-    ejections = new WeakMap();
     constructor(manager, nodeConfigs) {
         this.manager = manager;
         this.nodeConfigs = nodeConfigs;
@@ -73,33 +71,14 @@ class NodeManager {
         }
         return nodeStats;
     }
-    getBackendInventory() {
-        return [...this.nodes.values()].map(node => {
-            const connected = NodeHealthMonitor_1.NodeHealthMonitor.available(node);
-            const adapter = connected ? node.backend : undefined;
-            return {
-                identifier: node.identifier,
-                state: node.state,
-                connected,
-                ready: connected && node.state === types_1.NodeState.READY,
-                draining: node.draining,
-                kind: adapter?.kind,
-                version: adapter?.version,
-                protocolVersion: adapter?.protocolVersion,
-                refreshedAt: adapter ? node.backendRefreshedAt : undefined,
-                features: adapter?.listFeatures() ?? [],
-                plugins: adapter?.plugins.map(plugin => ({ ...plugin })) ?? [],
-            };
-        });
-    }
     findNode(options = {}) {
-        return (0, OpenTelemetry_1.observeSyncOperation)(this.manager, 'nyxlink.node.select', () => NodeSelector_1.NodeSelector.select(this.nodes.values(), this.manager.options.node, options), result => result ? 'success' : 'empty');
+        return NodeSelector_1.NodeSelector.select(this.nodes.values(), this.manager.options.node, options);
     }
     setDraining(identifier, draining = true) {
         const node = this.nodes.get(identifier);
         if (typeof draining !== 'boolean')
             throw new TypeError('draining must be a boolean');
-        if (this.manager.destroyed || !node || node.destroyed || !draining && (this.drains.has(node) || this.ejections.has(node)))
+        if (this.manager.destroyed || !node || node.destroyed || !draining && this.drains.has(node))
             return false;
         node.draining = draining;
         return true;
@@ -107,8 +86,6 @@ class NodeManager {
     drain(identifier) {
         const node = this.nodes.get(identifier);
         if (this.manager.destroyed || !node || node.destroyed)
-            return Promise.resolve(false);
-        if (this.ejections.has(node))
             return Promise.resolve(false);
         const existing = this.drains.get(node);
         if (existing)
@@ -128,109 +105,38 @@ class NodeManager {
                 continue;
             try {
                 const result = await NodeFailover_1.NodeFailover.move(player, node);
-                const current = !player.destroyed && this.manager.players.get(player.guildId) === player;
-                const destination = player.node;
-                if (result.status === 'failed' || current && (destination === node || !destination.connected || destination.destroyed ||
-                    this.nodes.get(destination.identifier) !== destination))
+                if (result.status !== 'recovered' && !player.destroyed && player.node === node)
+                    drained = false;
+                else if (result.status === 'failed')
                     drained = false;
             }
             catch {
                 drained = false;
             }
         }
-        return drained && !node.destroyed && !this.manager.destroyed &&
-            this.nodes.get(node.identifier) === node;
+        return drained && !node.destroyed && !this.manager.destroyed;
     }
-    eject(identifier) {
+    async eject(identifier) {
         const node = this.nodes.get(identifier);
-        if (!node || node.destroyed || this.manager.destroyed)
-            return Promise.resolve(false);
-        const existing = this.ejections.get(node);
-        if (existing)
-            return existing;
-        if (this.drains.has(node))
-            return Promise.resolve(false);
-        this.setDraining(identifier);
-        const operation = Promise.resolve().then(() => this.ejectNode(identifier, node))
-            .finally(() => this.ejections.delete(node));
-        this.ejections.set(node, operation);
-        return operation;
-    }
-    async ejectNode(identifier, node) {
-        const active = () => !this.manager.destroyed && !node.destroyed && this.nodes.get(identifier) === node;
-        if (!active())
+        if (!node) {
+            this.manager.emit("debug", `Moonlink.js > NodeManager#eject: Node ${identifier} not found.`);
             return false;
-        const players = this.manager.players.filter(player => player.node === node);
-        const results = await Promise.all(players.map(async (player) => {
-            try {
-                return await NodeFailover_1.NodeFailover.move(player, node);
-            }
-            catch (error) {
-                const failure = error instanceof Error ? error : new Error(String(error));
-                try {
-                    this.manager.emit('nodeError', node, failure);
-                }
-                catch { }
-                return { status: 'failed', attempts: 0 };
-            }
-        }));
-        if (!active())
-            return false;
-        const registered = (player) => !player.destroyed &&
-            this.manager.players.get(player.guildId) === player;
-        const attached = (player) => registered(player) && player.node === node;
-        const stranded = (player) => registered(player) &&
-            (!player.node.connected || player.node.destroyed);
-        const recovered = (player, index) => {
-            const result = results[index];
-            return result.status === 'recovered' && !!result.node &&
-                registered(player) && player.node === result.node &&
-                result.node !== node && this.nodes.get(result.node.identifier) === result.node &&
-                result.node.connected && !result.node.destroyed;
-        };
-        if (players.some((player, index) => results[index].status === 'cancelled' && registered(player)))
-            return false;
-        if (players.some((player, index) => results[index].status === 'recovered' &&
-            registered(player) && !recovered(player, index) &&
-            !attached(player) && !stranded(player)))
-            return false;
-        const failed = players.filter((player, index) => registered(player) &&
-            !recovered(player, index) &&
-            (attached(player) || stranded(player)));
-        if (failed.length) {
-            try {
+        }
+        const playersToMove = this.manager.players.filter(player => player.node.identifier === identifier);
+        if (playersToMove.length > 0) {
+            this.manager.emit("debug", `Moonlink.js > NodeManager#eject: Moving ${playersToMove.length} players from ${identifier}...`);
+            const results = await Promise.all(playersToMove.map(player => NodeFailover_1.NodeFailover.move(player, node)));
+            const failed = playersToMove.filter((_, index) => results[index].status === 'failed');
+            if (failed.length) {
                 this.manager.emit('playersOrphaned', failed, node);
-            }
-            catch (error) {
-                const failure = error instanceof Error ? error : new Error(String(error));
-                try {
-                    this.manager.emit('nodeError', node, failure);
+                if (!this.manager.options.node?.failover?.preserveOnFailure) {
+                    await Promise.all(failed.map(player => player.destroy('Node ejected: failover failed')));
                 }
-                catch { }
-            }
-            if (!active())
-                return false;
-            if (!this.manager.options.node?.failover?.preserveOnFailure) {
-                const cleanup = await Promise.allSettled(failed.filter(registered)
-                    .map(player => player.destroy('Node ejected: failover failed')));
-                const errors = cleanup.filter((result) => result.status === 'rejected');
-                for (const result of errors) {
-                    const failure = result.reason instanceof Error ? result.reason : new Error(String(result.reason));
-                    try {
-                        this.manager.emit('nodeError', node, failure);
-                    }
-                    catch { }
-                }
-                if (errors.length || failed.some(registered))
-                    return false;
             }
         }
-        if (!active())
-            return false;
-        const preserved = new Set(failed);
-        if (this.manager.players.filter(player => attached(player) && !preserved.has(player)).length)
-            return false;
-        return this.remove(identifier);
+        this.remove(identifier);
+        this.manager.emit("debug", `Moonlink.js > NodeManager#eject: Node ${identifier} ejected successfully.`);
+        return true;
     }
     _validateConfig(config) {
         (0, Util_1.validate)(config.host, (value) => typeof value === "string" && value.length > 0, "Node config 'host' must be a non-empty string.");

@@ -41,9 +41,6 @@ class DatabaseManager {
             this.provider = this.manager.options.database.adapter;
             return;
         }
-        if (this.dbConfig.type === 'external') {
-            throw new TypeError('External storage requires options.database.adapter');
-        }
         switch (this.dbConfig.type) {
             case 'local':
                 this.provider = new Local_1.Local();
@@ -86,7 +83,6 @@ class DatabaseManager {
             throw new TypeError('Invalid player storage path');
         const root = `${namespace}.${guildId}`;
         for (let attempt = 0; attempt < 8; attempt++) {
-            await this.manager.guildOwnership?.assertCurrent(guildId);
             const previous = await this.provider.get(root);
             const revision = (0, PlayerSnapshot_1.recordRevision)(previous);
             if (deleting && previous === undefined)
@@ -95,7 +91,7 @@ class DatabaseManager {
             if (candidate !== undefined && (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)))
                 throw new TypeError('Stored player must be an object');
             const next = candidate;
-            if (parts.length && next !== undefined) {
+            if (parts.length) {
                 let parent = next;
                 for (const part of parts.slice(0, -1)) {
                     if (!Object.hasOwn(parent, part) || !parent[part] || typeof parent[part] !== 'object') {
@@ -122,7 +118,6 @@ class DatabaseManager {
                 next.schemaVersion = 1;
                 next.revision = (0, node_crypto_1.randomUUID)();
             }
-            await this.manager.guildOwnership?.assertCurrent(guildId);
             if (await this.replace(root, revision, next))
                 return true;
         }
@@ -164,14 +159,12 @@ class DatabaseManager {
             return Promise.reject(new PlayerSnapshot_1.SnapshotConflictError());
         this.importing.add(guildId);
         return this.mutate(async () => {
-            await this.manager.guildOwnership?.assertCurrent(guildId);
             const key = `players.${guildId}`;
             const previous = await this.provider.get(key);
             if (this.manager.players.has(guildId) || (0, PlayerSnapshot_1.recordRevision)(previous) !== expectedRevision)
                 throw new PlayerSnapshot_1.SnapshotConflictError();
             const revision = (0, node_crypto_1.randomUUID)();
             const next = { ...snapshot.data, schemaVersion: 1, revision };
-            await this.manager.guildOwnership?.assertCurrent(guildId);
             if (!await this.replace(key, expectedRevision, next))
                 throw new PlayerSnapshot_1.SnapshotConflictError();
             return (0, PlayerSnapshot_1.snapshotJSON)({ ...snapshot, revision });
@@ -186,9 +179,6 @@ class DatabaseManager {
         return this.provider.keys(pattern);
     }
     clear() {
-        if (this.manager.guildOwnership) {
-            return Promise.reject(new Error('Cannot clear shared storage while guild leases are active'));
-        }
         return this.mutate(() => this.provider.clear());
     }
     mutate(operation) {

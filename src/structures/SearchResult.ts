@@ -1,3 +1,4 @@
+import { readLavaSrcPlaylistMetadata, type LavaSrcPlaylistMetadata } from '../backends/LavaSrcMetadata';
 import type { IRESTLoadTracks, ITrack } from "../typings/Interfaces";
 import { LoadType, type TPartialTrackProperties } from "../typings/types";
 import { Track } from "../entities/Track";
@@ -5,6 +6,8 @@ import { Track } from "../entities/Track";
 export class SearchResult {
     public loadType: LoadType;
     public tracks: Track[];
+    /** Original collection metadata, detached from the wire response. */
+    public playlistPluginInfo?: Record<string, unknown>;
     public playlistInfo?: { name: string; selectedTrack: number; duration: number };
     public exception?: {
         message: string;
@@ -20,6 +23,10 @@ export class SearchResult {
 
             case "playlist":
                 this.loadType = LoadType.PLAYLIST;
+                const plugin = response.data.pluginInfo;
+                if (plugin && typeof plugin === 'object' && !Array.isArray(plugin)) {
+                    this.playlistPluginInfo = structuredClone(plugin);
+                }
                 this.tracks = response.data.tracks
                     .slice(0, playlistLoadLimit)
                     .map((track: ITrack) => new Track(track, requester, undefined, partialTrackOptions));
@@ -54,6 +61,10 @@ export class SearchResult {
                 this.tracks = [];
                 break;
         }
+    }
+
+    public getLavaSrcMetadata(): LavaSrcPlaylistMetadata | undefined {
+        return readLavaSrcPlaylistMetadata(this.playlistPluginInfo);
     }
 
     public get isPlaylist(): boolean {

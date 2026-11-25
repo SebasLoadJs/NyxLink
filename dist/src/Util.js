@@ -28,12 +28,6 @@ const HttpError_1 = require("./errors/HttpError");
 const HttpPolicyError_1 = require("./errors/HttpPolicyError");
 const RequestPolicy_1 = require("./http/RequestPolicy");
 const promises_1 = require("node:timers/promises");
-const node_stream_1 = require("node:stream");
-const HTTP_RESPONSE_LIMIT = 32 * 1024 * 1024;
-const redirectMarker = Symbol('httpRedirect');
-function responseLimitError() {
-    return Object.assign(new Error('HTTP response exceeds the 32 MiB decoded size limit'), { code: 'HTTP_RESPONSE_TOO_LARGE' });
-}
 exports.structures = {};
 class Structure {
     static manager;
@@ -220,10 +214,6 @@ function Log(message, LogPath) {
 }
 async function makeRequest(initialUrl, options, timeout = 100000, retries = 3, retryDelay = 1000, maxRedirects = 5) {
     const { returnHeaders } = options;
-    if (!Number.isSafeInteger(timeout) || timeout < 0 || timeout > 2147483647)
-        throw new RangeError('Invalid HTTP timeout');
-    const bodyData = options.body == null ? undefined :
-        typeof options.body === "object" ? JSON.stringify(options.body) : String(options.body);
     const supportsZstd = typeof node_zlib_1.default
         .createZstdDecompress === "function";
     const acceptEncoding = supportsZstd
@@ -242,32 +232,33 @@ async function makeRequest(initialUrl, options, timeout = 100000, retries = 3, r
                     options.signal?.throwIfAborted();
                     const urlObject = (0, RequestPolicy_1.requestUrl)(currentUrl, options.allowedOrigins);
                     const transport = urlObject.protocol === "https:" ? node_https_1.default : node_http_1.default;
-                    const outgoingHeaders = { ...headers, "Accept-Encoding": acceptEncoding };
-                    for (const name of Object.keys(outgoingHeaders))
-                        if (name.toLowerCase() === 'host')
-                            delete outgoingHeaders[name];
                     const requestOptions = {
                         ...options,
                         auth,
                         hostname: urlObject.hostname,
                         port: urlObject.port || (urlObject.protocol === "https:" ? 443 : 80),
                         path: urlObject.pathname + urlObject.search,
-                        headers: outgoingHeaders,
+                        headers: {
+                            ...headers,
+                            "Accept-Encoding": acceptEncoding,
+                        },
                     };
                     delete requestOptions.returnHeaders;
                     delete requestOptions.throwOnError;
                     delete requestOptions.allowedOrigins;
+                    for (const name of Object.keys(requestOptions.headers))
+                        if (name.toLowerCase() === 'host')
+                            delete requestOptions.headers[name];
                     const req = transport.request(requestOptions, (res) => {
                         const { statusCode, headers } = res;
-                        res.on("error", reject);
                         if (statusCode &&
                             (statusCode === 301 ||
                                 statusCode === 302 ||
                                 statusCode === 307 ||
                                 statusCode === 308) &&
                             headers.location) {
-                            res.destroy();
-                            return resolve({ [redirectMarker]: headers.location });
+                            req.destroy();
+                            return resolve({ _redirect: headers.location });
                         }
                         if (statusCode && (statusCode < 200 || statusCode >= 300)) {
                             if (options.throwOnError) {
@@ -294,54 +285,38 @@ async function makeRequest(initialUrl, options, timeout = 100000, retries = 3, r
                                 });
                                 return;
                             }
-                            res.destroy();
-                            return reject(new HttpError_1.HttpError(statusCode, undefined, res.headers["retry-after"]));
+                            req.destroy();
+                            return reject(new Error(`Server responded with status ${statusCode}`));
                         }
+                        let stream = res;
                         const encodingHeader = res.headers["content-encoding"];
-                        const encoding = Array.isArray(encodingHeader) ? encodingHeader[0] : encodingHeader;
-                        const normalizedEncoding = typeof encoding === "string" ? encoding.toLowerCase().trim() : undefined;
-                        let decoder;
-                        if (normalizedEncoding === "gzip")
-                            decoder = node_zlib_1.default.createGunzip();
-                        else if (normalizedEncoding === "deflate")
-                            decoder = node_zlib_1.default.createInflate();
-                        else if (normalizedEncoding === "br")
-                            decoder = node_zlib_1.default.createBrotliDecompress();
-                        else if (normalizedEncoding === "zstd" && supportsZstd) {
-                            decoder = node_zlib_1.default.createZstdDecompress();
+                        const encoding = Array.isArray(encodingHeader)
+                            ? encodingHeader[0]
+                            : encodingHeader;
+                        const normalizedEncoding = typeof encoding === "string" ? encoding.toLowerCase() : undefined;
+                        if (normalizedEncoding === "gzip") {
+                            stream = res.pipe(node_zlib_1.default.createGunzip());
                         }
-                        else if (normalizedEncoding && normalizedEncoding !== "identity") {
-                            res.destroy();
-                            reject(new Error("Unsupported HTTP content encoding"));
-                            return;
+                        else if (normalizedEncoding === "deflate") {
+                            stream = res.pipe(node_zlib_1.default.createInflate());
+                        }
+                        else if (normalizedEncoding === "br") {
+                            stream = res.pipe(node_zlib_1.default.createBrotliDecompress());
+                        }
+                        else if (normalizedEncoding === "zstd") {
+                            if (!supportsZstd) {
+                                req.destroy();
+                                return reject(new Error("Zstd is not supported by this Node.js runtime."));
+                            }
+                            stream = res.pipe(node_zlib_1.default.createZstdDecompress());
                         }
                         const chunks = [];
-                        let size = 0;
-                        const collector = new node_stream_1.Writable({
-                            write(chunk, _encoding, callback) {
-                                size += chunk.length;
-                                if (size > HTTP_RESPONSE_LIMIT) {
-                                    callback(responseLimitError());
-                                    return;
-                                }
-                                chunks.push(chunk);
-                                callback();
-                            }
-                        });
-                        (0, node_stream_1.pipeline)(decoder ? [res, decoder, collector] : [res, collector], (error) => {
-                            if (error) {
-                                reject(error);
-                                return;
-                            }
+                        stream.on("data", (chunk) => chunks.push(chunk));
+                        stream.on("error", (err) => reject(new Error(`Stream error: ${err.message}`)));
+                        stream.on("end", () => {
                             const body = Buffer.concat(chunks);
                             const contentType = res.headers["content-type"] || "";
                             if (body.length === 0) {
-                                if (statusCode === 204 && options.noContentAsNull) {
-                                    const empty = null;
-                                    return resolve(returnHeaders
-                                        ? { data: empty, headers: res.headers }
-                                        : empty);
-                                }
                                 if (contentType.includes("application/json")) {
                                     const emptyJson = {};
                                     return resolve(returnHeaders
@@ -371,18 +346,15 @@ async function makeRequest(initialUrl, options, timeout = 100000, retries = 3, r
                         });
                     });
                     req.on("error", (err) => reject(Object.assign(new Error(`Request error: ${err.message}`, { cause: err }), { code: err.code })));
-                    const expire = () => {
-                        const error = Object.assign(new Error("Request timed out"), { code: 'ETIMEDOUT' });
-                        reject(error);
-                        req.destroy(error);
-                    };
-                    req.on("timeout", expire);
+                    req.on("timeout", () => {
+                        req.destroy();
+                        reject(Object.assign(new Error("Request timed out"), { code: 'ETIMEDOUT' }));
+                    });
                     req.setTimeout(timeout);
-                    const deadline = timeout > 0 ? setTimeout(expire, timeout) : undefined;
-                    deadline?.unref();
-                    req.once("close", () => { if (deadline)
-                        clearTimeout(deadline); });
-                    if (bodyData !== undefined) {
+                    if (options.body) {
+                        const bodyData = typeof options.body === "object" && options.body !== null
+                            ? JSON.stringify(options.body)
+                            : options.body.toString();
                         req.setHeader("Content-Length", Buffer.byteLength(bodyData));
                         req.write(bodyData);
                     }
@@ -390,8 +362,8 @@ async function makeRequest(initialUrl, options, timeout = 100000, retries = 3, r
                 });
                 if (typeof result === "object" &&
                     result !== null &&
-                    redirectMarker in result) {
-                    const newLocation = result[redirectMarker];
+                    result._redirect) {
+                    const newLocation = result._redirect;
                     const next = (0, RequestPolicy_1.requestUrl)(newLocation, options.allowedOrigins, currentUrl);
                     if (next.origin !== new node_url_1.URL(currentUrl).origin) {
                         if (options.body !== undefined && options.body !== null)
@@ -410,21 +382,14 @@ async function makeRequest(initialUrl, options, timeout = 100000, retries = 3, r
         catch (error) {
             if (error instanceof HttpPolicyError_1.HttpPolicyError || options.signal?.aborted)
                 throw error;
-            const terminal = error instanceof HttpError_1.HttpError && !error.retryable ||
-                error?.code === 'HTTP_RESPONSE_TOO_LARGE';
-            if (terminal || attempt >= retries) {
-                if (options.throwOnError)
-                    throw error;
-                return undefined;
+            if (options.throwOnError && attempt >= retries)
+                throw error;
+            const is404 = error.message.includes('status 404');
+            if (!is404) {
+                console.error(`Attempt ${attempt + 1}/${retries + 1} failed for ${initialUrl}: ${error.message}`);
             }
             if (attempt < retries) {
-                const delayMs = Math.max(retryDelay * Math.pow(2, attempt), error instanceof HttpError_1.HttpError ? error.retryAfterMs ?? 0 : 0);
-                if (!Number.isFinite(delayMs) || delayMs > 60000) {
-                    if (options.throwOnError)
-                        throw error;
-                    return undefined;
-                }
-                await (0, promises_1.setTimeout)(delayMs, undefined, { signal: options.signal });
+                await (0, promises_1.setTimeout)(retryDelay * Math.pow(2, attempt), undefined, { signal: options.signal });
                 currentUrl = initial.href;
             }
             else {
@@ -454,7 +419,7 @@ function decodeErrorBody(buffer, encoding) {
 }
 async function makeStreamRequest(initialUrl, options, timeout = 100000) {
     return new Promise((resolve, reject) => {
-        const urlObject = (0, RequestPolicy_1.requestUrl)(initialUrl);
+        const urlObject = new node_url_1.URL(initialUrl);
         const transport = urlObject.protocol === "https:" ? node_https_1.default : node_http_1.default;
         const requestOptions = {
             ...options,
@@ -462,10 +427,7 @@ async function makeStreamRequest(initialUrl, options, timeout = 100000) {
             port: urlObject.port || (urlObject.protocol === "https:" ? 443 : 80),
             path: urlObject.pathname + urlObject.search,
         };
-        requestOptions.headers = (0, RequestPolicy_1.requestHeaders)(options.headers);
-        for (const name of Object.keys(requestOptions.headers))
-            if (name.toLowerCase() === "host")
-                delete requestOptions.headers[name];
+        delete requestOptions.headers?.["host"];
         const req = transport.request(requestOptions, (res) => {
             const statusCode = res.statusCode ?? 0;
             if (statusCode < 200 || statusCode >= 300) {
@@ -515,12 +477,7 @@ async function makeStreamRequest(initialUrl, options, timeout = 100000) {
 }
 function stringifyWithReplacer(obj) {
     const cache = new Set();
-    return JSON.stringify(obj, (key, value) => {
-        const normalized = key.replace(/[^a-z0-9]/gi, '').toLowerCase();
-        if (['authorization', 'proxyauthorization', 'password', 'token', 'accesstoken', 'refreshtoken', 'clientsecret', 'apikey', 'sessionid', 'cookie', 'setcookie', 'userdata', 'requester'].includes(normalized))
-            return '[Redacted]';
-        if (typeof value === 'bigint')
-            return value.toString();
+    return JSON.stringify(obj, (_key, value) => {
         if (typeof value === 'object' && value !== null) {
             if (cache.has(value)) {
                 return "[Circular Refs]";
@@ -603,7 +560,7 @@ function isValidDiscordId(id) {
 }
 class EventEmitter {
     parent;
-    listenerMap = Object.create(null);
+    listenerMap = {};
     constructor(parent) {
         this.parent = parent;
     }
@@ -617,11 +574,7 @@ class EventEmitter {
         };
         bucket.add(entry);
         this.sortListeners(bucket);
-        return () => {
-            bucket.delete(entry);
-            if (bucket.size === 0 && this.listenerMap[event] === bucket)
-                delete this.listenerMap[event];
-        };
+        return () => this.off(event, listener);
     }
     once(event, listener, priority) {
         return this.on(event, listener, { once: true, priority });
@@ -639,27 +592,28 @@ class EventEmitter {
     }
     emit(event, ...args) {
         const set = this.listenerMap[event];
-        if (set) {
-            for (const entry of [...set]) {
-                if (entry.once) {
-                    if (!set.delete(entry))
-                        continue;
-                    if (set.size === 0 && this.listenerMap[event] === set)
-                        delete this.listenerMap[event];
+        if (!set)
+            return;
+        const removeAfter = [];
+        for (const entry of [...set]) {
+            try {
+                entry.listener(...args);
+            }
+            catch (err) {
+                if (event !== 'error' && this.listenerMap['error']) {
+                    this.emit('error', err);
                 }
-                try {
-                    entry.listener(...args);
-                }
-                catch (err) {
-                    if (event !== 'error' && this.listenerMap['error']) {
-                        this.emit('error', err);
-                    }
-                    else {
-                        throw err;
-                    }
+                else {
+                    throw err;
                 }
             }
+            if (entry.once)
+                removeAfter.push(entry);
         }
+        for (const rm of removeAfter)
+            set.delete(rm);
+        if (set.size === 0)
+            delete this.listenerMap[event];
         if (this.parent)
             this.parent.emit(event, ...args);
     }
@@ -672,9 +626,7 @@ class EventEmitter {
             });
     }
     listenerCount(event) {
-        if (event !== undefined)
-            return this.listenerMap[event]?.size ?? 0;
-        return Object.values(this.listenerMap).reduce((total, bucket) => total + bucket.size, 0);
+        return this.listenerMap[event]?.size ?? 0;
     }
     createChild() {
         return new EventEmitter(this);

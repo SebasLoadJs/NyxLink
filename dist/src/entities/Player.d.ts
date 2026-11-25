@@ -1,5 +1,3 @@
-import { type CrossfadeOptions, type QueuePreloadOptions } from '../backends/NodeLinkContracts';
-import { type PlayerUpdatePayload, type PlayerVoiceUpdate } from '../backends/ProtocolContracts';
 import { type RestartOptions } from "../players/PlayerMigration";
 import { type NodeRequirements } from '../nodes/NodeSelector';
 import { Node } from "./Node";
@@ -13,7 +11,6 @@ import { Voice } from "./Voice";
 import { Track } from "./Track";
 import { VoiceReceiver, VoiceReceiverOptions } from "./VoiceReceiver";
 import { type PlayerSnapshot } from '../database/PlayerSnapshot';
-import { type MixCreateOptions, type MixLayerCreated, type MixLayersResponse } from '../backends/NodeLinkMixContracts';
 export declare class Player {
     readonly manager: Manager;
     node: Node;
@@ -42,19 +39,11 @@ export declare class Player {
     historySize: number;
     lastActivityTime: number;
     private readonly commands;
-    get pendingCommands(): number;
     private destructionPromise?;
-    private pendingPlayTicket?;
-    private lastSuccessfulExplicitPlayTicket?;
     private volumeRevision;
     private optimisticVolumeRevision;
     private fading?;
-    private crossfade?;
     private nextTrack?;
-    private preloadOptions?;
-    private queuePreload?;
-    private readonly preloadScheduler;
-    private get preloadJob();
     private audioTrackId?;
     private loudnessNormalizer?;
     private endTime?;
@@ -80,8 +69,8 @@ export declare class Player {
     private assertNodeLinkFeature;
     private resolveEncodedTrack;
     private sendPlayerUpdate;
-    updatePlayer(payload: PlayerUpdatePayload, noReplace?: boolean): Promise<any>;
-    updateVoice(voice: PlayerVoiceUpdate): Promise<any>;
+    updatePlayer(payload: Record<string, any>, noReplace?: boolean): Promise<any>;
+    updateVoice(voice: Record<string, any>): Promise<any>;
     connect({ selfDeaf, selfMute }?: {
         selfDeaf?: boolean;
         selfMute?: boolean;
@@ -98,11 +87,13 @@ export declare class Player {
     playAutoPlay(track: Track, ticket: number, automaticTicket: number): Promise<boolean>;
     private playNext;
     private applyPlayback;
-    addMix(track: Track | string, options?: MixCreateOptions): Promise<MixLayerCreated | null>;
-    getMixes(): Promise<MixLayersResponse | null>;
+    addMix(track: Track | string, options?: {
+        volume?: number;
+        userData?: Record<string, any>;
+    }): Promise<any | null>;
+    getMixes(): Promise<any | null>;
     updateMixVolume(mixId: string, volume: number): Promise<this>;
     removeMix(mixId: string): Promise<this>;
-    private mixCommand;
     subscribeLyrics(options?: {
         skipTrackSource?: boolean;
     }): Promise<this>;
@@ -120,18 +111,8 @@ export declare class Player {
     getDirectStream(itag?: number | null): Promise<any | null>;
     setFading(fading: IFadingOptions): Promise<this>;
     clearFading(): Promise<this>;
-    getCrossfade(): CrossfadeOptions | undefined;
-    setCrossfade(options: CrossfadeOptions): Promise<this>;
-    clearCrossfade(): Promise<this>;
     setNextTrack(track: Track | string, userData?: Record<string, any>): Promise<this>;
     clearNextTrack(): Promise<this>;
-    getNextTrack(): {
-        encoded: string;
-        userData?: Record<string, unknown>;
-    } | undefined;
-    setQueuePreload(options: QueuePreloadOptions): this;
-    requestQueuePreload(): void;
-    consumePreloadedTrack(): void;
     setAudioTrackId(audioTrackId?: string): this;
     setLoudnessNormalizer(enabled: boolean): Promise<this>;
     createVoiceReceiver(options?: VoiceReceiverOptions): VoiceReceiver;

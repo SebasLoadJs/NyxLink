@@ -296,3 +296,55 @@ const extensionDisposer: Promise<() => Promise<void>> = manager.useExtension(opt
 void extensionDisposer;
 const migrationStage: import('../../dist').MigrationStage = 'persist-snapshot';
 void migrationStage;
+
+
+// Public 5.3 backend-specific contracts must be usable without deep imports.
+const lavaDiscovery: Promise<import('../../dist').LavaSearchResult | null> =
+    node.loadSearch('spsearch:Daft Punk', { types: ['album', 'artist', 'text'], timeoutMs: 5000 });
+const nativeDiscovery: Promise<import('../../dist').IRESTLoadTracks> =
+    node.loadNodeLinkSearch('Daft Punk', { source: 'ytmsearch', type: 'album' });
+const holoMetadata: import('../../dist').HoloTrackMetadata | undefined = track.getHoloMetadata();
+const providerMetadata: import('../../dist').LavaSrcTrackMetadata | undefined = track.getLavaSrcMetadata();
+const collectionMetadata: Promise<import('../../dist').LavaSrcPlaylistMetadata | undefined> =
+    search.then(result => result.getLavaSrcMetadata());
+const typedDspx: Filters = player.filters.setLavaDSPX('echo', { echoLength: 0.3, decay: 0.5 });
+player.filters.setLavaDSPX('high-pass', { cutoffFrequency: 80 });
+player.filters.setLavaDSPX('normalization');
+const compatibleFilters: Promise<Player> = player.filters.apply({ compatibleOnly: true });
+
+const recoveryConfiguration: import('../../dist').IManagerOptionsConfig = {
+    recommendationDiscovery: { providers: ['spotify', 'deezer', 'tidal'], maxCandidates: 10, timeoutMs: 5000 },
+    node: { mixRecovery: { mode: 'restart', maxLayers: 3 } },
+};
+manager.on('sponsorBlockEvent', (_player, observation) => {
+    const source: import('../../dist').BackendKind = observation.backend;
+    if (observation.kind === 'segmentSkipped') {
+        const segment: import('../../dist').SponsorSegment = observation.segment;
+        const start: number = segment.start;
+        void start;
+    }
+    if (observation.kind === 'chaptersLoaded') {
+        const chapters: import('../../dist').SponsorChapter[] = observation.chapters;
+        void chapters;
+    }
+    // @ts-expect-error Guild-only observations do not prove the identity of the playing track.
+    observation.track;
+    void source;
+});
+manager.on('playerNodeFailover', (_player, report) => {
+    const recovery: import('../../dist').MixRecoveryReport | undefined = report.mixRecovery;
+    const suspended: readonly string[] | undefined = report.suspendedFeatures;
+    void [recovery, suspended];
+});
+// @ts-expect-error Discovery types are specific to the backend's contract.
+node.loadSearch('query', { types: ['channel'] });
+// @ts-expect-error Native NodeLink search does not use LavaSearch text suggestions.
+node.loadNodeLinkSearch('query', { type: 'text' });
+// @ts-expect-error DSPX echo requires echoLength and decay, not native NodeLink filter fields.
+player.filters.setLavaDSPX('echo', { cutoffFrequency: 80 });
+// @ts-expect-error Native mixer API does not offer seamless layer seeking.
+const invalidMixerRecovery: import('../../dist').MixRecoveryOptions = { mode: 'resume' };
+// @ts-expect-error Arbitrary provider names are not accepted by recommendation discovery.
+const invalidDiscovery: import('../../dist').RecommendationDiscoveryOptions = { providers: ['unknown'] };
+void [lavaDiscovery, nativeDiscovery, holoMetadata, providerMetadata, collectionMetadata, typedDspx,
+    compatibleFilters, recoveryConfiguration, invalidMixerRecovery, invalidDiscovery];

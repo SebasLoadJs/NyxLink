@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.NodeFailover = void 0;
-const OpenTelemetry_1 = require("../observability/OpenTelemetry");
 const PlaybackGuard_1 = require("../players/PlaybackGuard");
 const Util_1 = require("../Util");
 const RecoveryQueue_1 = require("./RecoveryQueue");
@@ -29,7 +28,7 @@ class NodeFailover {
             return queue.run(() => {
                 if (cancelled())
                     return Promise.resolve({ status: 'cancelled', attempts: 0 });
-                return (0, OpenTelemetry_1.observeOperation)(player.manager, 'nyxlink.failover', () => this.attempt(player, source, options), result => result.status === 'recovered' ? 'success' : result.status === 'failed' ? 'error' : 'cancelled');
+                return this.attempt(player, source, options);
             }, () => {
                 player.manager.emit('playerRecoveryFailed', player);
                 return { status: 'failed', attempts: 0, reason: 'queue-full' };
@@ -52,11 +51,9 @@ class NodeFailover {
         }
         const guard = (0, PlaybackGuard_1.playbackGuard)(player);
         let ticket = guard.ticket;
-        let owner = source;
-        const cancelled = () => player.destroyed || source.destroyed || player.manager.destroyed || !guard.isCurrent(ticket);
         let attempts = 0;
         while (attempts < maxAttempts) {
-            if (cancelled() || player.node !== owner)
+            if (player.destroyed || source.destroyed || player.manager.destroyed || !guard.isCurrent(ticket))
                 return { status: 'cancelled', attempts };
             const target = player.manager.nodes.findNode({ ...player.nodeSelection, exclude: [...excluded], allowUnhealthyFallback: false });
             if (!target)
@@ -74,20 +71,12 @@ class NodeFailover {
             catch { }
             if (player.destroyed || source.destroyed || player.manager.destroyed || !guard.isCurrent(ticket))
                 return { status: 'cancelled', attempts };
-            if (restored && player.node === target) {
-                if (target.connected && !target.destroyed) {
-                    return { status: 'recovered', attempts, node: target };
-                }
-                owner = target;
-            }
-            else if (player.node !== owner) {
-                return { status: 'cancelled', attempts };
+            if (restored && player.node === target && target.connected && !target.destroyed) {
+                return { status: 'recovered', attempts, node: target };
             }
             if (baseDelay && attempts < maxAttempts)
-                await (0, Util_1.delay)((0, RetryDelay_1.retryDelay)(baseDelay, attempts - 1, jitter, 60000));
+                await (0, Util_1.delay)((0, RetryDelay_1.retryDelay)(baseDelay, 0, jitter, 60000));
         }
-        if (cancelled() || player.node !== owner)
-            return { status: 'cancelled', attempts };
         player.manager.emit('playerRecoveryFailed', player);
         return { status: 'failed', attempts };
     }

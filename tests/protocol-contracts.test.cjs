@@ -56,6 +56,7 @@ test('direct REST calls apply the same adapter policy before issuing HTTP',async
   server.listen(0,'127.0.0.1');await once(server,'listening');
   t.after(()=>{server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
   node.port=server.address().port;
+  node.sessionId='protocol-fixture-session';
   node.backend=adapter('lavalink');
   const rest=new Rest(node);
   await assert.rejects(rest.updatePlayer(player.guildId,{nextTrack:null}),{code:'FEATURE_UNAVAILABLE'});

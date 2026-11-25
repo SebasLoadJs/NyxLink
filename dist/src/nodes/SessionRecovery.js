@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.resumeSessionPlayers = resumeSessionPlayers;
-const OpenTelemetry_1 = require("../observability/OpenTelemetry");
 const types_1 = require("../typings/types");
 const PlaybackGuard_1 = require("../players/PlaybackGuard");
 const PlaybackAttempt_1 = require("../players/PlaybackAttempt");
@@ -42,8 +41,8 @@ async function recover(context, known) {
     const { node } = context;
     const manager = node.manager;
     const touched = new Set();
-    let creating;
-    const detachCreate = manager.on('playerCreate', player => { if (creating !== player.guildId)
+    let creating = false;
+    const detachCreate = manager.on('playerCreate', player => { if (!creating)
         touched.add(player.guildId); });
     const detachDestroy = manager.on('playerDestroyed', player => touched.add(player.guildId));
     try {
@@ -89,18 +88,13 @@ async function recover(context, known) {
                 if (storage.node !== undefined && storage.node !== node.identifier)
                     continue;
                 (0, PlayerSnapshot_1.recordRevision)(storage);
-                if (storage.current ? storage.current.encoded !== row.track?.encoded : !!row.track?.encoded)
-                    continue;
                 let player;
-                creating = row.guildId;
+                creating = true;
                 try {
-                    const options = { ...storage, guildId: row.guildId, volume: row.volume, node: node.identifier };
-                    player = manager.guildOwnership
-                        ? await manager.players.restoreOwned(options)
-                        : manager.players.restore(options);
+                    player = manager.players.restore({ ...storage, guildId: row.guildId, volume: row.volume, node: node.identifier });
                 }
                 finally {
-                    creating = undefined;
+                    creating = false;
                 }
                 if (player.destroyed || player.node !== node || manager.players.get(row.guildId) !== player || (0, PlaybackGuard_1.playbackGuard)(player).ticket !== 0 || touched.has(row.guildId))
                     continue;
@@ -139,7 +133,7 @@ function resumeSessionPlayers(node) {
     if (previous && previous.sessionId === context.sessionId && previous.socket === context.socket)
         return previous.operation;
     const known = new Map(node.manager.players.all.map(player => [player.guildId, snapshot(player)]));
-    const operation = Promise.resolve().then(() => (0, OpenTelemetry_1.observeOperation)(node.manager, 'nyxlink.session.restore', () => recover(context, known))).catch(error => {
+    const operation = Promise.resolve().then(() => recover(context, known)).catch(error => {
         if (current(context))
             node.manager.emit('nodeError', node, error instanceof Error ? error : new Error(String(error)));
     }).finally(() => { if (pending.get(node)?.operation === operation)

@@ -1,8 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Node = void 0;
-const OpenTelemetry_1 = require("../observability/OpenTelemetry");
-const SourceHealthMonitor_1 = require("../nodes/SourceHealthMonitor");
 const NodeFailover_1 = require("../nodes/NodeFailover");
 const BackendDetector_1 = require("../backends/BackendDetector");
 const FeatureUnavailableError_1 = require("../errors/FeatureUnavailableError");
@@ -10,7 +8,6 @@ const RecommendationResolver_1 = require("../autoplay/RecommendationResolver");
 const AutoPlayManager_1 = require("../autoplay/AutoPlayManager");
 const PlaybackGuard_1 = require("../players/PlaybackGuard");
 const PlaybackAttempt_1 = require("../players/PlaybackAttempt");
-const VoiceRecovery_1 = require("../players/VoiceRecovery");
 const TrackCodec_1 = require("../tracks/TrackCodec");
 const NodeCircuitBreaker_1 = require("../nodes/NodeCircuitBreaker");
 const SessionRecovery_1 = require("../nodes/SessionRecovery");
@@ -47,7 +44,7 @@ class Node {
     recoveryInProgress = false;
     regions;
     secure;
-    sessionId = "";
+    sessionId;
     priority;
     socket;
     stats;
@@ -57,14 +54,9 @@ class Node {
     isNodeLink = false;
     backend;
     backendReady = Promise.resolve();
-    backendGeneration = 0;
-    sourceHealth = new SourceHealthMonitor_1.SourceHealthMonitor();
-    backendRefresh;
-    backendRefreshedAt;
     authenticationFailed = false;
     connecting = false;
     readyTimeout;
-    voiceReconnectTimers = new Map();
     readyTimeoutMs;
     url;
     rest;
@@ -82,7 +74,7 @@ class Node {
         this.port = config.port;
         this.identifier = config.identifier ?? this.uuid;
         this.password = config.password || "youshallnotpass";
-        this.regions = [...(config.regions ?? [])];
+        this.regions = config.regions;
         this.pathVersion = config.pathVersion || "v4";
         this.retryDelay = config.retryDelay ?? this.manager.options.node?.retryDelay ?? 30000;
         this.retryAmount = config.retryAmount ?? this.manager.options.node?.retryAmount ?? 5;
@@ -115,7 +107,7 @@ class Node {
         return players + (cpuLoad * 100);
     }
     ping() {
-        if (!this.connected || !this.socket) {
+        if (!this.connected) {
             return Promise.reject(new Error("Node is not connected."));
         }
         return this.socket.ping();
@@ -126,45 +118,14 @@ class Node {
         }
         return new YouTubeLiveChat_1.YouTubeLiveChat(this, identifier, options);
     }
-    getLavalinkSponsorBlockCategories(guildId) {
-        return this.rest.getLavalinkSponsorBlockCategories(guildId);
-    }
-    setLavalinkSponsorBlockCategories(guildId, categories) {
-        return this.rest.setLavalinkSponsorBlockCategories(guildId, categories);
-    }
-    clearLavalinkSponsorBlockCategories(guildId) {
-        return this.rest.clearLavalinkSponsorBlockCategories(guildId);
-    }
-    async getLavaLyrics(track, options) {
-        const encoded = typeof track === 'string' ? track : track?.encoded;
-        if (!encoded)
-            throw new TypeError('getLavaLyrics requires an encoded track');
-        return this.rest.getLavaLyrics(encoded, options);
-    }
-    async loadLyrics(track, options) {
+    async loadLyrics(track, lang) {
         const encoded = typeof track === "string" ? track : track?.encoded;
         if (!encoded) {
             throw new Error("loadLyrics requires an encoded track string or object with an encoded field.");
         }
-        return this.rest.loadLyrics(encoded, options);
+        return this.rest.loadLyrics(encoded, lang);
     }
-    getSourceHealth() {
-        return this.rest.getSourceHealth();
-    }
-    getStreamFormats(track, options = {}) {
-        const encoded = typeof track === 'string' ? track : track?.encoded;
-        if (!encoded)
-            throw new TypeError('getStreamFormats requires an encoded track');
-        return this.rest.getStreamFormats(encoded, options);
-    }
-    loadSourceStream(track, options = {}) {
-        const encoded = typeof track === 'string' ? track : track?.encoded;
-        if (!encoded)
-            throw new TypeError('loadSourceStream requires an encoded track');
-        const { itag, position, range, signal, timeoutMs } = options;
-        return this.rest.loadStream({ encodedTrack: encoded, format: 'passthrough', ...(itag === undefined ? {} : { itag }), ...(position === undefined ? {} : { position }) }, { range, signal, timeoutMs });
-    }
-    async loadDirectStream(track, volume, position, filters, options = {}) {
+    async loadDirectStream(track, volume, position, filters) {
         const encoded = typeof track === "string" ? track : track?.encoded;
         if (!encoded) {
             throw new Error("loadDirectStream requires an encoded track string or object with an encoded field.");
@@ -176,7 +137,7 @@ class Node {
             payload.position = position;
         if (filters !== undefined)
             payload.filters = filters;
-        return this.rest.loadStream(payload, options);
+        return this.rest.loadStream(payload);
     }
     async getDirectStream(track, itag) {
         const encoded = typeof track === "string" ? track : track?.encoded;
@@ -193,79 +154,58 @@ class Node {
         this.state = state;
         this.manager.emit("nodeStateChange", this, oldState, state);
     }
-    get sessionStoragePath() {
-        return `nodes.${this.uuid}.sessions.${(0, Util_1.generateUUID)(this.identifier, 0)}`;
-    }
-    async loadStoredSessionId() {
-        const scoped = await this.manager.database.get(this.sessionStoragePath);
-        if (typeof scoped?.sessionId === 'string' && scoped.sessionId)
-            return scoped.sessionId;
-        const shared = [...this.manager.nodes.nodes.values()].some(node => node !== this && node.uuid === this.uuid);
-        if (shared)
-            return undefined;
-        const legacy = await this.manager.database.get(`nodes.${this.uuid}`);
-        return typeof legacy?.sessionId === 'string' && legacy.sessionId ? legacy.sessionId : undefined;
-    }
     async connect() {
         if (this.destroyed || this.connected || this.connecting || this.state === types_1.NodeState.CONNECTING && this.socket)
             return;
         this.connecting = true;
-        return (0, OpenTelemetry_1.observeOperation)(this.manager, 'nyxlink.connect', async () => {
-            try {
-                this.setState(types_1.NodeState.CONNECTING);
-                if (this.destroyed)
-                    return;
-                this.manager.emit("debug", `Moonlink.js > Node -> Attempting connection to ${this.identifier} (${this.host}:${this.port}).`);
-                const sessionId = await this.loadStoredSessionId();
-                if (this.destroyed)
-                    return;
-                let headers = {
-                    Authorization: this.password,
-                    "User-Id": this.manager.clientId,
-                    "Client-Name": this.manager.options.clientName || "Moonlink.js",
-                };
-                if (this.manager.options.resume && sessionId) {
-                    headers["Session-Id"] = sessionId;
-                    this.manager.emit("debug", `NyxLink > Node > Connect > Resuming a stored session for ${this.identifier}`);
-                }
-                this.manager.emit("debug", `NyxLink > Node >> WebSocket handshake prepared for ${this.identifier}. Resume: ${Boolean(headers["Session-Id"])}.`);
-                const socket = new (Util_1.Structure.get("WebSocket"))(`ws${this.secure ? "s" : ""}://${this.address}/${this.pathVersion}/websocket`, {
-                    headers,
-                });
-                this.socket = socket;
-                socket.on('open', () => { if (this.socket === socket && !this.destroyed)
-                    void this.open(); });
-                socket.on('close', event => { if (this.socket === socket && !this.destroyed)
-                    void this.close(event); });
-                socket.on('message', event => { if (this.socket === socket && !this.destroyed)
-                    void this.message(event); });
-                socket.on('error', event => { if (this.socket === socket && !this.destroyed)
-                    this.error(event); });
+        try {
+            this.setState(types_1.NodeState.CONNECTING);
+            if (this.destroyed)
+                return;
+            this.manager.emit("debug", `Moonlink.js > Node -> Attempting connection to ${this.identifier} (${this.host}:${this.port}).`);
+            const nodeData = await this.manager.database.get(`nodes.${this.uuid}`);
+            if (this.destroyed)
+                return;
+            const sessionId = nodeData?.sessionId;
+            let headers = {
+                Authorization: this.password,
+                "User-Id": this.manager.clientId,
+                "Client-Name": this.manager.options.clientName || "Moonlink.js",
+            };
+            if (this.manager.options.resume && sessionId) {
+                headers["Session-Id"] = sessionId;
+                this.manager.emit("debug", `Moonlink.js > Node > Connect > Using resume session ID: ${sessionId} for ${this.identifier}`);
             }
-            finally {
-                this.connecting = false;
-            }
-        });
+            this.manager.emit("debug", `Moonlink.js > Node >> WebSocket headers for ${this.identifier}: ${(0, Util_1.stringifyWithReplacer)(headers)}.`);
+            this.socket = new (Util_1.Structure.get("WebSocket"))(`ws${this.secure ? "s" : ""}://${this.address}/${this.pathVersion}/websocket`, {
+                headers,
+            });
+            const socket = this.socket;
+            socket.on('open', () => { if (this.socket === socket && !this.destroyed)
+                void this.open(); });
+            socket.on('close', event => { if (this.socket === socket && !this.destroyed)
+                void this.close(event); });
+            socket.on('message', event => { if (this.socket === socket && !this.destroyed)
+                void this.message(event); });
+            socket.on('error', event => { if (this.socket === socket && !this.destroyed)
+                this.error(event); });
+        }
+        finally {
+            this.connecting = false;
+        }
     }
     calculateReconnectDelay() {
         return (0, RetryDelay_1.retryDelay)(this.retryDelay, this.reconnectAttempts, this.retryJitter, 300000);
     }
     async probe() {
-        if (this.destroyed || this.manager.destroyed || !this.connected)
+        if (this.destroyed || !this.connected)
             return false;
-        const socket = this.socket;
-        const session = this.sessionId;
-        const previousStats = this.stats;
-        const previousTimestamp = this.statsReceivedAt;
         try {
             const stats = await this.rest.getStats();
-            if (!stats || this.destroyed || this.manager.destroyed || !this.connected ||
-                this.socket !== socket || this.sessionId !== session)
+            if (!stats || this.destroyed || !this.connected)
                 return false;
-            if (this.stats === previousStats && this.statsReceivedAt === previousTimestamp) {
-                this.stats = stats;
-                this.statsReceivedAt = Date.now();
-            }
+            this.stats = stats;
+            this.statsReceivedAt = Date.now();
             return this.circuit.state === 'closed';
         }
         catch {
@@ -346,10 +286,7 @@ class Node {
         const socket = this.socket;
         const active = () => !this.destroyed && this.connected && this.socket === socket && this.sessionId === sessionId;
         try {
-            const response = await this.rest.updateSession(this.manager.options.resume, this.resumeTimeout / 1000);
-            if (response == null || response.resuming !== this.manager.options.resume) {
-                throw new Error('Backend did not confirm resume configuration');
-            }
+            await this.rest.updateSession(this.manager.options.resume, this.resumeTimeout / 1000);
             if (!active())
                 return;
             this.resetResumeUpdateState();
@@ -361,7 +298,7 @@ class Node {
             this.resumeUpdateAttempts++;
             const attempt = this.resumeUpdateAttempts;
             const delay = Math.min(this.resumeUpdateBaseDelay * Math.pow(1.5, attempt - 1), 30000);
-            this.manager.emit("debug", `Moonlink.js > Node > Failed to enable resume for ${this.identifier} (attempt ${attempt}/${this.resumeUpdateMaxAttempts}). Retrying in ${Math.round(delay / 1000)}s. Error: ${error instanceof Error ? error.message : String(error)}`);
+            this.manager.emit("debug", `Moonlink.js > Node > Failed to enable resume for ${this.identifier} (attempt ${attempt}/${this.resumeUpdateMaxAttempts}). Retrying in ${Math.round(delay / 1000)}s. Error: ${error.message}`);
             if (attempt < this.resumeUpdateMaxAttempts) {
                 this.scheduleResumeUpdateRetry(delay);
             }
@@ -376,204 +313,111 @@ class Node {
             return;
         this.recoveryInProgress = true;
         this.pendingRecovery = false;
-        const notify = (callback) => {
-            try {
-                callback();
-            }
-            catch (error) {
-                try {
-                    this.manager.emit("nodeError", this, error instanceof Error ? error : new Error(String(error)));
-                }
-                catch { }
-            }
-        };
+        this.manager.emit("debug", `Moonlink.js > Node >> Session not resumed for node ${this.identifier}. Starting disaster recovery (${reason}).`);
+        const playersOnNode = this.manager.players.filter((p) => p.node.uuid === this.uuid);
         try {
-            notify(() => this.manager.emit("debug", `Moonlink.js > Node >> Session not resumed for node ${this.identifier}. Starting disaster recovery (${reason}).`));
-            const playersOnNode = this.manager.players.filter(player => player.node === this);
             await Promise.all(playersOnNode.map(async (player) => {
-                const active = () => !this.destroyed && !player.destroyed && player.node === this;
-                if (!active())
-                    return;
-                notify(() => this.manager.emit('playerRecoveryStarted', player));
-                if (!active())
-                    return;
-                let success = false;
+                this.manager.emit('playerRecoveryStarted', player);
                 try {
-                    success = await player.restart({ startQueued: false });
+                    const success = await player.restart({ startQueued: false });
+                    if (!this.destroyed)
+                        this.manager.emit(success ? 'playerRecoverySuccess' : 'playerRecoveryFailed', player);
                 }
                 catch (error) {
-                    notify(() => this.manager.emit('nodeError', this, error instanceof Error ? error : new Error(String(error))));
+                    if (!this.destroyed)
+                        this.manager.emit('playerRecoveryFailed', player);
                 }
-                if (active())
-                    notify(() => this.manager.emit(success ? 'playerRecoverySuccess' : 'playerRecoveryFailed', player));
             }));
         }
         finally {
             this.recoveryInProgress = false;
         }
     }
-    invalidateBackendRefresh() {
-        this.backendGeneration++;
-        this.backendRefresh = undefined;
-        this.sourceHealth.clear();
-    }
-    clearBackendMetadata() {
-        this.isNodeLink = false;
-        this.backend = undefined;
-        this.capabilities = new Set();
-        this.info = undefined;
-        this.version = undefined;
-        this.backendRefreshedAt = undefined;
-    }
-    refreshBackend() {
-        if (this.destroyed || this.manager.destroyed || !this.connected)
-            return Promise.resolve(false);
-        if (this.backendRefresh)
-            return this.backendRefresh;
-        const generation = this.backendGeneration;
-        const socket = this.socket;
-        const current = () => !this.destroyed && !this.manager.destroyed && this.connected &&
-            this.backendGeneration === generation && this.socket === socket;
-        const operation = Promise.resolve().then(() => (0, OpenTelemetry_1.observeOperation)(this.manager, 'nyxlink.capabilities', async () => {
-            if (!current())
-                return false;
-            try {
-                const result = await this.rest.getInfoWithHeaders();
-                if (!current() || !result)
-                    return false;
-                const capabilities = new Set();
-                const adapter = BackendDetector_1.BackendDetector.detect(result.data, result.headers, capabilities);
-                if (!adapter)
-                    return false;
-                this.backend = adapter;
-                this.capabilities = capabilities;
-                this.isNodeLink = adapter.kind === 'nodelink';
-                this.info = result.data;
-                this.version = adapter.version;
-                this.backendRefreshedAt = Date.now();
-                return true;
-            }
-            catch (error) {
-                if (current())
-                    this.manager.emit('debug', `NyxLink > Node > Backend metadata refresh failed for ${this.identifier}`);
-                return false;
-            }
-        }, result => result ? 'success' : 'resolved')).finally(() => {
-            if (this.backendRefresh === operation)
-                this.backendRefresh = undefined;
-        });
-        this.backendRefresh = operation;
-        return operation;
-    }
     async open() {
-        if (this.destroyed || this.manager.destroyed)
+        if (this.destroyed)
             return;
-        this.invalidateBackendRefresh();
-        const generation = this.backendGeneration;
-        const socket = this.socket;
         if (this.reconnectTimeout)
             clearTimeout(this.reconnectTimeout);
         this.reconnectTimeout = undefined;
-        this.stats = undefined;
-        this.statsReceivedAt = undefined;
-        this.clearBackendMetadata();
         this.connected = true;
         this.setState(types_1.NodeState.CONNECTED);
-        const current = () => !this.destroyed && !this.manager.destroyed && this.connected &&
-            this.backendGeneration === generation && this.socket === socket;
-        if (!current())
+        if (this.destroyed || !this.connected)
             return;
+        this.stats = undefined;
+        this.statsReceivedAt = undefined;
+        this.isNodeLink = false;
+        this.backend = undefined;
+        this.capabilities.clear();
+        this.info = undefined;
+        this.version = undefined;
+        const socket = this.socket;
         if (this.readyTimeout)
             clearTimeout(this.readyTimeout);
         this.readyTimeout = setTimeout(() => {
-            if (!current())
-                return;
             this.readyTimeout = undefined;
-            if (this.state !== types_1.NodeState.READY)
+            if (!this.destroyed && this.socket === socket && this.state !== types_1.NodeState.READY)
                 socket?.close(1011, 'No valid ready payload');
         }, this.readyTimeoutMs);
         this.readyTimeout.unref();
-        this.backendReady = this.refreshBackend().then(() => {
-            if (current())
+        this.backendReady = (async () => {
+            try {
+                const result = await this.rest.getInfoWithHeaders();
+                if (!this.connected || this.destroyed || this.socket !== socket)
+                    return;
+                if (result) {
+                    this.backend = BackendDetector_1.BackendDetector.detect(result.data, result.headers, this.capabilities);
+                    this.isNodeLink = this.backend?.kind === 'nodelink';
+                    this.info = result.data;
+                    this.version = this.backend?.version;
+                }
+            }
+            catch (error) {
+                this.manager.emit('debug', `NyxLink > Node >> Info unavailable for ${this.identifier}: ${error.message}`);
+            }
+            if (this.connected && !this.destroyed && this.socket === socket)
                 this.manager.emit('nodeConnected', this);
-        });
+        })();
         await this.backendReady;
     }
     async close(event) {
-        if (this.destroyed || (this.state === types_1.NodeState.DISCONNECTED && !this.connected))
+        if (this.destroyed)
             return;
-        this.invalidateBackendRefresh();
-        const closeGeneration = this.backendGeneration;
-        const closingSocket = this.socket;
-        this.socket = null;
-        const notify = (callback) => {
-            try {
-                callback();
-            }
-            catch (error) {
-                try {
-                    this.manager.emit("nodeError", this, error instanceof Error ? error : new Error(String(error)));
-                }
-                catch { }
-            }
-        };
-        const closingThisConnection = () => !this.destroyed &&
-            this.backendGeneration === closeGeneration && !this.connected &&
-            this.state === types_1.NodeState.DISCONNECTED;
-        this.clearVoiceReconnects();
         if (this.readyTimeout)
             clearTimeout(this.readyTimeout);
         this.readyTimeout = undefined;
         const { code, reason } = event;
         if (this.connected)
             this.connected = false;
-        notify(() => this.setState(types_1.NodeState.DISCONNECTED));
+        this.setState(types_1.NodeState.DISCONNECTED);
         this.resetResumeUpdateState();
-        notify(() => this.manager.emit("debug", `Moonlink.js > Node <- Disconnected from ${this.identifier}. Code: ${code}, Reason: ${reason}.`));
-        try {
-            closingSocket?.close();
+        this.manager.emit("debug", `Moonlink.js > Node <- Disconnected from ${this.identifier}. Code: ${code}, Reason: ${reason}.`);
+        this.manager.emit("nodeDisconnect", this, code, reason);
+        if (this.socket) {
+            this.socket.close();
+            this.socket = null;
         }
-        catch (error) {
-            notify(() => this.manager.emit("nodeError", this, error instanceof Error ? error : new Error(String(error))));
-        }
-        notify(() => this.manager.emit("nodeDisconnect", this, code, reason));
-        if (!closingThisConnection())
-            return;
         if (this.reconnectTimeout)
             clearTimeout(this.reconnectTimeout);
         this.reconnectTimeout = undefined;
-        let orphanedPlayers = this.manager.players.filter((p) => p.node === this);
+        let orphanedPlayers = this.manager.players.filter((p) => p.node.uuid === this.uuid);
         let moved = false;
         if (orphanedPlayers.length > 0 && this.manager.options.node?.autoMovePlayers) {
-            const transfers = await Promise.all(orphanedPlayers.map(async (player) => {
-                try {
-                    return await NodeFailover_1.NodeFailover.move(player, this);
-                }
-                catch (error) {
-                    const failure = error instanceof Error ? error : new Error(String(error));
-                    notify(() => this.manager.emit("nodeError", this, failure));
-                    return { status: 'failed', attempts: 0 };
-                }
-            }));
+            const transfers = await Promise.all(orphanedPlayers.map(player => NodeFailover_1.NodeFailover.move(player, this)));
             const destinations = new Map();
             orphanedPlayers.forEach((player, index) => {
                 const result = transfers[index];
-                if (result.status === 'recovered' && result.node && !player.destroyed &&
-                    player.node === result.node && result.node !== this &&
-                    result.node.connected && !result.node.destroyed) {
+                if (result.status === 'recovered') {
                     const group = destinations.get(result.node) ?? [];
                     group.push(player);
                     destinations.set(result.node, group);
                 }
             });
-            for (const [target, players] of destinations) {
-                notify(() => this.manager.emit('playersMoved', players, this, target));
-            }
-            orphanedPlayers = orphanedPlayers.filter(player => !player.destroyed && (player.node === this ||
-                !player.node.connected || player.node.destroyed));
+            for (const [target, players] of destinations)
+                this.manager.emit('playersMoved', players, this, target);
+            orphanedPlayers = orphanedPlayers.filter((_, index) => transfers[index].status === 'failed');
             moved = orphanedPlayers.length === 0;
         }
-        if (!closingThisConnection())
+        if (this.destroyed)
             return;
         if (this.authenticationFailed)
             this.reconnectAttempts = this.retryAmount;
@@ -581,22 +425,12 @@ class Node {
             if (!moved && orphanedPlayers.length > 0) {
                 this.manager.emit("debug", `Moonlink.js > Node >> Node disconnected permanently. Destroying ${orphanedPlayers.length} players.`);
                 if (!this.manager.options.node?.failover?.preserveOnFailure) {
-                    for (const player of orphanedPlayers) {
-                        try {
-                            await player.destroy("Node disconnected permanently");
-                        }
-                        catch (error) {
-                            const failure = error instanceof Error ? error : new Error(String(error));
-                            try {
-                                this.manager.emit("nodeError", this, failure);
-                            }
-                            catch { }
-                        }
-                    }
+                    for (const player of orphanedPlayers)
+                        await player.destroy("Node disconnected permanently");
                 }
-                notify(() => this.manager.emit("playersOrphaned", orphanedPlayers, this));
+                this.manager.emit("playersOrphaned", orphanedPlayers, this);
             }
-            if (this.reconnectAttempts >= this.retryAmount && closingThisConnection()) {
+            if (this.reconnectAttempts >= this.retryAmount && !this.destroyed) {
                 await this.destroy();
             }
         }
@@ -616,36 +450,15 @@ class Node {
             return;
         let payload;
         try {
-            payload = JSON.parse(typeof data === 'string' ? data : data.toString('utf8'));
+            payload = JSON.parse(data);
         }
         catch (e) {
-            this.manager.emit("debug", `NyxLink > Node > Rejected malformed payload from ${this.identifier}.`);
+            this.manager.emit("debug", `Moonlink.js > Node <- Received malformed payload from ${this.identifier}. Data: ${data}, Error: ${e}.`);
             return;
         }
         if (!payload || typeof payload !== 'object' || Array.isArray(payload) || typeof payload.op !== 'string')
             return;
-        const messageSocket = this.socket;
-        const messageGeneration = this.backendGeneration;
         this.manager.emit("nodeRaw", this, payload);
-        if (payload.op === 'event' && (payload.type === 'SourceHealthSnapshotEvent' || payload.type === 'SourceHealthChangeEvent')) {
-            await this.backendReady;
-            if (this.destroyed || this.manager.destroyed || !this.connected || !this.isNodeLink ||
-                this.socket !== messageSocket || this.backendGeneration !== messageGeneration)
-                return;
-            let event;
-            try {
-                event = this.sourceHealth.apply(payload);
-            }
-            catch {
-                this.manager.emit('debug', `NyxLink > Node > Rejected invalid source health event from ${this.identifier}.`);
-                return;
-            }
-            if (event?.type === 'SourceHealthSnapshotEvent')
-                this.manager.emit('sourceHealthSnapshot', this, event);
-            else if (event?.type === 'SourceHealthChangeEvent')
-                this.manager.emit('sourceHealthChange', this, event);
-            return;
-        }
         const player = this.manager.players.get(payload.guildId);
         if (player && (player.destroyed || player.node !== this))
             return;
@@ -659,11 +472,10 @@ class Node {
                 if (typeof payload.sessionId !== 'string' || !payload.sessionId || typeof payload.resumed !== 'boolean')
                     return;
                 const readySocket = this.socket;
-                const readyGeneration = this.backendGeneration;
                 await this.backendReady;
-                if (this.destroyed || !this.connected || this.socket !== readySocket || this.backendGeneration !== readyGeneration)
+                if (this.destroyed || !this.connected || this.socket !== readySocket)
                     return;
-                this.manager.emit("debug", `NyxLink > Node >> READY for ${this.identifier}. Resumed: ${payload.resumed}.`);
+                this.manager.emit("debug", `Moonlink.js > Node >> READY payload: ${(0, Util_1.stringifyWithReplacer)(payload)}`);
                 this.sessionId = payload.sessionId;
                 this.resumed = payload.resumed;
                 this.reconnectAttempts = 0;
@@ -673,10 +485,10 @@ class Node {
                 this.setState(types_1.NodeState.READY);
                 if (this.destroyed || !this.connected)
                     return;
-                await this.manager.database.set(this.sessionStoragePath, {
+                await this.manager.database.set(`nodes.${this.uuid}`, {
                     sessionId: this.sessionId,
                 });
-                if (this.destroyed || !this.connected || this.socket !== readySocket || this.backendGeneration !== readyGeneration)
+                if (this.destroyed || !this.connected || this.socket !== readySocket)
                     return;
                 if (this.manager.options.resume) {
                     void this.enableResumeWithRetry();
@@ -734,7 +546,7 @@ class Node {
                         player.current.time = currentState.time;
                         player.updateData("current.position", currentState.position);
                     }
-                    if (shouldPreservePosition && lastState) {
+                    if (shouldPreservePosition) {
                         player.set("lastKnownPosition", lastState.position);
                     }
                 }
@@ -789,14 +601,10 @@ class Node {
                 });
                 this.manager.emit("playerUpdate", player, player.current ?? null, payload);
                 player.voice.check(currentState.connected);
-                player.requestQueuePreload?.();
                 break;
             case "event":
                 if (payload.type === "WorkerFailedEvent") {
-                    void this.handleWorkerFailed(payload).catch(() => {
-                        if (!this.destroyed)
-                            this.manager.emit("debug", `NyxLink > Worker recovery handler rejected on ${this.identifier}.`);
-                    });
+                    this.handleWorkerFailed(payload);
                     loggedByCase = true;
                     break;
                 }
@@ -888,39 +696,42 @@ class Node {
                 this.handleLyricsNotFound(player, payload);
                 break;
             case "WebSocketClosedEvent":
-                void this.handleWebSocketClosed(player, payload).catch(() => {
-                    if (!this.destroyed)
-                        this.manager.emit("debug", `NyxLink > Voice close recovery rejected on ${this.identifier}.`);
-                });
+                this.handleWebSocketClosed(player, payload);
                 break;
         }
     }
     async handleWorkerFailed(payload) {
-        const affectedGuilds = [...new Set((Array.isArray(payload.affectedGuilds) ? payload.affectedGuilds : [])
-                .filter((id) => typeof id === "string" && /^[0-9]{17,20}$/.test(id)))];
-        this.manager.emit("debug", `NyxLink > WorkerFailedEvent on ${this.identifier}: ${affectedGuilds.length} valid guild(s).`);
-        const session = this.sessionId;
-        const socket = this.socket;
-        const generation = this.backendGeneration;
+        const affectedGuilds = Array.isArray(payload.affectedGuilds) ? payload.affectedGuilds : [];
+        this.manager.emit("debug", `Moonlink.js > Node#handleWorkerFailed >> WorkerFailedEvent received on ${this.identifier}. Affected guilds: ${affectedGuilds.join(", ") || "none"}. Message: ${payload.message ?? "n/a"}.`);
         for (const guildId of affectedGuilds) {
             const player = this.manager.players.get(guildId);
-            if (!player)
-                continue;
-            const guard = (0, PlaybackGuard_1.playbackGuard)(player);
-            const ticket = guard.ticket;
-            const active = () => !this.destroyed && this.connected && !this.manager.destroyed &&
-                this.sessionId === session && this.socket === socket && this.backendGeneration === generation &&
-                !player.destroyed && this.manager.players.get(guildId) === player &&
-                player.node === this && guard.isCurrent(ticket);
-            if (!active())
+            if (!player || player.destroyed)
                 continue;
             if (player.get("voiceCloseRecoveryInProgress")) {
-                this.manager.emit("debug", `NyxLink > Worker recovery already active for ${guildId}.`);
+                this.manager.emit("debug", `Moonlink.js > Node#handleWorkerFailed >> Recovery already in progress for player ${guildId}, skipping duplicate worker recovery.`);
                 continue;
             }
-            await (0, VoiceRecovery_1.recoverVoicePlayer)(this, player, active, {
-                label: 'Worker', destroyReason: 'Worker failed recovery failed',
-            });
+            player.set("voiceCloseRecoveryInProgress", true);
+            try {
+                await player.disconnect();
+                try {
+                    await this.rest.destroyPlayer(guildId);
+                }
+                catch { }
+                await new Promise(resolve => setTimeout(resolve, 750));
+                await player.connect();
+                const restarted = await player.restart();
+                if (!restarted) {
+                    this.manager.emit("debug", `Moonlink.js > Node#handleWorkerFailed >> Restart returned false for player ${guildId}.`);
+                }
+            }
+            catch (error) {
+                this.manager.emit("debug", `Moonlink.js > Node#handleWorkerFailed >> Recovery failed for player ${guildId}. Error: ${error.message}`);
+                await player.destroy("Worker failed recovery failed");
+            }
+            finally {
+                player.set("voiceCloseRecoveryInProgress", false);
+            }
         }
     }
     async handleTrackStart(player, payload) {
@@ -933,8 +744,7 @@ class Node {
             return;
         const trackData = attempts.clean(incoming);
         if (started === 'preloaded') {
-            player.consumePreloadedTrack();
-            player.current = new (Util_1.Structure.get("Track"))(trackData, trackData.userData?.requester ?? player.current?.requester, undefined, this.manager.options.trackPartial ?? []);
+            player.current = new (Util_1.Structure.get("Track"))(trackData, trackData.userData?.requester ?? player.current?.requester);
             player.updateData('current', TrackCodec_1.TrackCodec.serialize(player.current));
         }
         const trackTitle = trackData?.info?.title ?? player.current?.title ?? "Unknown";
@@ -964,9 +774,8 @@ class Node {
         if (player.current && (!trackData.userData || Object.keys(trackData.userData).length === 0)) {
             trackData.userData = player.current.userData;
         }
-        const trackForEvent = new (Util_1.Structure.get("Track"))(trackData, player.current?.requester, undefined, this.manager.options.trackPartial ?? []);
+        const trackForEvent = new (Util_1.Structure.get("Track"))(trackData, player.current?.requester);
         this.manager.emit("trackStart", player, trackForEvent);
-        player.requestQueuePreload?.();
     }
     async handleTrackEnd(player, payload) {
         const { reason } = payload;
@@ -983,10 +792,10 @@ class Node {
             trackData.userData = player.current.userData;
         }
         const trackForEvent = trackData
-            ? new (Util_1.Structure.get("Track"))(trackData, player.current?.requester, undefined, this.manager.options.trackPartial ?? [])
+            ? new (Util_1.Structure.get("Track"))(trackData, player.current?.requester)
             : player.current;
         const intent = (0, PlaybackGuard_1.playbackGuard)(player).ticket;
-        if (!isCrossfadeTransition && !isGaplessTransition) {
+        if (!isCrossfadeTransition) {
             player.playing = false;
             player.paused = false;
             player.updateActivity();
@@ -1028,16 +837,18 @@ class Node {
             this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> Track was ${reason}, skipping queue logic for player ${player.guildId}.`);
             return;
         }
-        if (reason === "finished" && player.loop === "track" && player.current) {
-            this.manager.emit("debug", `NyxLink > Node#handleTrackEnd >> Replaying looped track for player ${player.guildId}.`);
-            await player.replay();
+        if (player.loop === "track" && player.current) {
+            this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> Player ${player.guildId} is in track loop mode. Replaying track: ${player.current.title}.`);
+            await player.updatePlayer({
+                track: { encoded: player.current.encoded },
+                position: 0,
+            });
             return;
         }
-        if (reason === "finished" && player.loop === "queue" && player.current) {
+        if (player.loop === "queue" && player.current) {
             this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd >> Player ${player.guildId} is in queue loop mode. Adding current track to the end of the queue: ${player.current.title}.`);
-            const loopTrack = player.current.clone();
-            loopTrack.position = 0;
-            player.queue.add(loopTrack);
+            player.current.position = 0;
+            player.queue.add(player.current);
             this.manager.emit("debug", `Moonlink.js > Node#handleTrackEnd << Queue size is now ${player.queue.size}.`);
         }
         if (player.queue.size > 0) {
@@ -1071,20 +882,13 @@ class Node {
             await player.play();
             return;
         }
-        await this.handleQueueEnd(player, trackForEvent, intent);
+        await this.handleQueueEnd(player, trackForEvent);
     }
     async handleTrackStuck(player, payload) {
-        if (payload.track?.encoded && payload.track.encoded !== player.current?.encoded)
-            return;
         const track = player.current;
-        const ticket = (0, PlaybackGuard_1.playbackGuard)(player).ticket;
-        const unchanged = () => !player.destroyed && player.node === this &&
-            player.current === track && (0, PlaybackGuard_1.playbackGuard)(player).isCurrent(ticket);
         const thresholdMs = payload.thresholdMs;
         this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck >> Track stuck for player ${player.guildId}: "${track?.title}". Threshold: ${thresholdMs}ms. Payload: ${(0, Util_1.stringifyWithReplacer)(payload)}.`);
         this.manager.emit("trackStuck", player, track, thresholdMs, payload);
-        if (!track || !unchanged())
-            return;
         if (track && track.duration === -1) {
             this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck >> Track has -1 duration (stream?), skipping auto-recovery to prevent loops for player ${player.guildId}.`);
             return;
@@ -1118,25 +922,16 @@ class Node {
                 this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck >> Seeked forward 1s for player ${player.guildId}.`);
             }
             catch (error) {
-                if (!unchanged())
-                    return;
-                this.manager.emit("debug", `NyxLink > Node#handleTrackStuck >> Failed to seek, attempting full restart for player ${player.guildId}. Error: ${error instanceof Error ? error.message : String(error)}.`);
+                this.manager.emit("debug", `Moonlink.js > Node#handleTrackStuck >> Failed to seek, attempting full restart for player ${player.guildId}. Error: ${error.message}.`);
                 await player.restart();
             }
         }
     }
     async handleTrackException(player, payload) {
-        if (payload.track?.encoded && payload.track.encoded !== player.current?.encoded)
-            return;
         const track = player.current;
-        const ticket = (0, PlaybackGuard_1.playbackGuard)(player).ticket;
-        const unchanged = () => !player.destroyed && player.node === this &&
-            player.current === track && (0, PlaybackGuard_1.playbackGuard)(player).isCurrent(ticket);
         const exception = payload.exception;
         this.manager.emit("debug", `Moonlink.js > Node#handleTrackException >> Track exception for player ${player.guildId}: "${track?.title}". Severity: ${exception.severity}. Message: ${exception.message}. Payload: ${(0, Util_1.stringifyWithReplacer)(payload)}.`);
         this.manager.emit("trackException", player, track, exception, payload);
-        if (!track || !unchanged())
-            return;
         if (this.manager.options.trackHandling?.autoSkipOnError) {
             this.manager.emit("debug", `Moonlink.js > Node#handleTrackException >> 'autoSkipOnError' is true, skipping track for player ${player.guildId}.`);
             await player.skip();
@@ -1183,7 +978,7 @@ class Node {
     }
     handleMixStarted(player, payload) {
         const trackData = payload.track;
-        const mixTrack = new (Util_1.Structure.get("Track"))(trackData, trackData?.userData?.requester, undefined, this.manager.options.trackPartial ?? []);
+        const mixTrack = new (Util_1.Structure.get("Track"))(trackData, trackData?.userData?.requester);
         this.manager.emit("mixStart", player, payload.mixId, mixTrack, payload.volume, payload);
     }
     handleMixEnded(player, payload) {
@@ -1279,36 +1074,9 @@ class Node {
     handleLyricsNotFound(player, payload) {
         this.manager.emit("lyricsNotFound", player, payload);
     }
-    cancelVoiceReconnect(player) {
-        const timer = this.voiceReconnectTimers.get(player);
-        if (timer !== undefined)
-            clearTimeout(timer);
-        this.voiceReconnectTimers.delete(player);
-    }
-    clearVoiceReconnects() {
-        for (const timer of this.voiceReconnectTimers.values())
-            clearTimeout(timer);
-        this.voiceReconnectTimers.clear();
-    }
-    async recoverSpecialVoiceClose(player, code) {
-        const guard = (0, PlaybackGuard_1.playbackGuard)(player);
-        const ticket = guard.ticket;
-        const session = this.sessionId;
-        const socket = this.socket;
-        const generation = this.backendGeneration;
-        const active = () => !this.destroyed && this.connected && !this.manager.destroyed &&
-            player.node === this && !player.destroyed &&
-            this.manager.players.get(player.guildId) === player &&
-            this.sessionId === session && this.socket === socket && this.backendGeneration === generation &&
-            guard.isCurrent(ticket);
-        await (0, VoiceRecovery_1.recoverVoicePlayer)(this, player, active, {
-            label: `Voice close ${code}`, resetReconnectAttempts: true,
-            destroyReason: code === 4022 ? 'Voice close 4022 recovery failed' : 'Worker failed (5001) recovery failed',
-        });
-    }
     async handleWebSocketClosed(player, payload) {
         const { code, reason, byRemote } = payload;
-        if (this.destroyed || player.destroyed || player.node !== this)
+        if (player.destroyed)
             return;
         if (player.get("voiceCloseRecoveryInProgress")) {
             this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Voice-close recovery already in progress for player ${player.guildId}, skipping event.`);
@@ -1320,8 +1088,59 @@ class Node {
             this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Ignoring WebSocket close (${code}) for player ${player.guildId} due to channel move.`);
             return;
         }
-        if (code === 4022 || (code === 5001 && this.isNodeLink)) {
-            await this.recoverSpecialVoiceClose(player, code);
+        if (code === 4022) {
+            player.set("voiceCloseRecoveryInProgress", true);
+            try {
+                this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Handling 4022 for player ${player.guildId} with full bot-side voice recovery.`);
+                await player.disconnect();
+                try {
+                    await this.rest.destroyPlayer(player.guildId);
+                }
+                catch (e) {
+                    this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Failed to destroy remote player during 4022 recovery for ${player.guildId}: ${e.message}`);
+                }
+                await new Promise(resolve => setTimeout(resolve, 750));
+                await player.connect();
+                const restarted = await player.restart();
+                if (!restarted) {
+                    this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> 4022 recovery restart returned false for player ${player.guildId}.`);
+                }
+                player.set("wsReconnectAttempts", 0);
+                this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> 4022 recovery finished for player ${player.guildId}.`);
+            }
+            catch (error) {
+                this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> 4022 recovery failed for player ${player.guildId}. Error: ${error.message}`);
+                await player.destroy("Voice close 4022 recovery failed");
+            }
+            finally {
+                player.set("voiceCloseRecoveryInProgress", false);
+            }
+            return;
+        }
+        if (code === 5001 && this.isNodeLink) {
+            player.set("voiceCloseRecoveryInProgress", true);
+            try {
+                this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Handling 5001 (worker_failed) for player ${player.guildId} with bot-side recovery.`);
+                await player.disconnect();
+                try {
+                    await this.rest.destroyPlayer(player.guildId);
+                }
+                catch { }
+                await new Promise(resolve => setTimeout(resolve, 750));
+                await player.connect();
+                const restarted = await player.restart();
+                if (!restarted) {
+                    this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> 5001 recovery restart returned false for player ${player.guildId}.`);
+                }
+                player.set("wsReconnectAttempts", 0);
+            }
+            catch (error) {
+                this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> 5001 recovery failed for player ${player.guildId}. Error: ${error.message}`);
+                await player.destroy("Worker failed (5001) recovery failed");
+            }
+            finally {
+                player.set("voiceCloseRecoveryInProgress", false);
+            }
             return;
         }
         if (player.isResuming) {
@@ -1342,8 +1161,6 @@ class Node {
                 await player.destroy("Disconnected by user/kick");
             return;
         }
-        if (this.voiceReconnectTimers.has(player))
-            return;
         const reconnectAttempts = (player.get("wsReconnectAttempts") || 0) + 1;
         const maxReconnectAttempts = voiceOptions.maxReconnectAttempts ?? 5;
         if (reconnectAttempts > maxReconnectAttempts) {
@@ -1356,47 +1173,32 @@ class Node {
         this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed -> Attempting reconnect ${reconnectAttempts}/${maxReconnectAttempts} for player ${player.guildId}.`);
         const reconnectDelay = voiceOptions.reconnectDelay ?? 5000;
         this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed -> Reconnect scheduled in ${reconnectDelay}ms for player ${player.guildId}.`);
-        const guard = (0, PlaybackGuard_1.playbackGuard)(player);
-        const ticket = guard.ticket;
-        const active = () => !this.destroyed && !player.destroyed && player.node === this &&
-            guard.isCurrent(ticket) && Boolean(player.get("userInitiatedConnect"));
-        const timer = setTimeout(() => {
-            this.voiceReconnectTimers.delete(player);
-            if (!active() || player.get("voiceCloseRecoveryInProgress"))
+        setTimeout(async () => {
+            if (player.destroyed || !player.get("userInitiatedConnect")) {
+                this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Reconnect cancelled for player ${player.guildId}. (Destroyed or not user-initiated)`);
                 return;
-            const recover = async () => {
-                player.set("voiceCloseRecoveryInProgress", true);
-                try {
-                    if (player.playing && player.current) {
-                        if (!await player.restart({ destroyOnFailure: false }))
-                            throw new Error("Player restart was not acknowledged");
-                    }
-                    else {
-                        await player.connect();
-                    }
-                    if (!active())
-                        return;
-                    this.manager.emit("debug", `NyxLink > Node > Voice recovery finished for player ${player.guildId}.`);
-                    player.set("wsReconnectAttempts", 0);
+            }
+            try {
+                if (player.playing && player.current) {
+                    this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed -> Attempting player restart for ${player.guildId}.`);
+                    await player.restart();
                 }
-                catch (error) {
-                    if (!active())
-                        return;
-                    this.manager.emit("debug", `NyxLink > Node > Reconnect attempt ${reconnectAttempts} failed: ${error.message}`);
-                    if (reconnectAttempts >= maxReconnectAttempts) {
-                        this.manager.emit("socketClosed", player, code, reason, byRemote, payload);
-                        if (active())
-                            await player.destroy("All reconnect attempts exhausted");
-                    }
+                else {
+                    this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed -> Reconnecting voice for idle player ${player.guildId}.`);
+                    await player.connect();
                 }
-                finally {
-                    player.set("voiceCloseRecoveryInProgress", false);
+                this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Voice recovery finished for player ${player.guildId}.`);
+                player.set("wsReconnectAttempts", 0);
+            }
+            catch (error) {
+                this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> Reconnect attempt ${reconnectAttempts} failed for player ${player.guildId}. Error: ${error.message}.`);
+                if (reconnectAttempts >= maxReconnectAttempts) {
+                    this.manager.emit("debug", `Moonlink.js > Node#handleWebSocketClosed >> All reconnect attempts exhausted for player ${player.guildId}.`);
+                    this.manager.emit("socketClosed", player, code, reason, byRemote, payload);
+                    await player.destroy("All reconnect attempts exhausted");
                 }
-            };
-            void recover().catch(error => this.manager.emit("nodeError", this, error));
+            }
         }, reconnectDelay);
-        timer.unref?.();
-        this.voiceReconnectTimers.set(player, timer);
     }
     async updateRecommendations(player, track = player.current) {
         return RecommendationResolver_1.RecommendationResolver.update(this, player, track);
@@ -1404,40 +1206,30 @@ class Node {
     async handleAutoPlay(player, previousTrack) {
         return AutoPlayManager_1.AutoPlayManager.play(this, player, previousTrack);
     }
-    async handleQueueEnd(player, lastTrack, ticket = (0, PlaybackGuard_1.playbackGuard)(player).ticket) {
-        if (player.destroyed || player.node !== this || player.queue.size > 0 || player.playing ||
-            !(0, PlaybackGuard_1.playbackGuard)(player).isCurrent(ticket))
-            return;
-        this.manager.emit("debug", `NyxLink > Node#handleQueueEnd >> Queue ended for player ${player.guildId}. LastTrack: ${lastTrack?.title || "None"}.`);
+    async handleQueueEnd(player, lastTrack) {
+        this.manager.emit("debug", `Moonlink.js > Node#handleQueueEnd >> Queue ended for player ${player.guildId}. LastTrack: ${lastTrack?.title || "None"}.`);
         player.current = null;
         player.playing = false;
         player.paused = false;
-        this.manager.emit("debug", `NyxLink > Node#handleQueueEnd >> Player state updated for guild ${player.guildId}.`);
+        this.manager.emit("debug", `Moonlink.js > Node#handleQueueEnd >> Player state updated: current=${player.current}, playing=${player.playing}, paused=${player.paused} for player ${player.guildId}.`);
         this.manager.emit("queueEnd", player, lastTrack);
-        const stillIdle = () => !player.destroyed && player.node === this &&
-            (0, PlaybackGuard_1.playbackGuard)(player).isCurrent(ticket) && !player.playing &&
-            player.current === null && player.queue.size === 0;
-        if (player.autoLeave && stillIdle()) {
+        if (player.autoLeave) {
+            this.manager.emit("debug", `Moonlink.js > Node#handleQueueEnd -> AutoLeave enabled, destroying player ${player.guildId}.`);
             this.manager.emit("autoLeaved", player, lastTrack);
-            if (!stillIdle())
-                return;
-            this.manager.emit("debug", `NyxLink > Node#handleQueueEnd -> AutoLeave enabled, destroying player ${player.guildId}.`);
             await player.destroy("AutoLeave enabled");
         }
     }
     error({ error }) {
-        if (error && typeof error === 'object' && 'statusCode' in error && (error.statusCode === 401 || error.statusCode === 403))
+        if (error?.statusCode === 401 || error?.statusCode === 403)
             this.authenticationFailed = true;
-        const failure = error instanceof Error ? error : new Error(String(error));
-        this.manager.emit("debug", `NyxLink > Node > Error on node ${this.identifier}: ${failure.message}`);
-        this.manager.emit("nodeError", this, failure);
+        this.manager.emit("debug", `Moonlink.js > Node !> Error on node ${this.identifier}. Error: ${error.message}.`);
+        this.manager.emit("nodeError", this, error);
     }
     async destroy() {
         if (this.destroyed)
             return;
         this.destroyed = true;
         this.connected = false;
-        this.clearVoiceReconnects();
         if (this.readyTimeout)
             clearTimeout(this.readyTimeout);
         this.readyTimeout = undefined;
@@ -1446,8 +1238,9 @@ class Node {
         this.reconnectTimeout = undefined;
         this.cancelResumeWindow();
         this.resetResumeUpdateState();
-        this.invalidateBackendRefresh();
-        this.clearBackendMetadata();
+        this.backend = undefined;
+        this.isNodeLink = false;
+        this.capabilities.clear();
         const socket = this.socket;
         this.socket = undefined;
         socket?.close();

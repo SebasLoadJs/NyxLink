@@ -268,3 +268,43 @@ test('observer exceptions after commit do not undo an acknowledged migration', a
   const saved = await manager.database.get(`players.${player.guildId}`);
   assert.equal(saved.node, target.identifier);
 });
+
+
+test('rotating the destination session during restore prevents commit and cleanup of its replacement', async t => {
+  const { manager, node: source, player } = createPlayer(t);
+  const target = attachDestination(t, manager);
+  target.sessionId = 'initial-target';
+  player.current = createTrack('session-fenced');
+  player.playing = true;
+  let sourceCleanup = 0, targetCleanup = 0;
+  source.rest.destroyPlayer = async () => { sourceCleanup++; };
+  target.rest.destroyPlayer = async () => { targetCleanup++; };
+  player.restart = async () => {
+    target.sessionId = 'replacement-target';
+    return true;
+  };
+  assert.equal(await player.transferNode(target), false);
+  assert.equal(player.node, source);
+  assert.equal(sourceCleanup, 0);
+  assert.equal(targetCleanup, 0);
+  assert.equal(await manager.database.get(`players.${player.guildId}.node`), source.identifier);
+});
+
+test('a new source session is not deleted after destination ownership commits', async t => {
+  const { manager, node: source, player } = createPlayer(t);
+  const target = attachDestination(t, manager);
+  source.sessionId = 'initial-source';
+  let sourceCleanup = 0;
+  const reports = [];
+  source.rest.destroyPlayer = async () => { sourceCleanup++; };
+  manager.on('playerNodeFailover', (_player, report) => reports.push(report));
+  player.restart = async () => {
+    source.sessionId = 'replacement-source';
+    return true;
+  };
+  assert.equal(await player.transferNode(target), true);
+  assert.equal(player.node, target);
+  assert.equal(sourceCleanup, 0);
+  assert.equal(reports.at(-1).reasonCode, 'source-cleanup-failed');
+  assert.match(reports.at(-1).reason, /identity changed/);
+});

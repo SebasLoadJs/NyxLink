@@ -87,12 +87,12 @@ export class Queue {
             if (t === undefined || t === null) continue;
 
             if (maxSize !== "unlimited" && this.tracks.length >= maxSize) {
-                this.manager.emit("debug", `Moonlink.js > Queue >> Max queue size (${maxSize}) reached. Cannot add more tracks.`);
+                this.manager.emit("debug", `NyxLink > Queue >> Max queue size (${maxSize}) reached. Cannot add more tracks.`);
                 break;
             }
 
             if (!allowDuplicates && this.tracks.some(existing => existing.encoded === t.encoded)) {
-                this.manager.emit("debug", `Moonlink.js > Queue >> Duplicate track not allowed. Track: ${t.title}`);
+                this.manager.emit("debug", `NyxLink > Queue >> Duplicate track not allowed. Track: ${t.title}`);
                 continue;
             }
 
@@ -123,7 +123,7 @@ export class Queue {
         const maxSize = this.manager.options.queue?.maxSize ?? 1000;
 
         if (maxSize !== "unlimited" && this.tracks.length + accepted.length > maxSize) {
-            this.manager.emit("debug", `Moonlink.js > Queue >> Max queue size (${maxSize}) reached. Cannot insert more tracks.`);
+            this.manager.emit("debug", `NyxLink > Queue >> Max queue size (${maxSize}) reached. Cannot insert more tracks.`);
             return;
         }
 
