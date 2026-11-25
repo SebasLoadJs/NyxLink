@@ -88,6 +88,7 @@ export interface IManagerEvents {
     trackEnd: (player: Player, track: Track, reason: TrackEndReason, payload?: any) => void;
     trackStuck: (player: Player, track: Track, threshold: number, payload?: any) => void;
     trackException: (player: Player, track: Track, exception: any, payload?: any) => void;
+    sponsorBlockEvent: (player: Player, observation: import('../backends/SponsorBlockEvents').SponsorBlockObservation) => void;
     mixStart: (player: Player, mixId: string, track: Track, volume: number, payload?: any) => void;
     mixEnd: (player: Player, mixId: string, reason: string, payload?: any) => void;
     lyricsNotFound: (player: Player, payload?: any) => void;
