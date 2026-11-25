@@ -1,9 +1,6 @@
 import { hasLavaDSPXPlugin } from './LavaDSPXContracts';
 import type { BackendAdapter, BackendPlugin } from './BackendAdapter';
 import { LavalinkAdapter } from './LavalinkAdapter';
-import { hasLavaLyricsPlugin } from './LavaLyricsContracts';
-import { hasLavalinkSponsorBlockPlugin } from './LavalinkSponsorBlockContracts';
-import { hasLavaSearchPlugin } from './LavaSearchContracts';
 import { NodeLinkAdapter } from './NodeLinkAdapter';
 
 function object(value: unknown): Record<string, unknown> | undefined {
@@ -50,9 +47,7 @@ export class BackendDetector {
         if (!nodeLink) {
             if (hasLavaDSPXPlugin(metadata)) capabilities.add('lavadspx');
             if (metadata.some(plugin => ['lavasrc', 'lavasrc-plugin'].includes(plugin.name.toLowerCase()))) capabilities.add('lavasrc');
-            if (hasLavaSearchPlugin(metadata)) capabilities.add('lavasearch');
-            if (hasLavaLyricsPlugin(metadata)) capabilities.add('lavalyrics');
-            if (hasLavalinkSponsorBlockPlugin(metadata)) capabilities.add('lavalink:sponsorblock');
+            // Plugin installation alone does not establish optional HTTP endpoint availability.
         }
         return nodeLink ? new NodeLinkAdapter(version, capabilities, metadata) : new LavalinkAdapter(version, capabilities, metadata);
     }
