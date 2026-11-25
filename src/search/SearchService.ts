@@ -77,10 +77,13 @@ export class SearchService {
             const sourceAliases: Readonly<Record<string, string>> = {
                 youtube:'youtube', youtubemusic:'youtube', ytsearch:'youtube', ytmsearch:'youtube',
                 soundcloud:'soundcloud', scsearch:'soundcloud', dzsearch:'deezer', spsearch:'spotify',
-                amsearch:'applemusic', local:'local'
+                amsearch:'applemusic', azsearch:'amazonmusic', lfsearch:'lastfm', shsearch:'shazam', szsearch:'shazam', slsearch:'songlink', local:'local'
             };
             const preferSource = sourceHealth && !isUrl && Object.hasOwn(sourceAliases, source) ? sourceAliases[source] : undefined;
-            const node = query.node ? this.manager.nodes.nodes.get(query.node) : this.manager.nodes.findNode({ preferSource });
+            // The newly supported NodeLink-only providers must not be sent to a Lavalink node.
+            const exclusive = !isUrl && ['azsearch', 'lfsearch', 'shsearch', 'szsearch', 'slsearch'].includes(source);
+            const node = query.node ? this.manager.nodes.nodes.get(query.node) :
+                this.manager.nodes.findNode({ preferSource, ...(exclusive ? { backend: 'nodelink' as const } : {}) });
             if (!node || node.destroyed || !node.connected) throw new Error('No available nodes for searching');
             // Search responses are tied to the selected node and its session.
             // A late response must not advertise tracks from a node that has
@@ -120,7 +123,16 @@ export class SearchService {
                 let response: IRESTLoadTracks = { loadType: 'empty', data: {} };
                 for (const platform of platforms) {
                     activeSignal.throwIfAborted();
-                    if (nodeLinkSources.has(platform)) node.assertFeature(`search:${platform}`);
+                    if (nodeLinkSources.has(platform)) {
+                        // LavaSrc advertises the same prefix for these sources. Keep the native
+                        // NodeLink gate for every other extension and for unverified plugins.
+                        const shared = { spsearch: 'spotify', amsearch: 'applemusic', dzsearch: 'deezer', tdsearch: 'tidal' } as const;
+                        const provider = Object.hasOwn(shared, platform) ? shared[platform as keyof typeof shared] : undefined;
+                        const lavaSrc = node.backend?.kind === 'lavalink' && provider !== undefined &&
+                            node.backend.plugins.some(plugin => ['lavasrc', 'lavasrc-plugin'].includes(plugin.name.toLowerCase())) &&
+                            node.backend.supports(`source:${provider}`);
+                        if (!lavaSrc) node.assertFeature(`search:${platform}`);
+                    }
                     const prefix = Object.hasOwn(sources, platform) ? sources[platform as keyof typeof sources] : platform;
                     const identifier = isUrl ? query.query : `${prefix}:${query.query}`;
                     response = await this.wait(node.rest.loadTracks(identifier, { timeoutMs, signal: activeSignal }), activeSignal);
