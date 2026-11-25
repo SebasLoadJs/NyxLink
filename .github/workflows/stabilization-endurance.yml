@@ -28,6 +28,11 @@ on:
       - '.github/workflows/stabilization-endurance.yml'
   workflow_dispatch:
 
+# Supersede only automatic development pushes; preserve manual, PR and release checks.
+concurrency:
+  group: stabilization-endurance-${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' && 'dev-push' || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
+
 permissions:
   contents: read
 

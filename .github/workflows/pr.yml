@@ -7,6 +7,11 @@ on:
     branches: [dev, v5.2, v5.3]
   workflow_dispatch:
 
+# Supersede only automatic development pushes; preserve manual, PR and release checks.
+concurrency:
+  group: pr-${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' && 'dev-push' || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
+
 permissions:
   contents: read
 
