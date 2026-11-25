@@ -47,6 +47,7 @@ export type PlayerUpdateAcknowledgement = Record<string, unknown> & {
 };
 
 const extensionFields = ['fading', 'nextTrack', 'loudnessNormalizer', 'crossfade'] as const;
+export const nodeLinkPlayerFeatures = Object.freeze([...extensionFields, 'audioTrackId'] as const);
 
 /** Both adapters use the same wire protocol, with explicit backend-only fields. */
 export function preparePlayerUpdate(
