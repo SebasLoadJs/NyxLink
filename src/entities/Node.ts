@@ -1,3 +1,5 @@
+import type { NodeLinkDiscoveryOptions } from '../backends/NodeLinkSearchContracts';
+import type { IRESTLoadTracks } from '../typings/Interfaces';
 import type { LavaSearchOptions, LavaSearchResult } from '../backends/LavaSearchContracts';
 import { observeOperation } from '../observability/OpenTelemetry';
 import type { LyricsRequestOptions, SourceHealthResponse, NodeLinkStreamFormats } from '../backends/NodeLinkContracts';
@@ -335,6 +337,11 @@ export class Node {
   }
 
   /** Lavalink LavaSearch plugin; use a provider-supported query prefix. */
+  /** Native NodeLink discovery; inspect entity metadata before queueing. */
+  public loadNodeLinkSearch(query: string, options?: NodeLinkDiscoveryOptions): Promise<IRESTLoadTracks> {
+    return this.rest.loadNodeLinkSearch(query, options);
+  }
+
   public loadSearch(query: string, options?: LavaSearchOptions): Promise<LavaSearchResult | null> {
     return this.rest.loadSearch(query, options);
   }
