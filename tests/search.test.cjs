@@ -283,3 +283,41 @@ test('pending search refuses responses from a replaced node with the same identi
   replacement.rest.loadTracks = async () => ({ loadType: 'track', data: { ...record(), encoded: 'replacement-track' } });
   assert.equal((await manager.search({ query: 'stale node', node: node.identifier })).tracks[0].encoded, 'replacement-track');
 });
+
+test('backend inventory replacement with the same version invalidates cached searches', async t => {
+  const { BackendDetector } = require('../dist');
+  const { manager, node } = fixture(t, { cache: { ttlMs: 60000 } });
+  const inventory = { version: { semver: '4.2.2' } };
+  node.backend = BackendDetector.detect(inventory);
+  let calls = 0;
+  node.rest.loadTracks = async () => ({ loadType: 'track', data: { ...record(), encoded: 'generation-' + (++calls) } });
+  assert.equal((await manager.search({ query: 'same version' })).tracks[0].encoded, 'generation-1');
+  node.backend = BackendDetector.detect(inventory);
+  assert.equal((await manager.search({ query: 'same version' })).tracks[0].encoded, 'generation-2');
+  assert.equal((await manager.search({ query: 'same version' })).tracks[0].encoded, 'generation-2');
+  assert.equal(calls, 2);
+});
+
+test('new backend inventory does not coalesce with an older pending search of the same version', async t => {
+  const { BackendDetector } = require('../dist');
+  const { manager, node } = fixture(t, { deduplicate: true, cache: { ttlMs: 60000 } });
+  const inventory = { version: { semver: '4.2.2' } };
+  node.backend = BackendDetector.detect(inventory);
+  const entered = deferred(), pending = deferred();
+  let calls = 0;
+  node.rest.loadTracks = async () => {
+    if (++calls === 1) { entered.resolve(); return pending.promise; }
+    return { loadType: 'track', data: { ...record(), encoded: 'new-inventory' } };
+  };
+  const old = manager.search({ query: 'same song' });
+  const rejected = assert.rejects(old, /node changed/i);
+  await entered.promise;
+  node.backend = BackendDetector.detect(inventory);
+  try {
+    assert.equal((await manager.search({ query: 'same song' })).tracks[0].encoded, 'new-inventory');
+  } finally {
+    pending.resolve({ loadType: 'track', data: record() });
+  }
+  await rejected;
+  assert.equal(calls, 2);
+});

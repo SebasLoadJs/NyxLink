@@ -12,7 +12,7 @@ export class SearchService {
     private readonly cache = new Map<string, { expires: number; value: IRESTLoadTracks }>();
     // Cache ownership is per Node instance, not host:port or a reusable
     // identifier. Nodes with the same endpoint can serve different sessions.
-    private readonly cacheNodeIds = new WeakMap<Node, number>();
+    private readonly cacheNodeIds = new WeakMap<Node, { id: number; session: Node['sessionId']; backend: Node['backend']; socket: Node['socket'] }>();
     private nextCacheNodeId = 0;
     private readonly pending = new Set<AbortController>();
     private readonly shared = new SharedSearchRequests<IRESTLoadTracks>();
@@ -91,11 +91,12 @@ export class SearchService {
             // disconnected, rotated sessions, or been replaced under the same ID.
             const searchSession = node.sessionId;
             const searchBackend = node.backend;
+            const searchSocket = node.socket;
             const assertCurrentNode = (): void => {
                 signal.throwIfAborted();
                 if (this.manager.destroyed || node.destroyed || !node.connected ||
                     this.manager.nodes.nodes.get(node.identifier) !== node ||
-                    node.sessionId !== searchSession || node.backend !== searchBackend) {
+                    node.sessionId !== searchSession || node.backend !== searchBackend || node.socket !== searchSocket) {
                     throw new Error('Search node changed while the request was pending');
                 }
             };
@@ -106,12 +107,12 @@ export class SearchService {
             const ttl = settings?.ttlMs ?? 0;
             const capacity = settings?.maxEntries ?? 100;
             if (settings && (!Number.isFinite(ttl) || ttl <= 0 || ttl > 3600000 || !Number.isInteger(capacity) || capacity < 1 || capacity > 1000)) throw new TypeError('Search cache requires ttlMs 1..3600000 and maxEntries 1..1000');
-            let nodeId = this.cacheNodeIds.get(node);
-            if (nodeId === undefined) {
-                nodeId = ++this.nextCacheNodeId;
-                this.cacheNodeIds.set(node, nodeId);
+            let identity = this.cacheNodeIds.get(node);
+            if (!identity || identity.session !== searchSession || identity.backend !== searchBackend || identity.socket !== searchSocket) {
+                identity = { id: ++this.nextCacheNodeId, session: searchSession, backend: searchBackend, socket: searchSocket };
+                this.cacheNodeIds.set(node, identity);
             }
-            const key = JSON.stringify([nodeId, node.sessionId, node.backend?.kind, node.backend?.version, query.query, platforms]);
+            const key = JSON.stringify([identity.id, query.query, platforms]);
             const cached = this.cache.get(key);
             if (ttl && !options.resolver && cached && cached.expires > Date.now()) {
                 assertCurrentNode();
