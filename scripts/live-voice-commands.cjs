@@ -74,7 +74,7 @@ async function verifyCommandSequence(player, node, tracks) {
   await waitForSnapshot(node.rest, player.guildId, row => row.paused === false, 'resume');
   checks.push('resumeConfirmed');
 
-  player.setVolume(40);
+  await withDeadline(() => player.setVolumeAsync(40), 'volume');
   await waitForSnapshot(node.rest, player.guildId, row => row.volume === 40, 'volume');
   checks.push('volumeConfirmed');
 
@@ -89,6 +89,10 @@ async function verifyCommandSequence(player, node, tracks) {
   await waitForSnapshot(node.rest, player.guildId, row => row.track?.encoded === tracks[1].encoded,
     'second track');
   checks.push('secondTrackConfirmed');
+
+  await withDeadline(() => player.stop(), 'stop');
+  await waitForSnapshot(node.rest, player.guildId, row => row.track === null, 'stop');
+  checks.push('stopConfirmed');
   return checks;
 }
 

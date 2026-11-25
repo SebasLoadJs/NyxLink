@@ -15,7 +15,7 @@ const REQUIRED = Object.freeze([
 ]);
 const COMMAND_CHECKS = [
   'playAcknowledged', 'firstTrackConfirmed', 'pauseConfirmed', 'resumeConfirmed',
-  'volumeConfirmed', 'seekConfirmed', 'skipAcknowledged', 'secondTrackConfirmed',
+  'volumeConfirmed', 'seekConfirmed', 'skipAcknowledged', 'secondTrackConfirmed', 'stopConfirmed',
 ];
 const RECONNECT_CHECKS = [
   'initialTrackConfirmed', 'disconnectConfirmed', 'voiceReconnected',

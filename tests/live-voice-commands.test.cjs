@@ -12,9 +12,10 @@ function fixture() {
     async play() { calls.push('play'); state.track = { encoded: tracks[0].encoded }; return true; },
     async pause() { calls.push('pause'); state.paused = true; },
     async resume() { calls.push('resume'); state.paused = false; },
-    setVolume(n) { calls.push('volume'); state.volume = n; return this; },
+    async setVolumeAsync(n) { calls.push('volume'); state.volume = n; return this; },
     async seek(n) { calls.push('seek'); state.state.position = n; },
     async skip() { calls.push('skip'); state.track = { encoded: tracks[1].encoded }; return true; },
+    async stop() { calls.push('stop'); state.track = null; return this; },
   };
   const node = { rest: { async getPlayer(guildId) {
     assert.equal(guildId, player.guildId);
@@ -28,10 +29,10 @@ test('live command sequence verifies backend acknowledgement without claiming au
   const checks = await verifyCommandSequence(player, node, tracks);
   assert.deepEqual(checks, [
     'playAcknowledged', 'firstTrackConfirmed', 'pauseConfirmed', 'resumeConfirmed',
-    'volumeConfirmed', 'seekConfirmed', 'skipAcknowledged', 'secondTrackConfirmed',
+    'volumeConfirmed', 'seekConfirmed', 'skipAcknowledged', 'secondTrackConfirmed', 'stopConfirmed',
   ]);
   assert.deepEqual(calls.map(v => Array.isArray(v) ? v[0] : v), [
-    'queue', 'play', 'pause', 'resume', 'volume', 'seek', 'skip',
+    'queue', 'play', 'pause', 'resume', 'volume', 'seek', 'skip', 'stop',
   ]);
 });
 
@@ -53,6 +54,12 @@ test('command smoke treats a rejected skip as a failed acceptance', async () => 
   const { player, node, tracks } = fixture();
   player.skip = async () => false;
   await assert.rejects(verifyCommandSequence(player, node, tracks), /rejected skip/);
+});
+
+test('command acceptance rejects a failed stop', async () => {
+  const { player, node, tracks } = fixture();
+  player.stop = async () => { throw new Error('backend rejected stop'); };
+  await assert.rejects(verifyCommandSequence(player, node, tracks), /backend rejected stop/);
 });
 
 test('backend polling detects missing acknowledgements within a bounded interval', async () => {

@@ -7,7 +7,7 @@ const { inspectReports, inspectDirectory } = require('../scripts/check-live-voic
 
 const revision = 'b'.repeat(40);
 const commandChecks = ['playAcknowledged', 'firstTrackConfirmed', 'pauseConfirmed',
-  'resumeConfirmed', 'volumeConfirmed', 'seekConfirmed', 'skipAcknowledged', 'secondTrackConfirmed'];
+  'resumeConfirmed', 'volumeConfirmed', 'seekConfirmed', 'skipAcknowledged', 'secondTrackConfirmed', 'stopConfirmed'];
 const reconnectChecks = ['initialTrackConfirmed', 'disconnectConfirmed', 'voiceReconnected',
   'restartAcknowledged', 'backendVoiceAndTrackConfirmed'];
 function make(backend, mode, suffix = '2026-11-23T20-00-00.000Z') {
@@ -117,4 +117,12 @@ test('a report without a verified fresh build cannot certify voice protocols', (
   delete entries[0].report.buildValidated;
   assert.equal(inspectReports(revision, entries).modes['nodelink:commands'], 'failed');
   assert.equal(inspectReports(revision, entries).protocolEvidenceComplete, false);
+});
+
+ test('command reports without confirmed stop cannot certify acceptance', () => {
+  const entries = all();
+  entries[0].report.commandChecks = commandChecks.slice(0, -1);
+  const summary = inspectReports(revision, entries);
+  assert.equal(summary.modes['nodelink:commands'], 'failed');
+  assert.equal(summary.protocolEvidenceComplete, false);
 });
