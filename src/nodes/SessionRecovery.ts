@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { observeOperation } from '../observability/OpenTelemetry';
 import type { Node } from '../entities/Node';
 import type { Player } from '../entities/Player';
@@ -60,18 +61,21 @@ async function recover(context: Context, known: Map<string, Snapshot>): Promise<
         if (!current(context) || rows == null) return;
         if (!Array.isArray(rows)) throw new TypeError('Invalid resumed player list');
         // An ambiguous backend response must not arbitrarily select the first state.
-        const seen = new Set<string>();
-        const duplicates = new Set<string>();
+        const firstRows = new Map<string, IRESTGetPlayers>();
+        const conflicts = new Set<string>();
+        const processed = new Set<string>();
         for (const row of rows) {
             if (!row || typeof row.guildId !== 'string') continue;
-            if (seen.has(row.guildId)) duplicates.add(row.guildId);
-            seen.add(row.guildId);
+            const first = firstRows.get(row.guildId);
+            if (first && !isDeepStrictEqual(first, row)) conflicts.add(row.guildId);
+            else if (!first) firstRows.set(row.guildId, row);
         }
         for (const row of rows) {
             if (!current(context)) return;
             try {
                 if (!valid(row)) throw new TypeError('Invalid resumed player state');
-                if (duplicates.has(row.guildId)) continue;
+                if (conflicts.has(row.guildId) || processed.has(row.guildId)) continue;
+                processed.add(row.guildId);
                 if (touched.has(row.guildId)) continue;
                 const saved = known.get(row.guildId);
                 const existing = manager.players.get(row.guildId);
