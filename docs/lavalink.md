@@ -2,6 +2,22 @@
 
 NyxLink supports the core Lavalink v4 REST and WebSocket protocol, session recovery, filters and playback control. Optional plugins must be installed and advertised by the connected server. Their contracts are distinct from NodeLink's extensions.
 
+## LavaSearch
+
+Advanced search uses the Lavalink LavaSearch plugin and an enabled compatible provider (for example LavaSrc).
+
+```ts
+if (node.backend?.supports('lavasearch')) {
+  const results = await node.loadSearch('spsearch:Architects', {
+    types: ['track', 'album', 'artist', 'playlist', 'text'],
+    signal: AbortSignal.timeout(10000),
+  });
+  // HTTP 204 => null. Other successful responses keep provider plugin metadata.
+}
+```
+
+The typed response preserves optional result arrays; album, artist and playlist entries are discovery results, not necessarily playable tracks. This low-level node API does not implement application catalog policies. Unsupported backends are rejected without sending a request. A malformed response or provider error is not an empty search. See the [plugin contract](https://github.com/topi314/LavaSearch).
+
 ## LavaLyrics
 
 ```ts
