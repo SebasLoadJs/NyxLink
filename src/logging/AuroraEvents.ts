@@ -58,6 +58,15 @@ export const auroraCatalog = {
     QUEUE_ADDED: { category: 'QUEUE', level: 'debug', outcome: 'observed', message: 'Tracks queued' },
     QUEUE_ENDED: { category: 'QUEUE', level: 'info', outcome: 'observed', message: 'Queue exhausted' },
     AUTOPLAY_INSERTED: { category: 'AUTOPLAY', level: 'info', outcome: 'observed', message: 'Autoplay track selected' },
+    MIX_STARTED: { category: 'PLAYER', level: 'debug', outcome: 'observed', message: 'Audio mix layer started' },
+    MIX_ENDED: { category: 'PLAYER', level: 'debug', outcome: 'observed', message: 'Audio mix layer ended' },
+    SPONSOR_SEGMENTS_LOADED: { category: 'PLUGIN', level: 'debug', outcome: 'observed', message: 'SponsorBlock segments loaded' },
+    SPONSOR_SEGMENT_SKIPPED: { category: 'PLUGIN', level: 'debug', outcome: 'observed', message: 'SponsorBlock segment skipped' },
+    CHAPTERS_LOADED: { category: 'PLUGIN', level: 'debug', outcome: 'observed', message: 'Track chapters loaded' },
+    CHAPTER_STARTED: { category: 'PLUGIN', level: 'debug', outcome: 'observed', message: 'Track chapter started' },
+    AUDIO_FEATURES_SUSPENDED: { category: 'FAILOVER', level: 'warn', outcome: 'observed', message: 'Incompatible audio preferences suspended' },
+    MIX_RECOVERY_COMPLETED: { category: 'FAILOVER', level: 'info', outcome: 'confirmed', message: 'Mixer reconstruction acknowledged' },
+    MIX_RECOVERY_PARTIAL: { category: 'FAILOVER', level: 'warn', outcome: 'observed', message: 'Mixer reconstruction incomplete' },
     FAILOVER_STARTED: { category: 'FAILOVER', level: 'info', outcome: 'started', message: 'Recovery initiated' },
     FAILOVER_RECOVERED: { category: 'FAILOVER', level: 'info', outcome: 'confirmed', message: 'Recovery confirmed by protocol' },
     FAILOVER_FAILED: { category: 'FAILOVER', level: 'error', outcome: 'failed', message: 'Recovery failed' },
@@ -77,6 +86,13 @@ export type AuroraContext = {
     playingCount?: number;
     queuedTracks?: number;
     sourceCount?: number;
+    segmentCount?: number;
+    chapterCount?: number;
+    suspendedCount?: number;
+    mixCaptured?: number;
+    mixRestored?: number;
+    mixFailed?: number;
+    mixSkipped?: number;
 };
 export type AuroraEvent = {
     eventCode: AuroraEventCode;
@@ -130,10 +146,10 @@ type Operation = { id: string; started: number; parentId?: string };
 const migrationStages = new Set<unknown>(['select-target','resolve-track','restore-player','persist-snapshot','cleanup-source','rollback','cleanup-target']);
 const migrationStatuses = new Set<unknown>(['started','acknowledged','failed','cancelled','partial']);
 function safeContext(value: unknown = {}): AuroraContext {
-    const input = observedFields(value, ['backend','attempt','trackCount','reasonCode','stage','stageStatus','httpStatus','nodeCount','playerCount','playingCount','queuedTracks','sourceCount']) as AuroraContext;
+    const input = observedFields(value, ['backend','attempt','trackCount','reasonCode','stage','stageStatus','httpStatus','nodeCount','playerCount','playingCount','queuedTracks','sourceCount','segmentCount','chapterCount','suspendedCount','mixCaptured','mixRestored','mixFailed','mixSkipped']) as AuroraContext;
     const context: AuroraContext = {};
     if (input.backend !== undefined) context.backend = backend(input.backend);
-    for (const field of ['nodeCount','playerCount','playingCount','queuedTracks','sourceCount'] as const) {
+    for (const field of ['nodeCount','playerCount','playingCount','queuedTracks','sourceCount','segmentCount','chapterCount','suspendedCount','mixCaptured','mixRestored','mixFailed','mixSkipped'] as const) {
         const value = count(input[field]);
         if (value !== undefined) context[field] = value;
     }
@@ -274,6 +290,15 @@ export class AuroraEvents {
             manager.on('queueAdd', (player, tracks) => this.emit('QUEUE_ADDED', { backend: backend(player.node.backend?.kind), trackCount: Array.isArray(tracks) ? tracks.length : 1 })),
             manager.on('queueEnd', player => this.emit('QUEUE_ENDED', { backend: backend(player.node.backend?.kind) })),
             manager.on('autoPlayed', player => this.emit('AUTOPLAY_INSERTED', { backend: backend(player.node.backend?.kind) })),
+            manager.on('mixStart', player => this.emit('MIX_STARTED', { backend: backend(player.node.backend?.kind) })),
+            manager.on('mixEnd', player => this.emit('MIX_ENDED', { backend: backend(player.node.backend?.kind) })),
+            manager.on('sponsorBlockEvent', (_player, observation) => {
+                const context = { backend: backend(observation.backend) };
+                if (observation.kind === 'segmentsLoaded') this.emit('SPONSOR_SEGMENTS_LOADED', { ...context, segmentCount: observation.segments.length });
+                else if (observation.kind === 'segmentSkipped') this.emit('SPONSOR_SEGMENT_SKIPPED', context);
+                else if (observation.kind === 'chaptersLoaded') this.emit('CHAPTERS_LOADED', { ...context, chapterCount: observation.chapters.length });
+                else if (observation.kind === 'chapterStarted') this.emit('CHAPTER_STARTED', context);
+            }),
             manager.on('playerNodeFailover', (player, report) => {
                 const context = { backend: backend(player.node.backend?.kind), reasonCode: safeFailoverReason(report.reasonCode) };
                 if (report.status === 'in-progress') {
@@ -287,6 +312,13 @@ export class AuroraEvents {
                         report.status === 'failed' ? 'FAILOVER_FAILED' :
                         report.status === 'cancelled' ? 'FAILOVER_CANCELLED' : undefined;
                     if (code) this.emit(code, context, operation, true);
+                    if (report.status === 'recovered') {
+                        if (report.suspendedFeatures?.length) this.emit('AUDIO_FEATURES_SUSPENDED', { ...context, suspendedCount: report.suspendedFeatures.length }, operation);
+                        const mix = report.mixRecovery;
+                        if (mix) this.emit(mix.status === 'completed' ? 'MIX_RECOVERY_COMPLETED' : 'MIX_RECOVERY_PARTIAL', {
+                            ...context, mixCaptured: mix.captured, mixRestored: mix.restored.length, mixFailed: mix.failed, mixSkipped: mix.skipped
+                        }, operation);
+                    }
                 }
             }),
         );
