@@ -1,3 +1,4 @@
+import { hasLavaSearchPlugin, lavaSearchParameters, validateLavaSearch, type LavaSearchOptions, type LavaSearchResult } from '../backends/LavaSearchContracts';
 import { observeOperation } from '../observability/OpenTelemetry';
 import { getManagerLogRoute } from '../logging/ManagerLogRoute';
 import { requireGroupId, requireGuildId, groupCreateBody, groupPatchBody, validateGroup, validateGroups, validateGroupPatch, sponsorOptionsBody, sponsorSegmentsBody, validateSponsorState, type PlayerGroup, type GroupCreate, type GroupPatch, type GroupPatchResult, type SponsorBlockOptions, type SponsorBlockSegment, type SponsorBlockState } from '../backends/NodeLinkOrchestration';
@@ -511,6 +512,36 @@ export class Rest {
      * The 204 No Content response maps to null; this method does not subscribe
      * to live lyric events or guarantee that a provider has lyrics.
      */
+    /** Advanced Lavalink search; distinct from NodeLink's source modifiers. */
+    public async loadSearch(query: string, options: LavaSearchOptions = {}): Promise<LavaSearchResult | null> {
+        const params = lavaSearchParameters(query, options);
+        const backend = this.node.backend;
+        if (backend?.kind !== 'lavalink' || !hasLavaSearchPlugin(backend.plugins) ||
+            backend.featureStatus('lavasearch') === 'unavailable') {
+            throw new FeatureUnavailableError('lavasearch', backend?.kind ?? 'unknown');
+        }
+        const socket = this.node.socket;
+        const session = this.node.sessionId;
+        const current = () => !this.node.destroyed && this.node.backend === backend &&
+            this.node.socket === socket && this.node.sessionId === session;
+        options.signal?.throwIfAborted();
+        const result = await this.node.circuit.run(async () => {
+            try {
+                return await this.request<unknown>(this.url + '/v4/loadsearch?' + params.toString(), {
+                    method: 'GET', headers: this.authHeaders, throwOnError: true,
+                    noContentAsNull: true, signal: options.signal
+                }, options.timeoutMs ?? 10000, 0);
+            } catch (error) {
+                this.featureError('lavasearch', error, backend, current);
+            }
+        });
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('LavaSearch backend session changed');
+        if (result !== null) validateLavaSearch(result);
+        backend.recordFeature('lavasearch', 'available');
+        return result;
+    }
+
     public async getLavaLyrics(encodedTrack: string, options?: LavaLyricsOptions): Promise<LavaLyricsData | null> {
         const params = lavaLyricsParameters(encodedTrack, options);
         const backend = this.node.backend;
