@@ -41,6 +41,7 @@ for (const status of [204, 404, 503]) {
     await once(server, 'listening');
     t.after(() => server.close());
     node.port = server.address().port;
+    node.sessionId = 'fixture-session';
     const rest = new Rest(node);
     const cleanup = rest.destroyPlayer(player.guildId, { timeoutMs: 1000 });
     if (status === 503) await assert.rejects(cleanup, /status 503/);
@@ -55,4 +56,41 @@ test('bounded cleanup rejects an invalid budget before issuing a request', async
   for (const timeoutMs of [0, -1, Infinity, NaN, 60001]) {
     await assert.rejects(rest.destroyPlayer(player.guildId, { timeoutMs }), TypeError);
   }
+});
+
+test('REST player routes reject invalid session or guild identifiers before transport', async t => {
+  const { node, player } = createPlayer(t);
+  const rest = new Rest(node);
+  for (const session of ['', '..', 'other/players', 'session?query', 'session%2fpath', 'x\r\ny']) {
+    node.sessionId = session;
+    await assert.rejects(rest.getPlayers(), TypeError);
+    await assert.rejects(rest.getPlayer(player.guildId), TypeError);
+    await assert.rejects(rest.updatePlayer(player.guildId, { paused: true }), TypeError);
+    await assert.rejects(rest.destroyPlayer(player.guildId), TypeError);
+    await assert.rejects(rest.updateSession(true, 60), TypeError);
+  }
+  node.sessionId = 'fixture-session';
+  for (const guild of ['..', '123?other', 'guild/other']) {
+    await assert.rejects(rest.getPlayer(guild), TypeError);
+    await assert.rejects(rest.updatePlayer(guild, {}), TypeError);
+    await assert.rejects(rest.destroyPlayer(guild), TypeError);
+  }
+});
+
+test('a delayed player ownership check cannot send an update to a replacement session', async t => {
+  const { node, player, manager } = createPlayer(t);
+  const { deferred } = require('./helpers/player.cjs');
+  const entered = deferred(), release = deferred();
+  node.sessionId = 'old-session';
+  const rest = new Rest(node);
+  const oldOwnership = manager.guildOwnership;
+  manager.guildOwnership = { async assertCurrent() { entered.resolve(); await release.promise; } };
+  try {
+    const request = rest.updatePlayer(player.guildId, { paused: true });
+    const rejected = assert.rejects(request, /session changed/);
+    await entered.promise;
+    node.sessionId = 'new-session';
+    release.resolve();
+    await rejected;
+  } finally { manager.guildOwnership = oldOwnership; }
 });

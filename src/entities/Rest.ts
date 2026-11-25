@@ -1,3 +1,4 @@
+import { sessionPath, playerPath } from '../backends/SessionPath';
 import { nodeLinkDiscoveryIdentifier, type NodeLinkDiscoveryOptions } from '../backends/NodeLinkSearchContracts';
 import { hasLavaSearchPlugin, lavaSearchParameters, validateLavaSearch, type LavaSearchOptions, type LavaSearchResult } from '../backends/LavaSearchContracts';
 import { observeOperation } from '../observability/OpenTelemetry';
@@ -253,7 +254,7 @@ export class Rest {
     }
 
     public async getPlayers(): Promise<IRESTGetPlayers[] | null> {
-        const res = await this.request<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}/players`, {
+        const res = await this.request<unknown>(`${this.url}${sessionPath(this.node.sessionId)}/players`, {
             method: "GET",
             headers: this.authHeaders
         });
@@ -268,7 +269,7 @@ export class Rest {
     }
 
     public async getPlayer(guildId: string): Promise<IRESTGetPlayers | null> {
-        const res = await this.request<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}`, {
+        const res = await this.request<unknown>(`${this.url}${playerPath(this.node.sessionId, guildId)}`, {
             method: "GET",
             headers: this.authHeaders
         });
@@ -282,7 +283,14 @@ export class Rest {
     }
 
     private async updatePlayerRequest(guildId: string, data: PlayerUpdatePayload, noReplace: boolean): Promise<PlayerUpdateAcknowledgement | null> {
+        requireGuildId(guildId);
+        const requestSession = this.node.sessionId;
+        const requestBackend = this.node.backend;
+        const requestSocket = this.node.socket;
+        playerPath(requestSession, guildId);
         await this.node.manager.guildOwnership?.assertCurrent(guildId);
+        if (this.node.destroyed || this.node.sessionId !== requestSession ||
+            this.node.backend !== requestBackend || this.node.socket !== requestSocket) throw new Error('Player update session changed');
         const payload = this.node.backend ? this.node.backend.preparePlayerUpdate(data) : preparePlayerUpdate(this.node.isNodeLink ? 'nodelink' : 'unknown', data);
         const params = new URLSearchParams();
         if (noReplace) {
@@ -293,12 +301,14 @@ export class Rest {
         const session = this.node.sessionId;
 
         try {
-            const res = await this.node.circuit.run(() => this.request<unknown>(`${this.url}/v4/sessions/${session}/players/${guildId}?${params.toString()}`, {
+            const res = await this.node.circuit.run(() => this.request<unknown>(`${this.url}${playerPath(session, guildId)}?${params.toString()}`, {
                 method: "PATCH",
                 headers: this.jsonHeaders,
                 body: payload,
                 throwOnError: true
             }, undefined, 0));
+            if (this.node.destroyed || this.node.sessionId !== requestSession ||
+                this.node.backend !== requestBackend || this.node.socket !== requestSocket) throw new Error('Player update session changed');
             if (res === undefined || res === null) return null;
             validatePlayerAcknowledgement(res, guildId);
             return res;
@@ -306,6 +316,7 @@ export class Rest {
             if (error instanceof HttpError && error.statusCode === 404 &&
                 owner && !owner.destroyed && !this.node.destroyed && owner.node === this.node &&
                 this.node.manager.players.get(guildId) === owner && this.node.sessionId === session &&
+                this.node.backend === requestBackend && this.node.socket === requestSocket &&
                 playbackGuard(owner).isCurrent(intent!) && !this.sessionRecoveries.has(owner)) {
                 this.sessionRecoveries.add(owner);
                 void this.triggerPlayerRecovery(owner)
@@ -317,21 +328,22 @@ export class Rest {
     }
 
     public async destroyPlayer(guildId: string, options?: { timeoutMs?: number; signal?: AbortSignal }): Promise<void> {
+        requireGuildId(guildId);
+        const session = this.node.sessionId, backend = this.node.backend, socket = this.node.socket;
+        const path = playerPath(session, guildId);
         await this.node.manager.guildOwnership?.assertCurrent(guildId);
+        if (this.node.sessionId !== session || this.node.backend !== backend || this.node.socket !== socket) throw new Error('Player cleanup session changed');
         const timeout = options?.timeoutMs ?? 10000;
         if (options && (!Number.isFinite(timeout) || timeout <= 0 || timeout > 60000)) throw new TypeError('Cleanup timeout must be within 1..60000 ms');
         try {
-            await this.request(`${this.url}/v4/sessions/${this.node.sessionId}/players/${guildId}`, {
+            await this.request(`${this.url}${path}`, {
                 method: "DELETE",
                 headers: this.authHeaders,
                 signal: options?.signal,
                 throwOnError: options !== undefined
             }, options ? timeout : undefined, options ? 0 : undefined);
         } catch (error) {
-            const err = error as Error;
-            if (!err.message.includes('status 404')) {
-                throw error;
-            }
+            if (!(error instanceof HttpError) || error.statusCode !== 404) throw error;
         }
     }
 
@@ -461,7 +473,7 @@ export class Rest {
     }
 
     public async updateSession(resuming: boolean, timeout: number): Promise<SessionUpdateResponse | null> {
-        const res = await this.request<unknown>(`${this.url}/v4/sessions/${this.node.sessionId}`, {
+        const res = await this.request<unknown>(`${this.url}${sessionPath(this.node.sessionId)}`, {
             method: "PATCH",
             headers: this.jsonHeaders,
             body: {

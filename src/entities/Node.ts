@@ -1,3 +1,4 @@
+import { isSessionId } from '../backends/SessionPath';
 import { readSponsorBlockEvent } from '../backends/SponsorBlockEvents';
 import type { NodeLinkDiscoveryOptions } from '../backends/NodeLinkSearchContracts';
 import type { IRESTLoadTracks } from '../typings/Interfaces';
@@ -458,12 +459,12 @@ export class Node {
   /** Legacy host/port sessions are only safe when this endpoint is unique. */
   private async loadStoredSessionId(): Promise<string | undefined> {
     const scoped = await this.manager.database.get<{ sessionId: string }>(this.sessionStoragePath);
-    if (typeof scoped?.sessionId === 'string' && scoped.sessionId) return scoped.sessionId;
+    if (isSessionId(scoped?.sessionId)) return scoped.sessionId;
     const shared = [...this.manager.nodes.nodes.values()].some(node =>
       node !== this && node.uuid === this.uuid);
     if (shared) return undefined;
     const legacy = await this.manager.database.get<{ sessionId: string }>(`nodes.${this.uuid}`);
-    return typeof legacy?.sessionId === 'string' && legacy.sessionId ? legacy.sessionId : undefined;
+    return isSessionId(legacy?.sessionId) ? legacy.sessionId : undefined;
   }
 
   public async connect(): Promise<void> {
@@ -936,7 +937,7 @@ export class Node {
 
     switch (payload.op) {
       case "ready":
-        if (typeof payload.sessionId !== 'string' || !payload.sessionId || typeof payload.resumed !== 'boolean') return;
+        if (!isSessionId(payload.sessionId) || typeof payload.resumed !== 'boolean') return;
         const readySocket = this.socket;
         const readyGeneration = this.backendGeneration;
         await this.backendReady;
