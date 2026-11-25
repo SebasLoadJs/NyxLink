@@ -2,6 +2,7 @@ import type { Node } from '../entities/Node';
 import type { Player } from '../entities/Player';
 import type { Track } from '../entities/Track';
 import type { ISearchQuery } from '../typings/Interfaces';
+import { disabledSource } from '../search/SourceRouting';
 import { playbackGuard } from '../players/PlaybackGuard';
 import { awaitWithAbort } from '../tracks/AbortableLookup';
 import { matchesRecommendationSeed, providerRecommendation, providerSearch, recommendationInfo, recommendationKeys, validateRecommendationDiscovery } from './RecommendationDiscovery';
@@ -40,27 +41,28 @@ export class RecommendationResolver {
                 }), signal);
                 return active() && result?.loadType !== 'error' && Array.isArray(result?.tracks) ? result.tracks : [];
             };
-            const disabled = new Set((node.manager.options.sources?.disabledSources ?? []).map(value => value.toLowerCase()));
+            const disabled = node.manager.options.sources?.disabledSources ?? [];
+            const isDisabled = (provider: string): boolean => disabledSource(provider, disabled);
             const supported = (provider: string): boolean =>
-                !disabled.has(provider) && node.isNodeLink && node.capabilities.has('source:' + provider);
+                !isDisabled(provider) && node.isNodeLink && node.capabilities.has('source:' + provider);
             const youtubeMix = (id: string, music = false) => ({
                 query: 'https://' + (music ? 'music' : 'www') + '.youtube.com/watch?v=' + id + '&list=RD' + id,
                 source: music ? 'youtubemusic' : 'youtube'
             });
             let primary: Pick<ISearchQuery, 'query' | 'source'> | undefined;
             if (source === 'youtube' || source === 'youtubemusic') {
-                if (!validYouTubeId(identifier)) return;
+                if (!validYouTubeId(identifier) || isDisabled('youtube')) return;
                 primary = config && supported('youtube')
                     ? { query: identifier, source: 'ytrec' }
                     : youtubeMix(identifier, source === 'youtubemusic');
             } else if ((source === 'spotify' || source === 'deezer' || source === 'tidal') && supported(source)) {
                 primary = providerRecommendation(source, identifier);
-            } else if (source === 'applemusic' && supported(source)) {
-                primary = { query: identifier, source: 'amrec' };
+            // Apple Music currently has no native amrec contract on the pinned NodeLink revision.
+            // Use the existing fallback instead of an invented recommendation prefix.
             } else if (source === 'soundcloud') {
                 primary = { query: track.author, source: 'soundcloud' };
             }
-            if (!primary && source !== 'youtube' && !disabled.has('youtube')) {
+            if (!primary && source !== 'youtube' && !isDisabled('youtube')) {
                 const seeds = await search({ query: track.title + ' ' + track.author, source: 'youtube' });
                 const seed = seeds.map(recommendationInfo).find(candidate =>
                     (candidate.sourceName === 'youtube' || candidate.sourceName === 'youtubemusic') &&
@@ -96,7 +98,7 @@ export class RecommendationResolver {
                     node.manager.emit('debug', 'NyxLink > RecommendationResolver > Additional provider lookup failed.');
                 }
             }
-            if (!active()) return;
+            if (!active() || signal.aborted) return;
             const historyLimit = node.manager.options.queue?.historyLimit ?? player.historySize ?? 10;
             const previous = Array.isArray(player.previous) && historyLimit > 0 ? player.previous.slice(-historyLimit) : [];
             const queued = Array.isArray(player.queue?.tracks) ? player.queue.tracks : [];
@@ -105,7 +107,7 @@ export class RecommendationResolver {
             // Interleave provider lists so the primary provider cannot occupy every
             // candidate slot before additional providers reach the preference scorer.
             const uniqueGroups = groups.map(group => group.filter(candidate => {
-                if (!candidate || !candidate.encoded || disabled.has(recommendationInfo(candidate).sourceName?.toLowerCase() ?? '')) return false;
+                if (!candidate || !candidate.encoded || isDisabled(recommendationInfo(candidate).sourceName?.toLowerCase() ?? '')) return false;
                 const keys = recommendationKeys(candidate);
                 if (!keys.length || keys.some(key => seen.has(key))) return false;
                 keys.forEach(key => seen.add(key));
