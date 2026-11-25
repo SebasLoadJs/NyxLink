@@ -1,5 +1,6 @@
 import type { BackendAdapter, BackendPlugin } from './BackendAdapter';
 import { LavalinkAdapter } from './LavalinkAdapter';
+import { hasLavaSearchPlugin } from './LavaSearchContracts';
 import { NodeLinkAdapter } from './NodeLinkAdapter';
 
 function object(value: unknown): Record<string, unknown> | undefined {
@@ -43,6 +44,7 @@ export class BackendDetector {
         // Presence of the flag advertises the diagnostic endpoint, even when monitoring is disabled.
         if (nodeLink && typeof object(data.sourceHealth)?.enabled === 'boolean') capabilities.add('source-health');
         const metadata = [...plugins.values()];
+        if (!nodeLink && hasLavaSearchPlugin(metadata)) capabilities.add('lavasearch');
         return nodeLink ? new NodeLinkAdapter(version, capabilities, metadata) : new LavalinkAdapter(version, capabilities, metadata);
     }
 }
