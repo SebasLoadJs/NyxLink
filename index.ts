@@ -1,3 +1,5 @@
+export { readSponsorBlockEvent } from './src/backends/SponsorBlockEvents';
+export type { SponsorBlockObservation, SponsorSegment, SponsorChapter } from './src/backends/SponsorBlockEvents';
 export type { LavaDSPXFilters, LavaDSPXKey, LavaDSPXPassFilter, LavaDSPXEchoFilter, LavaDSPXNormalizationFilter } from './src/backends/LavaDSPXContracts';
 export { readLavaSrcTrackMetadata, readLavaSrcPlaylistMetadata } from './src/backends/LavaSrcMetadata';
 export type { LavaSrcTrackMetadata, LavaSrcPlaylistMetadata, LavaSrcPlaylistType } from './src/backends/LavaSrcMetadata';
