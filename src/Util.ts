@@ -631,6 +631,7 @@ export const nodeLinkSources = new Set([
   "spsearch",
   "szsearch",
   "tdsearch",
+  "tdrec",
   "vksearch",
 ]);
 
@@ -662,6 +663,7 @@ export const sources = {
   spsearch: "spsearch",
   szsearch: "szsearch",
   tdsearch: "tdsearch",
+  tdrec: "tdrec",
   vksearch: "vksearch",
 };
 
