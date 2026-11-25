@@ -1,3 +1,4 @@
+import { captureMixRecovery, restoreMixRecovery, type MixRecoveryReport } from './MixRecovery';
 import type { FailoverReasonCode } from '../typings/Interfaces';
 import type { Player } from '../entities/Player';
 import type { Node } from '../entities/Node';
@@ -29,6 +30,7 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
     const source = player.node;
     const suspendedFeatures: string[] = [];
     let manualPreloadDiscarded = false;
+    let mixRecovery: MixRecoveryReport | undefined;
     let currentStage: MigrationStage = 'select-target';
     const observe = (stage: MigrationStage, status: MigrationStageObservation['status']) => {
         currentStage = stage;
@@ -50,6 +52,7 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
             source: source.identifier, target: target.identifier, status, positionMs: player.current?.position, reason, ...(reasonCode ? { reasonCode } : {}),
             ...(status === 'recovered' && suspendedFeatures.length ? { suspendedFeatures: [...new Set(suspendedFeatures)] } : {}),
             ...(status === 'recovered' && manualPreloadDiscarded ? { manualPreloadDiscarded: true } : {}),
+            ...(status === 'recovered' && mixRecovery ? { mixRecovery } : {}),
         });
     };
     const cleanup = async (node: Node): Promise<string | undefined> => {
@@ -73,6 +76,9 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
         if (!active() || source === target) return false;
         report('in-progress');
         observe('select-target', 'acknowledged');
+        if (!active()) { report('cancelled', undefined, 'intent-cancelled'); return false; }
+        const mixOptions = player.manager.options.node?.mixRecovery;
+        const mixes = mixOptions && source.isNodeLink ? await captureMixRecovery(player, source, mixOptions, active, guard.signal) : undefined;
         if (!active()) { report('cancelled', undefined, 'intent-cancelled'); return false; }
         const original = player.current;
         observe('resolve-track', 'started');
@@ -160,6 +166,13 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
         observe('cleanup-source', 'started');
         const reason = await cleanup(source);
         observe('cleanup-source', reason ? 'failed' : 'acknowledged');
+        if (mixes) {
+            mixRecovery = mixes.report;
+            if (!reason && active()) {
+                try { mixRecovery = await restoreMixRecovery(player, source, target, mixes, active, guard.signal); }
+                catch { /* layer recovery is optional; never roll back committed main playback */ }
+            }
+        }
         // The destination is already committed. Observer exceptions must not
         // turn a successful transfer into a rejected operation or a retry.
         const notify = (callback: () => void): void => {
