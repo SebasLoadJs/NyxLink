@@ -24,6 +24,17 @@ Health observations expire and do not automatically prohibit sources. Lyrics/cap
 
 AutoMix is server-side analysis associated with next-track preparation; NyxLink does not invent a separate server toggle. Protocol acknowledgements do not prove audible transitions or synchronized groups.
 
+## Holo metadata
+
+When the server enables Holo Tracks, the TrackStart event can include enriched metadata. Use `track.getHoloMetadata()` to parse the native pluginInfo projection, including JSON-string fields used by newer NodeLink revisions. The original pluginInfo remains unchanged. The result is optional and does not imply an enabled Holo configuration or permission to access any returned URL.
+
+```ts
+manager.on('trackStart', (_player, track) => {
+    const metadata = track.getHoloMetadata();
+    if (metadata) console.log(metadata.channelName, metadata.audioTracks);
+});
+```
+
 ## Streaming
 
 ```ts
