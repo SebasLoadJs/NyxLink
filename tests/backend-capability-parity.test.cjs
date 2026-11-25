@@ -35,9 +35,10 @@ test('advertised Lavalink plugins expose native plugin contracts, not NodeLink r
     ] };
     const backend = BackendDetector.detect(info);
     for (const feature of ['lavasearch', 'lavalyrics', 'lavalink:sponsorblock']) {
-        assert.equal(backend.describeFeature(feature).evidence, 'advertised');
-        assert.equal(backend.supports(feature), true);
+        assert.equal(backend.describeFeature(feature).evidence, 'none');
+        assert.equal(backend.featureStatus(feature), 'unknown');
     }
+    for (const plugin of info.plugins) assert.equal(backend.supports('plugin:' + plugin.name), true);
     assert.equal(backend.featureStatus('sponsorblock'), 'unavailable');
     assert.equal(BackendDetector.detect({ ...info, isNodelink: true }).featureStatus('lavalyrics'), 'unavailable');
     assert.equal(BackendDetector.detect({ ...info, plugins: [] }).featureStatus('lavasearch'), 'unknown');
