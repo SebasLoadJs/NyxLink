@@ -35,10 +35,7 @@ export class RecommendationResolver {
             const search = async (query: Pick<ISearchQuery, 'query' | 'source'>): Promise<Track[]> => {
                 signal.throwIfAborted();
                 if (!active()) return [];
-                const result = await awaitWithAbort(Promise.resolve().then(() => {
-                    signal.throwIfAborted();
-                    return node.manager.search({ ...query, node: node.identifier, requester: track.requester, signal });
-                }), signal);
+                const result = await awaitWithAbort(node.manager.search({ ...query, node: node.identifier, requester: track.requester, signal }), signal);
                 return active() && result?.loadType !== 'error' && Array.isArray(result?.tracks) ? result.tracks : [];
             };
             const disabled = node.manager.options.sources?.disabledSources ?? [];
@@ -65,7 +62,7 @@ export class RecommendationResolver {
             if (!primary && source !== 'youtube' && !isDisabled('youtube')) {
                 const seeds = await search({ query: track.title + ' ' + track.author, source: 'youtube' });
                 const seed = seeds.map(recommendationInfo).find(candidate =>
-                    (candidate.sourceName === 'youtube' || candidate.sourceName === 'youtubemusic') &&
+                    (candidate.sourceName?.toLowerCase() === 'youtube' || candidate.sourceName?.toLowerCase() === 'youtubemusic') &&
                     typeof candidate.identifier === 'string' && validYouTubeId(candidate.identifier));
                 if (seed?.identifier) primary = youtubeMix(seed.identifier);
             }
