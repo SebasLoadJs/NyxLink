@@ -125,6 +125,8 @@ export interface INodeFailoverReport {
     suspendedFeatures?: readonly string[];
     /** A manual source-node preload must be requested again. */
     manualPreloadDiscarded?: boolean;
+    /** Optional explicit mixer reconstruction; never claims seamless layer resume. */
+    mixRecovery?: import('../players/MixRecovery').MixRecoveryReport;
 }
 
 export interface IManagerNodeConfig {
@@ -196,6 +198,7 @@ export interface INodeOptions {
     recoveryQueueLimit?: number;
     circuitBreaker?: CircuitBreakerOptions | false;
     failover?: FailoverOptions;
+    mixRecovery?: import('../players/MixRecovery').MixRecoveryOptions;
     maxStatsAgeMs?: number;
     selectionStrategy?: NodeSortStrategy;
     retryDelay?: number;
