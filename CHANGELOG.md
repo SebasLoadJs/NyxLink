@@ -1,8 +1,8 @@
 # Changelog
 
-This changelog describes the prepared NyxLink 5.3.0-rc.2 source candidate. The candidate is not a claim of publication or audible acceptance.
+This changelog documents **NyxLink 5.3.0** (stable release).
 
-## [5.3.0-rc.2 — candidate, pending acceptance]
+## [5.3.0] — 2026-11-25
 
 ### Backend parity and stabilization
 
