@@ -466,9 +466,11 @@ export class Filters implements IFilters {
 
         // Validate the effective payload, including fields originating from presets.
         const suspended = suspendNativeFilters(payload, this.player.node);
-        if (payload.pluginFilters && options.compatibleOnly) {
+        if (payload.pluginFilters) {
             payload.pluginFilters = { ...payload.pluginFilters };
-            suspended.push(...suspendLavaDSPX(payload.pluginFilters, this.player.node.backend));
+            const dspxSuspended = suspendLavaDSPX(payload.pluginFilters, this.player.node.backend);
+            if (dspxSuspended.length && !options.compatibleOnly) throw new FeatureUnavailableError('lavadspx', this.player.node.backend?.kind ?? 'unknown');
+            suspended.push(...dspxSuspended);
         }
         if (suspended.length && !options.compatibleOnly) throw nodeLinkOnlyError("filters");
         options.suspended?.push(...suspended);
