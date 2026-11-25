@@ -61,3 +61,17 @@ chat.close();
 ```
 
 VoiceReceiver and live chat are optional, application-owned features. Use only authorized sources and handle participant privacy. Unsupported operations can throw `FeatureUnavailableError`.
+
+## Multi-provider recommendation discovery
+
+NyxLink retains its original recommendation path by default. To include additional provider recommendations and prefer NodeLink's native YouTube AutoMix lookup when advertised, enable discovery on the Manager options:
+
+```ts
+recommendationDiscovery: {
+    providers: ['spotify', 'deezer', 'tidal'],
+    timeoutMs: 10000,
+    maxCandidates: 20
+}
+```
+
+The shared deadline covers seed lookups and recommendation queries. Provider seeds must match the recording (valid ISRC, or exact normalized title/artist and duration within 3 seconds). Duplicate recordings are removed from history, queue and candidates, with primary provider precedence. Additional discovery is limited to advertised NodeLink sources; it does not claim those providers can stream audio directly. Existing application preference scoring still applies. Stop, newer playback intent and disabled autoplay cancel outstanding discovery.
