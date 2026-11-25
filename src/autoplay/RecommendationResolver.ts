@@ -65,9 +65,9 @@ export class RecommendationResolver {
                     typeof candidate.identifier === 'string' && validYouTubeId(candidate.identifier));
                 if (seed?.identifier) primary = youtubeMix(seed.identifier);
             }
-            const candidates: Track[] = [];
+            const groups: Track[][] = [];
             const collect = async (query: Pick<ISearchQuery, 'query' | 'source'>) => {
-                try { candidates.push(...(await search(query)).slice(0, 50)); }
+                try { groups.push((await search(query)).slice(0, 50)); }
                 catch (error) {
                     if (signal.aborted || !config) throw error;
                     node.manager.emit('debug', 'NyxLink > RecommendationResolver > Provider lookup failed.');
@@ -95,6 +95,12 @@ export class RecommendationResolver {
             const queued = Array.isArray(player.queue?.tracks) ? player.queue.tracks : [];
             const seen = new Set([track, ...previous, ...queued].filter(Boolean).flatMap(recommendationKeys));
             const selected: Track[] = [];
+            // Interleave provider lists so the primary provider cannot occupy every
+            // candidate slot before additional providers reach the preference scorer.
+            const candidates: Track[] = [];
+            for (let index = 0; index < 50; index++) {
+                for (const group of groups) if (group[index]) candidates.push(group[index]);
+            }
             for (const candidate of candidates) {
                 if (!candidate || !candidate.encoded || disabled.has(recommendationInfo(candidate).sourceName?.toLowerCase() ?? '')) continue;
                 const keys = recommendationKeys(candidate);
