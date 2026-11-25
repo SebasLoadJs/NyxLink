@@ -1,3 +1,4 @@
+import { hasLavaDSPXPlugin } from './LavaDSPXContracts';
 import type { BackendAdapter, BackendPlugin } from './BackendAdapter';
 import { LavalinkAdapter } from './LavalinkAdapter';
 import { hasLavaLyricsPlugin } from './LavaLyricsContracts';
@@ -47,6 +48,8 @@ export class BackendDetector {
         if (nodeLink && typeof object(data.sourceHealth)?.enabled === 'boolean') capabilities.add('source-health');
         const metadata = [...plugins.values()];
         if (!nodeLink) {
+            if (hasLavaDSPXPlugin(metadata)) capabilities.add('lavadspx');
+            if (metadata.some(plugin => ['lavasrc', 'lavasrc-plugin'].includes(plugin.name.toLowerCase()))) capabilities.add('lavasrc');
             if (hasLavaSearchPlugin(metadata)) capabilities.add('lavasearch');
             if (hasLavaLyricsPlugin(metadata)) capabilities.add('lavalyrics');
             if (hasLavalinkSponsorBlockPlugin(metadata)) capabilities.add('lavalink:sponsorblock');
