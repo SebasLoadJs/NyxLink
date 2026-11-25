@@ -121,6 +121,10 @@ export interface INodeFailoverReport {
     positionMs?: number;
     reason?: string;
     reasonCode?: FailoverReasonCode;
+    /** Remembered native controls that could not be sent to the destination. */
+    suspendedFeatures?: readonly string[];
+    /** A manual source-node preload must be requested again. */
+    manualPreloadDiscarded?: boolean;
 }
 
 export interface IManagerNodeConfig {
