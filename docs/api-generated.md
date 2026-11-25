@@ -305,6 +305,60 @@ export declare const auroraCatalog: {
         readonly outcome: "observed";
         readonly message: "Autoplay track selected";
     };
+    readonly MIX_STARTED: {
+        readonly category: "PLAYER";
+        readonly level: "debug";
+        readonly outcome: "observed";
+        readonly message: "Audio mix layer started";
+    };
+    readonly MIX_ENDED: {
+        readonly category: "PLAYER";
+        readonly level: "debug";
+        readonly outcome: "observed";
+        readonly message: "Audio mix layer ended";
+    };
+    readonly SPONSOR_SEGMENTS_LOADED: {
+        readonly category: "PLUGIN";
+        readonly level: "debug";
+        readonly outcome: "observed";
+        readonly message: "SponsorBlock segments loaded";
+    };
+    readonly SPONSOR_SEGMENT_SKIPPED: {
+        readonly category: "PLUGIN";
+        readonly level: "debug";
+        readonly outcome: "observed";
+        readonly message: "SponsorBlock segment skipped";
+    };
+    readonly CHAPTERS_LOADED: {
+        readonly category: "PLUGIN";
+        readonly level: "debug";
+        readonly outcome: "observed";
+        readonly message: "Track chapters loaded";
+    };
+    readonly CHAPTER_STARTED: {
+        readonly category: "PLUGIN";
+        readonly level: "debug";
+        readonly outcome: "observed";
+        readonly message: "Track chapter started";
+    };
+    readonly AUDIO_FEATURES_SUSPENDED: {
+        readonly category: "FAILOVER";
+        readonly level: "warn";
+        readonly outcome: "observed";
+        readonly message: "Incompatible audio preferences suspended";
+    };
+    readonly MIX_RECOVERY_COMPLETED: {
+        readonly category: "FAILOVER";
+        readonly level: "info";
+        readonly outcome: "confirmed";
+        readonly message: "Mixer reconstruction acknowledged";
+    };
+    readonly MIX_RECOVERY_PARTIAL: {
+        readonly category: "FAILOVER";
+        readonly level: "warn";
+        readonly outcome: "observed";
+        readonly message: "Mixer reconstruction incomplete";
+    };
     readonly FAILOVER_STARTED: {
         readonly category: "FAILOVER";
         readonly level: "info";
@@ -358,6 +412,13 @@ export type AuroraContext = {
     playingCount?: number;
     queuedTracks?: number;
     sourceCount?: number;
+    segmentCount?: number;
+    chapterCount?: number;
+    suspendedCount?: number;
+    mixCaptured?: number;
+    mixRestored?: number;
+    mixFailed?: number;
+    mixSkipped?: number;
 };
 ```
 
@@ -554,7 +615,7 @@ export declare abstract class BackendAdapter {
     readonly protocolVersion = 4;
     readonly registry: CapabilityRegistry;
     readonly plugins: readonly BackendPlugin[];
-    constructor(version: string, capabilities: Set<string>, plugins?: readonly BackendPlugin[]);
+    constructor(version: string, capabilities: Set<string>, plugins?: readonly BackendPlugin[], kind?: BackendKind);
     supports(feature: string): boolean;
     featureStatus(feature: string): CapabilityState;
     describeFeature(feature: string): CapabilityDescription;
@@ -690,7 +751,7 @@ export interface CapabilityNode {
 
 ```ts
 export declare class CapabilityRegistry {
-    constructor(advertised: ReadonlySet<string>);
+    constructor(advertised: ReadonlySet<string>, known?: ReadonlySet<string>, unavailable?: ReadonlySet<string>);
     describe(feature: string): CapabilityDescription;
     record(feature: string, state: CapabilityState): void;
     list(): CapabilityDescription[];
@@ -1074,11 +1135,17 @@ export declare class Filters implements IFilters {
     setSpeed(speed: number): this;
     setPitch(pitch: number): this;
     remove(filterName: string): this;
+    setLavaDSPX<K extends LavaDSPXKey>(key: K, value?: NonNullable<LavaDSPXFilters[K]>): this;
     setPluginFilters(filters: Record<string, any>): this;
     clear(): this;
     reset(): this;
-    toPayload(): IFilters;
-    apply(): Promise<Player>;
+    toPayload(options?: {
+        compatibleOnly?: boolean;
+        suspended?: string[];
+    }): IFilters;
+    apply(options?: {
+        compatibleOnly?: boolean;
+    }): Promise<Player>;
 }
 ```
 
@@ -1214,6 +1281,43 @@ export interface GuildVoiceGatewayPacket {
         readonly self_deaf: boolean;
         readonly self_mute: boolean;
     };
+}
+```
+
+## HoloAudioTrack
+
+[Source declaration](../src/backends/HoloTrackMetadata.ts)
+
+```ts
+export interface HoloAudioTrack {
+    id: string;
+    name?: string;
+    isDefault: boolean;
+    isAutoDubbed: boolean;
+}
+```
+
+## HoloTrackMetadata
+
+[Source declaration](../src/backends/HoloTrackMetadata.ts)
+
+```ts
+export interface HoloTrackMetadata {
+    type: 'holo';
+    description?: string;
+    publishedAt?: string;
+    views?: number;
+    likes?: number;
+    channelName?: string;
+    channelId?: string;
+    channelVerified?: boolean;
+    keywords: string[];
+    audioTracks: HoloAudioTrack[];
+    audioFormats: Record<string, unknown>[];
+    videoQualities: Record<string, unknown>[];
+    captions: Record<string, unknown>[];
+    channel?: Record<string, unknown>;
+    externalLinks?: Record<string, unknown>;
 }
 ```
 
@@ -1613,6 +1717,7 @@ export interface IManagerEvents {
     trackEnd: (player: Player, track: Track, reason: TrackEndReason, payload?: any) => void;
     trackStuck: (player: Player, track: Track, threshold: number, payload?: any) => void;
     trackException: (player: Player, track: Track, exception: any, payload?: any) => void;
+    sponsorBlockEvent: (player: Player, observation: import('../backends/SponsorBlockEvents').SponsorBlockObservation) => void;
     mixStart: (player: Player, mixId: string, track: Track, volume: number, payload?: any) => void;
     mixEnd: (player: Player, mixId: string, reason: string, payload?: any) => void;
     lyricsNotFound: (player: Player, payload?: any) => void;
@@ -1663,6 +1768,7 @@ export interface IManagerNodeConfig {
 ```ts
 export interface IManagerOptionsConfig {
     recommendations?: import('../autoplay/RecommendationPreference').RecommendationPreferences;
+    recommendationDiscovery?: import('../autoplay/RecommendationDiscovery').RecommendationDiscoveryOptions;
     logging?: AuroraEventOptions;
     telemetry?: OpenTelemetryOptions;
     clientName?: string;
@@ -1811,6 +1917,9 @@ export interface INodeFailoverReport {
     positionMs?: number;
     reason?: string;
     reasonCode?: FailoverReasonCode;
+    suspendedFeatures?: readonly string[];
+    manualPreloadDiscarded?: boolean;
+    mixRecovery?: import('../players/MixRecovery').MixRecoveryReport;
 }
 ```
 
@@ -1825,6 +1934,7 @@ export interface INodeOptions {
     recoveryQueueLimit?: number;
     circuitBreaker?: CircuitBreakerOptions | false;
     failover?: FailoverOptions;
+    mixRecovery?: import('../players/MixRecovery').MixRecoveryOptions;
     maxStatsAgeMs?: number;
     selectionStrategy?: NodeSortStrategy;
     retryDelay?: number;
@@ -2303,6 +2413,60 @@ export interface IVoiceConnectionOptions {
 }
 ```
 
+## LavaDSPXEchoFilter
+
+[Source declaration](../src/backends/LavaDSPXContracts.ts)
+
+```ts
+export interface LavaDSPXEchoFilter {
+    echoLength: number;
+    decay: number;
+}
+```
+
+## LavaDSPXFilters
+
+[Source declaration](../src/backends/LavaDSPXContracts.ts)
+
+```ts
+export interface LavaDSPXFilters {
+    'high-pass'?: LavaDSPXPassFilter;
+    'low-pass'?: LavaDSPXPassFilter;
+    echo?: LavaDSPXEchoFilter;
+    normalization?: LavaDSPXNormalizationFilter;
+}
+```
+
+## LavaDSPXKey
+
+[Source declaration](../src/backends/LavaDSPXContracts.ts)
+
+```ts
+export type LavaDSPXKey = typeof lavaDSPXKeys[number];
+```
+
+## LavaDSPXNormalizationFilter
+
+[Source declaration](../src/backends/LavaDSPXContracts.ts)
+
+```ts
+export interface LavaDSPXNormalizationFilter {
+    maxAmplitude: number;
+    adaptive?: boolean;
+}
+```
+
+## LavaDSPXPassFilter
+
+[Source declaration](../src/backends/LavaDSPXContracts.ts)
+
+```ts
+export interface LavaDSPXPassFilter {
+    cutoffFrequency: number;
+    boostFactor?: number;
+}
+```
+
 ## LavalinkAdapter
 
 [Source declaration](../src/backends/LavalinkAdapter.ts)
@@ -2310,6 +2474,7 @@ export interface IVoiceConnectionOptions {
 ```ts
 export declare class LavalinkAdapter extends BackendAdapter {
     readonly kind: "lavalink";
+    constructor(version: string, capabilities: Set<string>, plugins?: readonly BackendPlugin[]);
 }
 ```
 
@@ -2372,6 +2537,118 @@ export interface LavaLyricsLine {
 ```ts
 export interface LavaLyricsOptions {
     skipTrackSource?: boolean;
+}
+```
+
+## LavaSearchCollection
+
+[Source declaration](../src/backends/LavaSearchContracts.ts)
+
+```ts
+export interface LavaSearchCollection {
+    info: {
+        name: string;
+        selectedTrack: number;
+    };
+    pluginInfo: Record<string, unknown>;
+    tracks: ITrack[];
+}
+```
+
+## LavaSearchOptions
+
+[Source declaration](../src/backends/LavaSearchContracts.ts)
+
+```ts
+export interface LavaSearchOptions {
+    types?: readonly LavaSearchType[];
+    signal?: AbortSignal;
+    timeoutMs?: number;
+}
+```
+
+## LavaSearchResult
+
+[Source declaration](../src/backends/LavaSearchContracts.ts)
+
+```ts
+export interface LavaSearchResult {
+    tracks?: ITrack[];
+    albums?: LavaSearchCollection[];
+    artists?: LavaSearchCollection[];
+    playlists?: LavaSearchCollection[];
+    texts?: LavaSearchText[];
+    plugin: Record<string, unknown>;
+}
+```
+
+## LavaSearchText
+
+[Source declaration](../src/backends/LavaSearchContracts.ts)
+
+```ts
+export interface LavaSearchText {
+    text: string;
+    plugin: Record<string, unknown>;
+}
+```
+
+## LavaSearchType
+
+[Source declaration](../src/backends/LavaSearchContracts.ts)
+
+```ts
+export type LavaSearchType = typeof lavaSearchTypes[number];
+```
+
+## lavaSearchTypes
+
+[Source declaration](../src/backends/LavaSearchContracts.ts)
+
+```ts
+export declare const lavaSearchTypes: readonly [
+    "track",
+    "album",
+    "artist",
+    "playlist",
+    "text"
+];
+```
+
+## LavaSrcPlaylistMetadata
+
+[Source declaration](../src/backends/LavaSrcMetadata.ts)
+
+```ts
+export interface LavaSrcPlaylistMetadata {
+    type?: LavaSrcPlaylistType;
+    url?: string | null;
+    artworkUrl?: string | null;
+    author?: string | null;
+    totalTracks?: number | null;
+}
+```
+
+## LavaSrcPlaylistType
+
+[Source declaration](../src/backends/LavaSrcMetadata.ts)
+
+```ts
+export type LavaSrcPlaylistType = 'album' | 'playlist' | 'artist' | 'recommendations';
+```
+
+## LavaSrcTrackMetadata
+
+[Source declaration](../src/backends/LavaSrcMetadata.ts)
+
+```ts
+export interface LavaSrcTrackMetadata {
+    albumName?: string | null;
+    albumArtUrl?: string | null;
+    artistUrl?: string | null;
+    artistArtworkUrl?: string | null;
+    previewUrl?: string | null;
+    isPreview?: boolean;
 }
 ```
 
@@ -2564,6 +2841,34 @@ export interface MixLayerState extends MixLayerCreated {
 }
 ```
 
+## MixRecoveryOptions
+
+[Source declaration](../src/players/MixRecovery.ts)
+
+```ts
+export interface MixRecoveryOptions {
+    mode: 'restart';
+    maxLayers?: number;
+}
+```
+
+## MixRecoveryReport
+
+[Source declaration](../src/players/MixRecovery.ts)
+
+```ts
+export interface MixRecoveryReport {
+    status: 'unavailable' | 'skipped' | 'completed' | 'partial';
+    captured: number;
+    restored: readonly {
+        sourceId: string;
+        targetId: string;
+    }[];
+    failed: number;
+    skipped: number;
+}
+```
+
 ## MusicSnapshot
 
 [Source declaration](../src/logging/AuroraDiagnostics.ts)
@@ -2630,6 +2935,8 @@ export declare class Node {
     getLavalinkSponsorBlockCategories(guildId: string): Promise<LavalinkSponsorBlockCategory[]>;
     setLavalinkSponsorBlockCategories(guildId: string, categories: LavalinkSponsorBlockCategory[]): Promise<void>;
     clearLavalinkSponsorBlockCategories(guildId: string): Promise<void>;
+    loadNodeLinkSearch(query: string, options?: NodeLinkDiscoveryOptions): Promise<IRESTLoadTracks>;
+    loadSearch(query: string, options?: LavaSearchOptions): Promise<LavaSearchResult | null>;
     getLavaLyrics(track: string | ITrack | Track | {
         encoded?: string;
     }, options?: LavaLyricsOptions): Promise<LavaLyricsData | null>;
@@ -2750,7 +3057,44 @@ export declare class NodeHealthMonitor {
 ```ts
 export declare class NodeLinkAdapter extends BackendAdapter {
     readonly kind: "nodelink";
+    constructor(version: string, capabilities: Set<string>, plugins?: readonly BackendPlugin[]);
 }
+```
+
+## NodeLinkDiscoveryOptions
+
+[Source declaration](../src/backends/NodeLinkSearchContracts.ts)
+
+```ts
+export interface NodeLinkDiscoveryOptions {
+    source?: string;
+    type?: NodeLinkDiscoveryType;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+}
+```
+
+## NodeLinkDiscoveryType
+
+[Source declaration](../src/backends/NodeLinkSearchContracts.ts)
+
+```ts
+export type NodeLinkDiscoveryType = typeof nodeLinkDiscoveryTypes[number];
+```
+
+## nodeLinkDiscoveryTypes
+
+[Source declaration](../src/backends/NodeLinkSearchContracts.ts)
+
+```ts
+export declare const nodeLinkDiscoveryTypes: readonly [
+    "track",
+    "album",
+    "artist",
+    "playlist",
+    "channel",
+    "user"
+];
 ```
 
 ## NodeLinkPlayerUpdate
@@ -3105,6 +3449,7 @@ export declare class Player {
     } | undefined;
     setQueuePreload(options: QueuePreloadOptions): this;
     requestQueuePreload(): void;
+    completeAudioMigration(): boolean;
     consumePreloadedTrack(): void;
     setAudioTrackId(audioTrackId?: string): this;
     setLoudnessNormalizer(enabled: boolean): Promise<this>;
@@ -3425,6 +3770,38 @@ export interface QueuePreloadOptions {
 }
 ```
 
+## readHoloTrackMetadata
+
+[Source declaration](../src/backends/HoloTrackMetadata.ts)
+
+```ts
+export declare function readHoloTrackMetadata(value: unknown): HoloTrackMetadata | undefined;
+```
+
+## readLavaSrcPlaylistMetadata
+
+[Source declaration](../src/backends/LavaSrcMetadata.ts)
+
+```ts
+export declare function readLavaSrcPlaylistMetadata(value: unknown): LavaSrcPlaylistMetadata | undefined;
+```
+
+## readLavaSrcTrackMetadata
+
+[Source declaration](../src/backends/LavaSrcMetadata.ts)
+
+```ts
+export declare function readLavaSrcTrackMetadata(value: unknown): LavaSrcTrackMetadata | undefined;
+```
+
+## readSponsorBlockEvent
+
+[Source declaration](../src/backends/SponsorBlockEvents.ts)
+
+```ts
+export declare function readSponsorBlockEvent(value: unknown, backend?: BackendKind): SponsorBlockObservation | undefined;
+```
+
 ## RecommendationCandidate
 
 [Source declaration](../src/autoplay/RecommendationPreference.ts)
@@ -3439,6 +3816,18 @@ export interface RecommendationCandidate {
 }
 ```
 
+## RecommendationDiscoveryOptions
+
+[Source declaration](../src/autoplay/RecommendationDiscovery.ts)
+
+```ts
+export interface RecommendationDiscoveryOptions {
+    providers: readonly RecommendationProvider[];
+    timeoutMs?: number;
+    maxCandidates?: number;
+}
+```
+
 ## RecommendationPreferences
 
 [Source declaration](../src/autoplay/RecommendationPreference.ts)
@@ -3450,6 +3839,26 @@ export interface RecommendationPreferences {
         readonly seed: RecommendationCandidate;
     }): number;
 }
+```
+
+## RecommendationProvider
+
+[Source declaration](../src/autoplay/RecommendationDiscovery.ts)
+
+```ts
+export type RecommendationProvider = typeof recommendationProviders[number];
+```
+
+## recommendationProviders
+
+[Source declaration](../src/autoplay/RecommendationDiscovery.ts)
+
+```ts
+export declare const recommendationProviders: readonly [
+    "spotify",
+    "deezer",
+    "tidal"
+];
 ```
 
 ## RedisCommandClient
@@ -3583,6 +3992,7 @@ export declare class Rest {
         timeoutMs?: number;
         signal?: AbortSignal;
     }): Promise<void>;
+    loadNodeLinkSearch(query: string, options?: NodeLinkDiscoveryOptions): Promise<IRESTLoadTracks>;
     loadTracks(identifier: string, options?: {
         timeoutMs: number;
         signal?: AbortSignal;
@@ -3607,6 +4017,7 @@ export declare class Rest {
     getMixLayers(guildId: string): Promise<MixLayersResponse | null>;
     updateMixLayerVolume(guildId: string, mixId: string, volume: number): Promise<void>;
     removeMixLayer(guildId: string, mixId: string): Promise<void>;
+    loadSearch(query: string, options?: LavaSearchOptions): Promise<LavaSearchResult | null>;
     getLavaLyrics(encodedTrack: string, options?: LavaLyricsOptions): Promise<LavaLyricsData | null>;
     loadLyrics(encodedTrack: string, options?: string | LyricsRequestOptions): Promise<NodeLinkResponse<ILyricsData | Record<string, any>> | null>;
     getSourceHealth(): Promise<SourceHealthResponse>;
@@ -3671,6 +4082,7 @@ export type RoutePlannerType = "RotatingIpRoutePlanner" | "NanoIpRoutePlanner" |
 export declare class SearchResult {
     loadType: LoadType;
     tracks: Track[];
+    playlistPluginInfo?: Record<string, unknown>;
     playlistInfo?: {
         name: string;
         selectedTrack: number;
@@ -3681,6 +4093,7 @@ export declare class SearchResult {
         severity: string;
     };
     constructor(response: IRESTLoadTracks, requester?: any, playlistLoadLimit?: number, partialTrackOptions?: readonly TPartialTrackProperties[]);
+    getLavaSrcMetadata(): LavaSrcPlaylistMetadata | undefined;
     get isPlaylist(): boolean;
     get isTrack(): boolean;
     get isSearch(): boolean;
@@ -3830,6 +4243,26 @@ export interface SourceHealthSnapshotEvent {
 export type SourceHealthStatus = 'unknown' | 'idle' | 'healthy' | 'degraded' | 'unavailable' | 'rate_limited' | 'restricted' | 'misconfigured';
 ```
 
+## SponsorBlockObservation
+
+[Source declaration](../src/backends/SponsorBlockEvents.ts)
+
+```ts
+export type SponsorBlockObservation = Base & ({
+    kind: 'segmentsLoaded';
+    segments: SponsorSegment[];
+} | {
+    kind: 'segmentSkipped';
+    segment: SponsorSegment;
+} | {
+    kind: 'chaptersLoaded';
+    chapters: SponsorChapter[];
+} | {
+    kind: 'chapterStarted';
+    chapter: SponsorChapter;
+});
+```
+
 ## SponsorBlockOptions
 
 [Source declaration](../src/backends/NodeLinkOrchestration.ts)
@@ -3869,6 +4302,31 @@ export interface SponsorBlockSegment {
 export interface SponsorBlockState extends Required<SponsorBlockOptions> {
     segments: SponsorBlockSegment[];
     lastSkippedUuid: string | null;
+}
+```
+
+## SponsorChapter
+
+[Source declaration](../src/backends/SponsorBlockEvents.ts)
+
+```ts
+export interface SponsorChapter {
+    name: string;
+    start: number;
+    end: number;
+    duration: number;
+}
+```
+
+## SponsorSegment
+
+[Source declaration](../src/backends/SponsorBlockEvents.ts)
+
+```ts
+export interface SponsorSegment {
+    category: string;
+    start: number;
+    end: number;
 }
 ```
 
@@ -4175,6 +4633,8 @@ export declare class Track {
     userData: Record<string, any>;
     retries: number;
     constructor(data: ITrack | Record<string, any>, requester?: any, origin?: string, partialTrackOptions?: readonly TPartialTrackProperties[]);
+    getHoloMetadata(): HoloTrackMetadata | undefined;
+    getLavaSrcMetadata(): LavaSrcTrackMetadata | undefined;
     isPartialTrack(): boolean;
     get thumbnail(): string | null;
     setRequester(requester: any): this;
