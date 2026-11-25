@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { RedisCommandClient } from './RedisStorage';
+import { registerRedisLeaseCoordinator } from './RedisPlayerFence';
 
 export interface RedisGuildLeaseOptions {
   client: RedisCommandClient;
@@ -66,6 +67,10 @@ export class RedisGuildLeaseCoordinator {
     this.client = options.client;
     this.prefix = 'nyxlink:' + options.namespace + ':';
     this.ttlMs = ttl;
+    registerRedisLeaseCoordinator(this, this.prefix, lease => {
+      if (this.closed || !this.ownsHandle(lease)) return undefined;
+      return this.expected(lease);
+    });
   }
 
   private keys(guildId: string): [string, string] {

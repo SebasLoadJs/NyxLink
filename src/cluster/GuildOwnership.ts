@@ -1,6 +1,7 @@
 import type { Manager } from '../core/Manager';
 import { RedisGuildLeaseCoordinator, type RedisGuildLease } from '../database/RedisGuildLeaseCoordinator';
 import { playbackGuard } from '../players/PlaybackGuard';
+import { registerRedisOwnership } from '../database/RedisPlayerFence';
 
 const assignedCoordinators = new WeakSet<RedisGuildLeaseCoordinator>();
 
@@ -47,6 +48,7 @@ export class GuildOwnership {
         assignedCoordinators.add(options.coordinator);
         this.manager = manager;
         this.coordinator = options.coordinator;
+        registerRedisOwnership(this, this.coordinator);
         this.interval = setInterval(() => { void this.heartbeat(); }, interval);
         this.interval.unref();
     }

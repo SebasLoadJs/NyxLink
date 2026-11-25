@@ -1,5 +1,6 @@
 import type { Manager } from '../core/Manager';
 import type { StorageAdapter } from './StorageAdapter';
+import { registerRedisPlayerStorage } from './RedisPlayerFence';
 
 /** Redis 7+ command transport; a node-redis client supports sendCommand(). */
 export interface RedisCommandClient {
@@ -53,6 +54,9 @@ const CAS = [
   "return 1",
 ].join('\n');
 
+// Check the exact lease value and snapshot revision inside the same Redis command.
+const OWNED_CAS = "if redis.call('GET', KEYS[2]) ~= ARGV[4] then return -1 end\n" + CAS;
+
 /**
  * Optional Redis-backed StorageAdapter. The caller connects and owns the
  * Redis client. No extra package, network listener or Redis process is started.
@@ -74,6 +78,7 @@ export class RedisStorage implements StorageAdapter {
     }
     this.client = options.client;
     this.prefix = 'nyxlink:' + options.namespace + ':';
+    registerRedisPlayerStorage(this, this.prefix, (args) => this.send(...args), OWNED_CAS);
   }
 
   public async init(_manager: Manager): Promise<void> {

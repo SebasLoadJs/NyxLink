@@ -4,6 +4,7 @@ import { Local } from "../database/Local";
 import type { StorageAdapter } from '../database/StorageAdapter';
 import { randomUUID } from 'node:crypto';
 import type { RedisGuildLease } from '../database/RedisGuildLeaseCoordinator';
+import { compareAndSetOwnedPlayer } from '../database/RedisPlayerFence';
 import { PlayerSnapshotCodec, SnapshotConflictError, SnapshotValidationError, recordRevision, snapshotJSON, type PlayerSnapshot } from '../database/PlayerSnapshot';
 
 function copyPlayerValue<T>(value: T, ancestors = new Set<object>()): T {
@@ -149,12 +150,16 @@ export class DatabaseManager {
         next.revision = randomUUID();
       }
       await this.assertPlayerLease(guildId, lease);
-      if (await this.replace(root, revision, next)) return true;
+      if (await this.replace(root, revision, next, lease)) return true;
     }
     throw new SnapshotConflictError();
   }
 
-  private async replace(key: string, revision: string | null, value: unknown): Promise<boolean> {
+  private async replace(key: string, revision: string | null, value: unknown, lease?: RedisGuildLease): Promise<boolean> {
+    if (lease) {
+      const owned = await compareAndSetOwnedPlayer(this.provider, this.manager.guildOwnership, lease, key, revision, value);
+      if (owned !== undefined) return owned;
+    }
     if (this.provider.compareAndSet) return this.provider.compareAndSet(key, revision, value);
     // Legacy adapters retain the manager's serial queue, not cross-process CAS guarantees.
     if (value === undefined) await this.provider.remove(key);
@@ -192,7 +197,7 @@ export class DatabaseManager {
       const revision = randomUUID();
       const next = { ...snapshot.data, schemaVersion: 1, revision };
       await this.assertPlayerLease(guildId, lease);
-      if (!await this.replace(key, expectedRevision, next)) throw new SnapshotConflictError();
+      if (!await this.replace(key, expectedRevision, next, lease)) throw new SnapshotConflictError();
       return snapshotJSON({ ...snapshot, revision });
     }).finally(() => this.importing.delete(guildId));
   }
