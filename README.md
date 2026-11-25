@@ -41,9 +41,9 @@ NyxLink es un cliente TypeScript para bots musicales de Discord que conecta **La
 | **Motor de reproducción** | Cola, pausa, resume, seek, skip, volumen confirmado, filtros, repetición y autoplay. |
 | **Multi-backend** | Detección de capacidades, selección de nodos por carga, región y compatibilidad, failover y migración de reproductores. |
 | **Recuperación** | Reconexión, reanudación de sesiones, circuit breaker, drenado de nodos y control de concurrencia. |
-| **Búsqueda** | Resolución de pistas entre backends, fuentes configurables, timeout, cancelación, fallback y caché TTL/LRU. |
+| **Búsqueda** | Resolución entre backends, descubrimiento de catálogo, fuentes configurables, timeout, cancelación, fallback y caché TTL/LRU. |
 | **NodeLink** | Contratos para letras, capítulos, mixer, crossfade, AutoMix, streaming y grupos, según capacidades del servidor. |
-| **Lavalink** | Protocolo v4, filtros y extensiones LavaLyrics y SponsorBlock según plugins instalados. |
+| **Lavalink** | Protocolo v4, LavaSearch, LavaSrc, LavaLyrics, SponsorBlock y LavaDSPX según plugins instalados y capacidades. |
 | **Persistencia** | Memoria, almacenamiento local, Redis, snapshots versionados y control de propiedad de guilds. |
 | **Aurora** | Motor único Pino, presentación Consola, terminal interactiva, diagnósticos y OpenTelemetry opcional. |
 | **Desarrollo** | Tipos TypeScript, eventos, conectores, extensiones, API pública y métricas privadas. |
@@ -167,6 +167,19 @@ async function play(guildId, voiceChannelId, query, requester) {
 
 La búsqueda acepta texto o URL. Para encolar todos los resultados de una playlist, utiliza `player.queue.add(result.tracks)`.
 
+### Búsqueda avanzada y metadatos
+
+```ts
+const result = await manager.search({ query: 'Daft Punk', source: 'spotify' });
+const metadata = result.tracks[0]?.getLavaSrcMetadata();
+const holo = result.tracks[0]?.getHoloMetadata();
+const collection = result.getLavaSrcMetadata();
+```
+
+Los metadatos dependen del proveedor y pueden estar ausentes. Para buscar en un nodo concreto, pasa su identificador en `node`. Las fuentes internacionales adicionales de NodeLink incluyen Amazon Music (`azsearch`), Last.fm (`lfsearch`), Shazam (`shsearch`) y Songlink (`slsearch`). Last.fm y Shazam aportan descubrimiento; Songlink resuelve enlaces, no es un catálogo de audio independiente.
+
+Para los contratos nativos de descubrimiento `node.loadSearch()` (LavaSearch) y `node.loadNodeLinkSearch()` (NodeLink), consulta las [guías de backends](docs/backend-compatibility.md).
+
 | Control | API |
 | --- | --- |
 | Pausar / continuar | `await player.pause()` / `await player.resume()` |
@@ -225,7 +238,7 @@ const player = manager.players.create({
 });
 ```
 
-La selección respeta los requisitos de backend, capacidades y región. Las migraciones conservan el reproductor de origen hasta confirmar el destino; los fallos desencadenan rollback y limpieza. Las capacidades opcionales pueden devolver `FeatureUnavailableError`. Consulta [selección de nodos](docs/node-selection.md) y [compatibilidad de backends](docs/backend-compatibility.md).
+La selección respeta los requisitos de backend, capacidades y región. Las preferencias de audio nativas incompatibles se conservan en memoria y se omiten durante la restauración. El evento `playerNodeFailover` informa las funciones suspendidas y el resultado de la reconstrucción opcional del Mixer. Las migraciones conservan el reproductor de origen hasta confirmar el destino; los fallos desencadenan rollback y limpieza. Las capacidades opcionales pueden devolver `FeatureUnavailableError`. Consulta [selección de nodos](docs/node-selection.md) y [compatibilidad de backends](docs/backend-compatibility.md).
 
 <a name="aurora"></a>
 
@@ -286,6 +299,10 @@ La demostración usa eventos simulados. La API de logging acepta `options.loggin
 | `trackStart` | Inicio de pista notificado por el nodo. |
 | `trackException` | Error de reproducción. |
 | `queueEnd` | Cola agotada. |
+| `autoPlayed` | Reproducción automática aceptada. |
+| `playerNodeFailover` | Progreso, recuperación o fallo de migración. |
+| `mixStart` / `mixEnd` | Eventos nativos de capas de audio. |
+| `sponsorBlockEvent` | Observación normalizada de segmentos o capítulos. |
 | `playerDestroy` | Reproductor destruido. |
 
 Todos los eventos y argumentos se definen en [IManagerEvents](src/typings/Interfaces.ts) y en la [referencia de API generada](docs/api-generated.md).
@@ -319,7 +336,7 @@ pnpm run test:package
 pnpm run pack:check
 ```
 
-Los tests de integración de backends y plugins requieren Linux y Docker o Podman.
+Los tests de integración de backends y plugins requieren Linux y Docker o Podman. Consulta los [resultados de CI de dev](https://github.com/SebasLoadJs/NyxLink/actions?query=branch%3Adev), la [matriz de compatibilidad](docs/backend-compatibility.md) y la [aceptación de audio real](docs/pending-real-world-acceptance.md). Los contratos implementados en desarrollo no implican que todos los proveedores estén operativos ni que exista una versión estable publicada.
 
 ## 📄 Licencia
 

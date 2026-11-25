@@ -2,7 +2,7 @@
 
 ## Latest verified development checkpoint — 2026-11-24
 
-At NyxLink `770053d892939650cd0e44f5603ed8af49727409`, [validation](https://github.com/SebasLoadJs/NyxLink/actions/runs/45318101584), [baseline/modern protocols and plugins](https://github.com/SebasLoadJs/NyxLink/actions/runs/45318101522), [Redis](https://github.com/SebasLoadJs/NyxLink/actions/runs/45318101657) and [600-second endurance](https://github.com/SebasLoadJs/NyxLink/actions/runs/45318101691) passed. The image and plugin pins remain those in `tests/integration/backend-servers.json`. This supersedes the transient download failure recorded in the historical resume checkpoint below. New commits require their own checks in [PR #32](https://github.com/SebasLoadJs/NyxLink/pull/32).
+At NyxLink `770053d892939650cd0e44f5603ed8af49727409`, [validation](https://github.com/SebasLoadJs/NyxLink/actions/runs/45318101584), [baseline/modern protocols and plugins](https://github.com/SebasLoadJs/NyxLink/actions/runs/45318101522), [Redis](https://github.com/SebasLoadJs/NyxLink/actions/runs/45318101657) and [600-second endurance](https://github.com/SebasLoadJs/NyxLink/actions/runs/45318101691) passed. The image and plugin pins remain those in `tests/integration/backend-servers.json`. This supersedes the transient download failure recorded in the historical resume checkpoint below. New commits require their own checks in [dev CI](https://github.com/SebasLoadJs/NyxLink/actions?query=branch%3Adev).
 
 | Fixed profile | Scope accepted by automated checks | Scope still pending |
 | --- | --- | --- |
@@ -12,6 +12,28 @@ At NyxLink `770053d892939650cd0e44f5603ed8af49727409`, [validation](https://gith
 | LavaLyrics 1.1.0 / SponsorBlock 3.0.1 | Pinned plugin detection and enabled/disabled HTTP/WS contracts | Provider permissions/content/rate limits and actual audio effects |
 
 NodeLink seek patch acceptance is tracked separately; it does not certify unpatched images. [Operator acceptance](pending-real-world-acceptance.md) remains pending. The sections below retain historical observations rather than claiming all versions behave identically.
+
+## Development contracts (not release certification)
+
+The development branch additionally exposes LavaSearch discovery, NodeLink search modifiers, Holo metadata, LavaSrc metadata, LavaDSPX effects, opt-in multi-provider recommendations, native audio preference projection and optional mixer reconstruction. These additions require validation against the exact release candidate. Installed plugin metadata is not proof of optional REST endpoint availability. See [Lavalink](lavalink.md), [NodeLink](nodelink.md), [Mixer](mixer.md), and [node selection](node-selection.md).
+
+### SponsorBlock and chapter events
+
+Both backends expose a common `sponsorBlockEvent` observation while retaining their native wire events on `nodeRaw`. NodeLink uses `SponsorBlockSegmentsLoadedEvent` and `SponsorBlockSegmentSkippedEvent`; the Lavalink plugin uses `SegmentsLoaded`, `SegmentSkipped`, `ChaptersLoaded` and `ChapterStarted`. The typed observation records its backend and normalizes millisecond timestamps. It is not proof of the currently playing track identity: some upstream messages include only the guild ID.
+
+```ts
+manager.on('sponsorBlockEvent', (player, event) => {
+    if (event.kind === 'segmentSkipped') {
+        console.log(event.backend, event.segment.start, event.segment.end);
+    }
+});
+```
+
+See [NodeLink gateway constants](https://github.com/PerformanC/NodeLink/blob/97bbce1e169f18811c69836e3d0fa7f87e1d13fe/src/constants.ts) and [Lavalink SponsorBlock plugin](https://github.com/topi314/SponsorBlock-Plugin).
+
+## Maintenance policy
+
+NyxLink is a client for external audio nodes, not an audio server or a Discord voice engine. Review upstream API changes against pinned revisions, keep compatible API changes additive, retain security/runtime fixes and require protocol, packaging and audio acceptance for releases. Do not infer support for future plugins or claim playback solely from metadata or successful REST requests.
 
 ## Earlier baseline
 

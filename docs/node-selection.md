@@ -23,3 +23,10 @@ Eligibility, exclusion, circuit/draining checks, health filtering, readiness, re
 The caller supplies the preference on each call. There is no global sticky node, retained player reference, polling timer or automatic migration. A disconnected node never survives because of hysteresis. Source-health ranking already incorporates observed provider status/circuit state; node circuit breakers remain hard eligibility gates. This API does not invent server worker statistics or promise regional latency from configured region names.
 
 See [pending acceptance](pending-real-world-acceptance.md) for load/region and audible migration exercises.
+
+
+### Native audio recovery
+
+On migration, the shared playback state is restored independently of NodeLink-only controls. Native fading, crossfade, loudness normalization, audio track selection and extended filters are projected against the destination. Unsupported settings are retained in the live player and omitted from recovery requests; compatible destinations can receive them again. The recovered `playerNodeFailover` report optionally includes `suspendedFeatures` and `manualPreloadDiscarded`. Queue-backed preloads are rebuilt rather than reusing stale source-node encodings.
+
+Explicit native controls remain capability-gated. Applications can use `filters.apply({ compatibleOnly: true })` to apply the compatible subset while preserving the original filter preferences. This is not a guarantee of audible continuity. LavaDSPX compatibility is projected separately; arbitrary plugin filters are not guaranteed portable. See [optional mixer reconstruction](mixer.md#optional-mixer-reconstruction). Real backend/voice acceptance remains required.

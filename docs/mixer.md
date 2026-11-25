@@ -15,6 +15,15 @@ The contract was reviewed against NodeLink revision `97bbce1e169f18811c69836e3d0
 
 Concurrent Player mix calls execute in order. A failed call does not poison subsequent commands. User playback intent changes, disconnect/destruction, node migration, transport/session replacement or adapter replacement invalidate queued/in-flight operations with `PlayerOperationCancelledError` (`PLAYER_OPERATION_CANCELLED`). An already-sent mutation might still have happened remotely; cancellation does not claim transactional rollback on the server. Direct Rest calls remain the low-level boundary and do not join the Player command queue.
 
-Mixes are backend-owned. NyxLink does not keep a speculative local mix cache, copy layers during migration, promise audible synchronization or infer cleanup from a local command. Handle mix-end events/404s and explicitly remove layers your application owns; backend auto-cleanup depends on its configuration. Unsupported Lavalink calls fail before HTTP. Full mixer concurrency/audio/cleanup acceptance against pinned real servers and Discord is still required.
+Mixes are backend-owned. NyxLink does not keep a speculative local mix cache, copy layers by default during migration, promise audible synchronization or infer cleanup from a local command. Handle mix-end events/404s and explicitly remove layers your application owns; backend auto-cleanup depends on its configuration. Unsupported Lavalink calls fail before HTTP. Full mixer concurrency/audio/cleanup acceptance against pinned real servers and Discord is still required.
 
 See [compiled example](../examples/observability.ts) and `tests/mix-lifecycle.test.cjs` for HTTP response validation, command ordering, rejected operations and stale-session cancellation.
+
+
+### Optional mixer reconstruction
+
+The NodeLink mixer API supports creating, listing, updating volume and deleting layers, but not seeking an individual layer. Consequently, mixer recovery is disabled by default. Applications that explicitly want layers restarted from their beginning can set Manager option `node.mixRecovery: { mode: 'restart', maxLayers: 5 }`.
+
+Recovery reads an authoritative list from the source, never resurrects layers from old cached state, skips expired snapshots and layers, and attempts reconstruction only after the main player migration commits and source cleanup is acknowledged. It skips paused, unavailable or incompatible destinations. Each new layer receives its own destination ID; the optional `playerNodeFailover.mixRecovery` report identifies acknowledged ID mappings and failed/skipped counts. No automatic retry is made after an ambiguous creation request. A source that cannot be queried cannot provide a trustworthy list of layers.
+
+Contract reviewed against [NodeLink mixer collection API](https://github.com/PerformanC/NodeLink/blob/97bbce1e169f18811c69836e3d0fa7f87e1d13fe/src/api/sessions.id.players.id.mix.ts) and [individual layer API](https://github.com/PerformanC/NodeLink/blob/97bbce1e169f18811c69836e3d0fa7f87e1d13fe/src/api/sessions.id.players.id.mix.id.ts). Real audio acceptance remains required.
