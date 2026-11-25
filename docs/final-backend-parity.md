@@ -30,3 +30,11 @@ This document is a scope and acceptance policy, not evidence that every row has 
 On migration, the shared playback state is restored independently of NodeLink-only controls. Native fading, crossfade, loudness normalization, audio track selection and extended filters are projected against the destination. Unsupported settings are retained in the live player and omitted from recovery requests; compatible destinations can receive them again. The recovered `playerNodeFailover` report optionally includes `suspendedFeatures` and `manualPreloadDiscarded`. Queue-backed preloads are rebuilt rather than reusing stale source-node encodings.
 
 Explicit native controls remain capability-gated. Applications can use `filters.apply({ compatibleOnly: true })` to apply the compatible subset while preserving the original filter preferences. This is not a guarantee of audible continuity. Plugin-specific filter compatibility, mixer-layer reconstruction and real backend/voice acceptance still require separate verification.
+
+### Optional mixer reconstruction
+
+The NodeLink mixer API supports creating, listing, updating volume and deleting layers, but not seeking an individual layer. Consequently, mixer recovery is disabled by default. Applications that explicitly want layers restarted from their beginning can set Manager option `node.mixRecovery: { mode: 'restart', maxLayers: 5 }`.
+
+Recovery reads an authoritative list from the source, never resurrects layers from old cached state, skips expired snapshots and layers, and attempts reconstruction only after the main player migration commits and source cleanup is acknowledged. It skips paused, unavailable or incompatible destinations. Each new layer receives its own destination ID; the optional `playerNodeFailover.mixRecovery` report identifies acknowledged ID mappings and failed/skipped counts. No automatic retry is made after an ambiguous creation request. A source that cannot be queried cannot provide a trustworthy list of layers.
+
+Contract reviewed against [NodeLink mixer collection API](https://github.com/PerformanC/NodeLink/blob/97bbce1e169f18811c69836e3d0fa7f87e1d13fe/src/api/sessions.id.players.id.mix.ts) and [individual layer API](https://github.com/PerformanC/NodeLink/blob/97bbce1e169f18811c69836e3d0fa7f87e1d13fe/src/api/sessions.id.players.id.mix.id.ts). Real audio acceptance remains required.
