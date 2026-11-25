@@ -38,3 +38,21 @@ The NodeLink mixer API supports creating, listing, updating volume and deleting 
 Recovery reads an authoritative list from the source, never resurrects layers from old cached state, skips expired snapshots and layers, and attempts reconstruction only after the main player migration commits and source cleanup is acknowledged. It skips paused, unavailable or incompatible destinations. Each new layer receives its own destination ID; the optional `playerNodeFailover.mixRecovery` report identifies acknowledged ID mappings and failed/skipped counts. No automatic retry is made after an ambiguous creation request. A source that cannot be queried cannot provide a trustworthy list of layers.
 
 Contract reviewed against [NodeLink mixer collection API](https://github.com/PerformanC/NodeLink/blob/97bbce1e169f18811c69836e3d0fa7f87e1d13fe/src/api/sessions.id.players.id.mix.ts) and [individual layer API](https://github.com/PerformanC/NodeLink/blob/97bbce1e169f18811c69836e3d0fa7f87e1d13fe/src/api/sessions.id.players.id.mix.id.ts). Real audio acceptance remains required.
+
+### SponsorBlock and chapter events
+
+Both backends expose a common `sponsorBlockEvent` observation while retaining their native wire events on `nodeRaw`. NodeLink uses `SponsorBlockSegmentsLoadedEvent` and `SponsorBlockSegmentSkippedEvent`; the Lavalink plugin uses `SegmentsLoaded`, `SegmentSkipped`, `ChaptersLoaded` and `ChapterStarted`. The typed observation records its backend and normalizes millisecond timestamps. It is not proof of the currently playing track identity: some upstream messages include only the guild ID.
+
+```ts
+manager.on('sponsorBlockEvent', (player, event) => {
+    if (event.kind === 'segmentSkipped') {
+        console.log(event.backend, event.segment.start, event.segment.end);
+    }
+});
+```
+
+See [NodeLink gateway constants](https://github.com/PerformanC/NodeLink/blob/97bbce1e169f18811c69836e3d0fa7f87e1d13fe/src/constants.ts) and [Lavalink SponsorBlock plugin](https://github.com/topi314/SponsorBlock-Plugin).
+
+### Aurora observations
+
+The existing canonical route now includes mixer start/end, SponsorBlock and chapter observations, suspended audio preference counts, and mixer reconstruction counts. The terminal presentation uses those counts without exposing track metadata, guild IDs, layer IDs or raw payloads. Main playback recovery and optional mixer recovery are reported separately under the same operation ID. These are protocol observations, not confirmation of audible continuity.
