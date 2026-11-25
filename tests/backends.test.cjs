@@ -97,13 +97,13 @@ test('an explicit refresh atomically replaces the inventory, not the prior adapt
   node.rest.getInfoWithHeaders=async()=>({data:info({plugins:[{name:'example',version:'1.0.0'}]}),headers:{}});
   assert.equal(await node.refreshBackend(),true);
   const old=node.backend;
-  old.recordFeature('lyrics','available');
+  old.recordFeature('example:endpoint','available');
   node.rest.getInfoWithHeaders=async()=>({data:info({sourceManagers:['youtube']}),headers:{}});
   assert.equal(await node.refreshBackend(),true);
   assert.equal(node.backend.supports('plugin:example'),false);
-  assert.equal(node.backend.featureStatus('lyrics'),'unknown');
+  assert.equal(node.backend.featureStatus('example:endpoint'),'unknown');
   assert.equal(old.supports('plugin:example'),true);
-  assert.equal(old.featureStatus('lyrics'),'available');
+  assert.equal(old.featureStatus('example:endpoint'),'available');
   const current=node.backend;
   node.rest.getInfoWithHeaders=async()=>({data:{invalid:true},headers:{}});
   assert.equal(await node.refreshBackend(),false);
