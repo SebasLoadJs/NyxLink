@@ -3,11 +3,13 @@ export class PlaybackGuard {
     private generation = 0;
     private automaticGeneration = 0;
     private controller = new AbortController();
+    private automaticController = new AbortController();
 
     public get ticket(): number { return this.generation; }
     /** Signal for bounded external reads belonging to the current playback intent. */
     public get signal(): AbortSignal { return this.controller.signal; }
     public get automaticTicket(): number { return this.automaticGeneration; }
+    public get automaticSignal(): AbortSignal { return this.automaticController.signal; }
     public invalidate(): number {
         this.controller.abort(new Error('Playback intent superseded'));
         this.controller = new AbortController();
@@ -15,7 +17,11 @@ export class PlaybackGuard {
         return ++this.generation;
     }
     public isCurrent(ticket: number): boolean { return ticket === this.generation; }
-    public cancelAutoPlay(): number { return ++this.automaticGeneration; }
+    public cancelAutoPlay(): number {
+        this.automaticController.abort(new Error('Automatic playback superseded'));
+        this.automaticController = new AbortController();
+        return ++this.automaticGeneration;
+    }
     public isAutoCurrent(ticket: number): boolean { return ticket === this.automaticGeneration; }
 }
 
