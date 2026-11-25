@@ -29,7 +29,8 @@ test('LavaSearch validates response categories without losing plugin metadata', 
 });
 
 test('LavaSearch capability is advertised only for a Lavalink plugin', () => {
-    assert.equal(BackendDetector.detect(info).supports('lavasearch'), true);
+    assert.equal(BackendDetector.detect(info).supports('plugin:lavasearch-plugin'), true);
+    assert.equal(BackendDetector.detect(info).featureStatus('lavasearch'), 'unknown');
     assert.equal(BackendDetector.detect({ ...info, plugins: [] }).supports('lavasearch'), false);
     assert.equal(BackendDetector.detect({ ...info, isNodelink: true }).supports('lavasearch'), false);
 });
