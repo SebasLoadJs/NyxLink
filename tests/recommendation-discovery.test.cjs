@@ -79,3 +79,55 @@ test('native YouTube recommendation uses ytrec with an opt-in discovery configur
     await RecommendationResolver.update(node, player, seed);
     assert.equal(player.recommendations.length, 1);
 });
+
+
+test('a response from an old session cannot populate recommendations after reconnection', async () => {
+    let release, enter;
+    const entered = new Promise(resolve => { enter = resolve; });
+    const { node, player } = fixture(async () => {
+        enter();
+        return new Promise(resolve => { release = resolve; });
+    });
+    node.sessionId = 'old-session';
+    const pending = RecommendationResolver.update(node, player, track('tidal', '1', null));
+    await entered;
+    node.sessionId = 'new-session';
+    release({ tracks: [track('tidal', '2', null)] });
+    await pending;
+    assert.deepEqual(player.recommendations, []);
+});
+
+test('a stale node callback cannot cancel a lookup belonging to the current node', async () => {
+    let release, enter;
+    const entered = new Promise(resolve => { enter = resolve; });
+    const next = track('tidal', '2', null);
+    const { node, player } = fixture(async () => {
+        enter();
+        return new Promise(resolve => { release = resolve; });
+    });
+    const seed = track('tidal', '1', null);
+    const pending = RecommendationResolver.update(node, player, seed);
+    await entered;
+    const stale = { ...node, identifier: 'old-node' };
+    await RecommendationResolver.update(stale, player, seed);
+    release({ tracks: [next] });
+    await pending;
+    assert.deepEqual(player.recommendations, [next]);
+});
+
+test('provider lookup uses full internal metadata for partial tracks', async () => {
+    const seed = track('tidal', '1', 'USABC1234567');
+    delete seed.title;
+    delete seed.author;
+    const calls = [];
+    const { node, player } = fixture(async query => {
+        calls.push(query);
+        if (query.source === 'tdrec') return { tracks: [] };
+        if (query.source === 'dzsearch') return { tracks: [track('deezer', '1', 'USABC1234567')] };
+        if (query.source === 'dzrec') return { tracks: [track('deezer', '2', null)] };
+        throw new Error('Unexpected query');
+    }, { recommendationDiscovery: { providers: ['deezer'] } });
+    await RecommendationResolver.update(node, player, seed);
+    assert.equal(calls.find(query => query.source === 'dzsearch').query, 'Song Artist');
+    assert.equal(player.recommendations.length, 1);
+});

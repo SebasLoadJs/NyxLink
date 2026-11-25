@@ -13,6 +13,9 @@ const validYouTubeId = (value: string): boolean => /^[A-Za-z0-9_-]{11}$/.test(va
 /** Bounded, cancellation-aware recommendations against an explicit seed. Never starts playback. */
 export class RecommendationResolver {
     public static async update(node: Node, player: Player, track: Track): Promise<void> {
+        // A late callback from a previous node must not cancel the current lookup.
+        if (player.destroyed || node.destroyed || player.node && player.node !== node || node.manager.destroyed) return;
+        const session = node.sessionId, socket = node.socket, backend = node.backend;
         requests.get(player)?.abort(new Error('Recommendation lookup superseded'));
         const request = new AbortController();
         requests.set(player, request);
@@ -20,7 +23,8 @@ export class RecommendationResolver {
         const ticket = guard.ticket, autoTicket = guard.automaticTicket;
         const config = node.manager.options.recommendationDiscovery;
         const active = () => requests.get(player) === request && !player.destroyed &&
-            (!player.node || player.node === node) && !node.destroyed &&
+            (!player.node || player.node === node) && !node.destroyed && !node.manager.destroyed &&
+            node.sessionId === session && node.socket === socket && node.backend === backend &&
             guard.isCurrent(ticket) && guard.isAutoCurrent(autoTicket);
         if (active()) player.recommendations = [];
         let timer: ReturnType<typeof setTimeout> | undefined;
@@ -30,6 +34,8 @@ export class RecommendationResolver {
             const info = recommendationInfo(track);
             if (!info.sourceName || !info.identifier) return;
             const source = info.sourceName.toLowerCase(), identifier = info.identifier;
+            const title = info.title ?? track.title, author = info.author ?? track.author;
+            const queryText = [title, author].filter(value => typeof value === 'string' && value.trim()).join(' ');
             const signal = AbortSignal.any([guard.signal, guard.automaticSignal, request.signal]);
             timer = setTimeout(() => request.abort(new Error('Recommendation lookup timed out')), config?.timeoutMs ?? 10000);
             const search = async (query: Pick<ISearchQuery, 'query' | 'source'>): Promise<Track[]> => {
@@ -56,11 +62,11 @@ export class RecommendationResolver {
                 primary = providerRecommendation(source, identifier);
             // Apple Music currently has no native amrec contract on the pinned NodeLink revision.
             // Use the existing fallback instead of an invented recommendation prefix.
-            } else if (source === 'soundcloud') {
-                primary = { query: track.author, source: 'soundcloud' };
+            } else if (source === 'soundcloud' && author && !isDisabled('soundcloud')) {
+                primary = { query: author, source: 'soundcloud' };
             }
-            if (!primary && source !== 'youtube' && !isDisabled('youtube')) {
-                const seeds = await search({ query: track.title + ' ' + track.author, source: 'youtube' });
+            if (!primary && queryText && source !== 'youtube' && !isDisabled('youtube')) {
+                const seeds = await search({ query: queryText, source: 'youtube' });
                 const seed = seeds.map(recommendationInfo).find(candidate =>
                     (candidate.sourceName?.toLowerCase() === 'youtube' || candidate.sourceName?.toLowerCase() === 'youtubemusic') &&
                     typeof candidate.identifier === 'string' && validYouTubeId(candidate.identifier));
@@ -83,9 +89,9 @@ export class RecommendationResolver {
             // Opt-in additional providers; never fabricate IDs from a different catalogue.
             for (const provider of config?.providers ?? []) {
                 if (!active() || signal.aborted) break;
-                if (provider === source || !supported(provider)) continue;
+                if (!queryText || provider === source || !supported(provider)) continue;
                 try {
-                    const seeds = await search({ query: track.title + ' ' + track.author, source: providerSearch[provider] });
+                    const seeds = await search({ query: queryText, source: providerSearch[provider] });
                     const seed = seeds.slice(0, 50).find(candidate => matchesRecommendationSeed(track, candidate, provider));
                     const id = seed && recommendationInfo(seed).identifier;
                     const query = id ? providerRecommendation(provider, id) : undefined;
