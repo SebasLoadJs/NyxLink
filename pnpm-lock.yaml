@@ -11,6 +11,13 @@ importers:
 
   .:
     dependencies:
+      consola:
+        specifier: 3.4.2
+        version: 3.4.2
+      pino:
+        specifier: 10.4.0
+        version: 10.4.0
+    devDependencies:
       '@opentelemetry/api':
         specifier: 1.9.0
         version: 1.9.0
@@ -41,6 +48,9 @@ importers:
       '@opentelemetry/sdk-trace-base':
         specifier: 2.9.0
         version: 2.9.0(@opentelemetry/api@1.9.0)
+      '@types/node':
+        specifier: ^24.10.0
+        version: 24.12.2
       ansi-escapes:
         specifier: 7.3.0
         version: 7.3.0
@@ -59,9 +69,9 @@ importers:
       cli-truncate:
         specifier: 4.0.0
         version: 4.0.0
-      consola:
-        specifier: 3.4.2
-        version: 3.4.2
+      discord.js:
+        specifier: ^14.25.1
+        version: 14.26.2
       figlet:
         specifier: 1.11.3
         version: 1.11.3
@@ -104,9 +114,6 @@ importers:
       ora:
         specifier: 8.2.0
         version: 8.2.0
-      pino:
-        specifier: 10.4.0
-        version: 10.4.0
       pino-abstract-transport:
         specifier: 3.0.0
         version: 3.0.0
@@ -137,22 +144,15 @@ importers:
       terminal-link:
         specifier: 3.0.0
         version: 3.0.0
-      wrap-ansi:
-        specifier: 9.0.0
-        version: 9.0.0
-    devDependencies:
-      '@types/node':
-        specifier: ^24.10.0
-        version: 24.12.2
-      discord.js:
-        specifier: ^14.25.1
-        version: 14.26.2
       tinybench:
         specifier: 6.2.1
         version: 6.2.1
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+      wrap-ansi:
+        specifier: 9.0.0
+        version: 9.0.0
 
 packages:
 

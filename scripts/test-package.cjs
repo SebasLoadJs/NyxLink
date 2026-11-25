@@ -44,8 +44,8 @@ async function main() {
     await fs.writeFile(path.join(consumer, 'package.json'), JSON.stringify({ private: true, packageManager: manifest.packageManager,
       dependencies: { [manifest.name]: fromRegistry ? manifest.version : `file:${archive}` }, devDependencies: { '@types/node': types, typescript: compiler, 'discord.js': discord,
         ...manifest.dependencies,
-        ...manifest.peerDependencies,
-        '@opentelemetry/context-async-hooks': manifest.peerDependencies['@opentelemetry/sdk-trace-base'],
+        ...manifest.devDependencies,
+        '@opentelemetry/context-async-hooks': manifest.devDependencies['@opentelemetry/sdk-trace-base'],
         'ink-testing-library': '4.0.0', tinybench: manifest.devDependencies.tinybench } }));
     const pnpm = 'pnpm';
     run(pnpm, ['install', fromRegistry ? '--prefer-offline=false' : '--prefer-offline', ...(fromRegistry ? ['--force'] : []), '--registry=https://registry.npmjs.org/', '--ignore-scripts', '--no-frozen-lockfile'], consumer);
@@ -56,6 +56,8 @@ async function main() {
     assert.equal(actual.name, manifest.name); assert.equal(actual.version, manifest.version); assert.equal(actual.private, manifest.private);
     assert.deepEqual(actual.publishConfig, manifest.publishConfig);
     assert.deepEqual(actual.dependencies, manifest.dependencies);
+    assert.equal(actual.peerDependencies, undefined, 'Core consumers must not inherit optional Aurora tooling constraints');
+    assert.equal(actual.peerDependenciesMeta, undefined);
     const license = await fs.readFile(path.join(installed, 'LICENSE'));
     assert.deepEqual(license, await fs.readFile(path.join(root, 'LICENSE')));
     const attribution = await fs.readFile(path.join(installed, 'NOTICE.md'), 'utf8');
