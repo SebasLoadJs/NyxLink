@@ -609,6 +609,8 @@ export function stringifyWithReplacer(obj: any): string {
 /** NodeLink-only search prefixes. See https://github.com/PerformanC/NodeLink */
 export const nodeLinkSources = new Set([
   "admsearch",
+  "azsearch",
+  "slsearch",
   "amsearch",
   "audiomack",
   "bcsearch",
@@ -638,6 +640,8 @@ export const sources = {
   soundcloud: "scsearch",
   local: "local",
   admsearch: "admsearch",
+  azsearch: "azsearch",
+  slsearch: "slsearch",
   amsearch: "amsearch",
   audiomack: "audiomack",
   bcsearch: "bcsearch",
