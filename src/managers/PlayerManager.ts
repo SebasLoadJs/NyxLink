@@ -74,7 +74,7 @@ export class PlayerManager {
         }
 
         if (this.players.has(options.guildId)) {
-            this.manager.emit("debug", `Moonlink.js > PlayerManager >> Player already exists for Guild: ${options.guildId}. Returning existing player.`);
+            this.manager.emit("debug", `NyxLink > PlayerManager >> Player already exists for Guild: ${options.guildId}. Returning existing player.`);
             return this.players.get(options.guildId)!;
         }
 
@@ -104,7 +104,7 @@ export class PlayerManager {
         if (options.nodeSelection !== undefined) player.updateData('nodeSelection', player.nodeSelection);
 
         this.manager.emit("playerCreate", player);
-        this.manager.emit("debug", `Moonlink.js > PlayerManager >> Player created. Guild: ${options.guildId}, Options: ${JSON.stringify(options)}`);
+        this.manager.emit("debug", `NyxLink > PlayerManager >> Player created. Guild: ${options.guildId}`);
         return player;
     }
 
