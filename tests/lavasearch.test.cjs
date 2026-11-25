@@ -66,3 +66,52 @@ test('LavaSearch REST uses its native path, handles 204 and rejects unavailable 
         await new Promise(resolve => server.close(resolve));
     }
 });
+
+test('selected international providers use NodeLink and reject explicit Lavalink routing', async () => {
+    const { SearchService } = require('../dist/src/search/SearchService');
+    const { nodeLinkSources, sources } = require('../dist/src/Util');
+    const selections = [];
+    const calls = [];
+    const node = {
+        identifier: 'nl', connected: true, sessionId: 'session', backend: BackendDetector.detect({ ...info, isNodelink: true }),
+        assertFeature(feature) { assert.ok(feature.startsWith('search:')); },
+        rest: { async loadTracks(identifier) { calls.push(identifier); return { loadType: 'empty', data: {} }; } }
+    };
+    const lava = {
+        ...node, identifier: 'll', backend: BackendDetector.detect(info),
+        assertFeature(feature) { throw new FeatureUnavailableError(feature, 'lavalink'); }
+    };
+    const manager = { options: { search: {} }, emit() {}, nodes: {
+        nodes: new Map([['nl', node], ['ll', lava]]),
+        findNode(options) { selections.push(options); return node; }
+    }};
+    const service = new SearchService(manager, async () => null);
+    for (const source of ['azsearch', 'lfsearch', 'shsearch', 'slsearch']) {
+        assert.ok(nodeLinkSources.has(source));
+        assert.equal(sources[source], source);
+        await service.search({ query: 'test', source });
+        assert.equal(selections.at(-1).backend, 'nodelink');
+        assert.equal(calls.at(-1), source + ':test');
+        await assert.rejects(service.search({ query: 'test', source, node: 'll' }), FeatureUnavailableError);
+    }
+    assert.equal(calls.length, 4);
+    service.close();
+});
+
+test('advertised LavaSrc source is not misclassified as NodeLink-only', async () => {
+    const { SearchService } = require('../dist/src/search/SearchService');
+    const calls = [];
+    const node = {
+        identifier: 'll', connected: true, sessionId: 'session',
+        backend: BackendDetector.detect({ ...info, plugins: [{ name: 'lavasrc-plugin', version: '4.0.0' }], sourceManagers: ['spotify'] }),
+        assertFeature(feature) { throw new FeatureUnavailableError(feature, 'lavalink'); },
+        rest: { async loadTracks(identifier) { calls.push(identifier); return { loadType: 'empty', data: {} }; } }
+    };
+    const manager = { options: { search: {} }, emit() {}, nodes: { nodes: new Map([['ll', node]]), findNode() { return node; } } };
+    const service = new SearchService(manager, async () => null);
+    await service.search({ query: 'test', source: 'spsearch', node: 'll' });
+    assert.deepEqual(calls, ['spsearch:test']);
+    await assert.rejects(service.search({ query: 'test', source: 'amsearch', node: 'll' }), FeatureUnavailableError);
+    assert.equal(calls.length, 1);
+    service.close();
+});
