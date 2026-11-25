@@ -28,7 +28,8 @@ test('plugin inventory is validated and does not imply optional endpoint support
   assert.equal(adapter.getPlugin('LAVASRC').version,'4.8.0');
   assert.equal(adapter.supports('plugin:lavasrc'),true);
   assert.equal(adapter.describeFeature('plugin:lavasrc').evidence,'advertised');
-  assert.equal(adapter.featureStatus('lyrics'),'unknown');
+  assert.equal(adapter.featureStatus('lyrics'),'unavailable');
+  assert.equal(adapter.featureStatus('lavalyrics'),'unknown');
   assert.equal(adapter.supports('source:spotify'),false);
   assert.equal(adapter.supports('plugin:invalid'),false);
 });
