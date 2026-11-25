@@ -42,11 +42,16 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
     // If an object is registered, however, it must keep that exact registry identity.
     const registeredTarget = player.manager.nodes.nodes.get(target.identifier);
     const registeredPlayer = player.manager.players.get(player.guildId);
+    const identity = (node: Node) => ({ session: node.sessionId, socket: node.socket, backend: node.backend, registered: player.manager.nodes.nodes.get(node.identifier) });
+    const sourceIdentity = identity(source), targetIdentity = identity(target);
+    const matchesIdentity = (node: Node, expected: ReturnType<typeof identity>): boolean =>
+        node.sessionId === expected.session && node.socket === expected.socket &&
+        node.backend === expected.backend && player.manager.nodes.nodes.get(node.identifier) === expected.registered;
     const active = () => !player.destroyed && !player.manager.destroyed && target.manager === player.manager &&
         (!registeredTarget || registeredTarget === target) && (!registeredPlayer || registeredPlayer === player) &&
         player.manager.nodes.nodes.get(target.identifier) === registeredTarget &&
         player.manager.players.get(player.guildId) === registeredPlayer &&
-        guard.isCurrent(ticket) && NodeSelector.matches(target, player.nodeSelection);
+        guard.isCurrent(ticket) && matchesIdentity(target, targetIdentity) && NodeSelector.matches(target, player.nodeSelection);
     const report = (status: 'in-progress' | 'recovered' | 'failed' | 'cancelled', reason?: string, reasonCode?: FailoverReasonCode) => {
         player.manager.emit('playerNodeFailover', player, {
             source: source.identifier, target: target.identifier, status, positionMs: player.current?.position, reason, ...(reasonCode ? { reasonCode } : {}),
@@ -56,7 +61,13 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
         });
     };
     const cleanup = async (node: Node): Promise<string | undefined> => {
-        try { await node.rest.destroyPlayer(player.guildId, { timeoutMs: 10000 }); }
+        try {
+            // Never delete a player belonging to a replacement backend/session.
+            if (!matchesIdentity(node, node === source ? sourceIdentity : targetIdentity)) {
+                throw new Error('Migration cleanup skipped: backend identity changed');
+            }
+            await node.rest.destroyPlayer(player.guildId, { timeoutMs: 10000 });
+        }
         catch (error) {
             const failure = error instanceof Error ? error : new Error(String(error));
             // A user-supplied event listener must not abort rollback or re-enter
@@ -180,7 +191,7 @@ export async function migratePlayer(player: Player, target: Node, ticket: number
         };
         notify(() => player.manager.emit('playerSwitchedNode', player, source, target));
         notify(() => report('recovered', reason, reason === undefined ? undefined : 'source-cleanup-failed'));
-        if (original && !player.destroyed && guard.isCurrent(ticket) && player.node === target) {
+        if (original && active() && player.node === target) {
             notify(() => player.manager.emit('playerResumed', player));
         }
         return true;
