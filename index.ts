@@ -1,3 +1,6 @@
+export type { LavaDSPXFilters, LavaDSPXKey, LavaDSPXPassFilter, LavaDSPXEchoFilter, LavaDSPXNormalizationFilter } from './src/backends/LavaDSPXContracts';
+export { readLavaSrcTrackMetadata, readLavaSrcPlaylistMetadata } from './src/backends/LavaSrcMetadata';
+export type { LavaSrcTrackMetadata, LavaSrcPlaylistMetadata, LavaSrcPlaylistType } from './src/backends/LavaSrcMetadata';
 export type * from './src/typings/Interfaces';
 export { NodeState, VoiceConnectionState, LoadType } from './src/typings/types';
 export const version: string = require("../package.json").version as string;
