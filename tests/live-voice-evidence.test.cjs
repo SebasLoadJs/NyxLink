@@ -24,7 +24,9 @@ function make(backend, mode, suffix = '2026-11-23T20-00-00.000Z') {
       transitionReasons: mode === 'crossfade' ? ['crossfading'] : undefined,
       events: mode === 'crossfade' ? [{ type: 'trackStart', track: 'A' },
         { type: 'trackEnd', track: 'A', reason: 'crossfading' },
-        { type: 'trackStart', track: 'B' }] : [],
+        { type: 'trackStart', track: 'B' }] : mode === 'commands' ?
+        [{ type: 'trackStart', track: 'A' }, { type: 'trackStart', track: 'B' }] :
+        [{ type: 'trackStart', track: 'A' }],
     },
   };
 }
@@ -119,10 +121,26 @@ test('a report without a verified fresh build cannot certify voice protocols', (
   assert.equal(inspectReports(revision, entries).protocolEvidenceComplete, false);
 });
 
- test('command reports without confirmed stop cannot certify acceptance', () => {
+test('command reports without confirmed stop cannot certify acceptance', () => {
   const entries = all();
   entries[0].report.commandChecks = commandChecks.slice(0, -1);
   const summary = inspectReports(revision, entries);
   assert.equal(summary.modes['nodelink:commands'], 'failed');
   assert.equal(summary.protocolEvidenceComplete, false);
+});
+
+test('command reports with missing, reversed or extra track events cannot pass', () => {
+  for (const starts of [[], ['B', 'A'], ['A', 'B', 'B'], ['A', 'unexpected', 'B']]) {
+    const entries = all();
+    entries[0].report.events = starts.map(track => ({ type: 'trackStart', track }));
+    assert.equal(inspectReports(revision, entries).modes['nodelink:commands'], 'failed');
+  }
+});
+
+test('reconnect reports require an observed start of the expected track only', () => {
+  for (const starts of [[], ['B'], ['A', 'unexpected']]) {
+    const entries = all();
+    entries[1].report.events = starts.map(track => ({ type: 'trackStart', track }));
+    assert.equal(inspectReports(revision, entries).modes['nodelink:reconnect'], 'failed');
+  }
 });

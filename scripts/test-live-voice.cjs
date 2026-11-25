@@ -4,7 +4,7 @@ const { rmSync } = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { execFileSync, spawnSync } = require('node:child_process');
-const { withDeadline } = require('./live-voice-commands.cjs');
+const { withDeadline, hasOrderedTrackStarts, waitForTrackStarts } = require('./live-voice-commands.cjs');
 
 const snowflake = value => typeof value === 'string' && /^\d{17,20}$/.test(value);
 const address = value => {
@@ -288,24 +288,18 @@ async function run(config) {
       const { verifyReconnectSequence } = require('./live-voice-commands.cjs');
       report.reconnectChecks = await verifyReconnectSequence(player, node, tracks[0]);
       report.observed = report.reconnectChecks.length === 5 &&
-        events.some(e => e.type === 'trackStart' && e.track === 'A');
+        events.some(e => e.type === 'trackStart' && e.track === 'A') &&
+        events.filter(e => e.type === 'trackStart').every(e => e.track === 'A');
       report.success = report.observed;
       if (!report.success) throw new Error('Live reconnect did not confirm track A and backend voice restoration');
       record('reconnectSequencePassed');
     } else if (config.commandSmoke) {
       stage = 'command-smoke';
       const { verifyCommandSequence } = require('./live-voice-commands.cjs');
-      report.commandChecks = await verifyCommandSequence(player, node, tracks);
+      report.commandChecks = await verifyCommandSequence(player, node, tracks,
+        expected => waitForTrackStarts(events, expected));
       stage = 'command-event-observation';
-      const expires = Date.now() + 20000;
-      while (Date.now() < expires) {
-        const starts = events.filter(e => e.type === 'trackStart').map(e => e.track);
-        if (starts.includes('B')) break;
-        await delay(150);
-      }
-      const starts = events.filter(e => e.type === 'trackStart').map(e => e.track);
-      report.observed = starts.includes('A') && starts.includes('B') &&
-        starts.indexOf('A') < starts.indexOf('B');
+      report.observed = hasOrderedTrackStarts(events, ['A', 'B']);
       report.success = report.observed && report.commandChecks.length === 9;
       if (!report.success) throw new Error('Live command sequence did not produce ordered track events');
       record('commandSequencePassed');
