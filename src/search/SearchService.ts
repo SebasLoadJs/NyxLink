@@ -1,9 +1,10 @@
+import { sourcePrefix, sourceProvider, requiresNodeLink, disabledSource } from './SourceRouting';
 import type { Manager } from '../core/Manager';
 import { validateLoadResponse } from '../backends/ProtocolValidation';
 import type { Node } from '../entities/Node';
 import type { SearchResult } from '../structures/SearchResult';
 import type { IRESTLoadTracks, ISearchQuery } from '../typings/Interfaces';
-import { Structure, sources, nodeLinkSources } from '../Util';
+import { Structure, nodeLinkSources } from '../Util';
 import { SharedSearchRequests } from './SharedSearchRequests';
 
 /** Coordinates backend search policy; cache is opt-in, bounded and local to this manager. */
@@ -39,7 +40,7 @@ export class SearchService {
         const result: SearchResult = new (Structure.get('SearchResult'))(response, query.requester, this.manager.options.search?.playlistLoadLimit, this.manager.options.trackPartial ?? []);
         if (result.loadType === 'search') result.tracks = result.tracks.slice(0, this.manager.options.search?.resultLimit ?? 10);
         const disabled = this.manager.options.sources?.disabledSources ?? [];
-        result.tracks = result.tracks.filter(track => !disabled.includes(track.getInfo().sourceName));
+        result.tracks = result.tracks.filter(track => !disabledSource(track.getInfo().sourceName, disabled));
         for (const track of result.tracks) track.backend = node?.backend?.kind;
         return result;
     }
@@ -61,7 +62,15 @@ export class SearchService {
         const timer = setTimeout(() => controller.abort(Object.assign(new Error("Search timed out"), { code: "ETIMEDOUT" })), timeoutMs);
         this.pending.add(controller);
         try {
-            const native = await this.wait(this.native({ ...query, signal }), signal);
+            const disabled = this.manager.options.sources?.disabledSources ?? [];
+            const requested = query.source ?? this.manager.options.search?.defaultPlatform ?? 'youtube';
+            let isUrl = false;
+            try { const url = new URL(query.query); isUrl = url.protocol === 'http:' || url.protocol === 'https:'; } catch {}
+            if ((query.source !== undefined || !isUrl) && disabledSource(requested, disabled)) {
+                throw new Error('Requested search source is disabled');
+            }
+            // An explicit node is a backend routing instruction, not a suggestion to use a local provider.
+            const native = query.node ? null : await this.wait(this.native({ ...query, signal }), signal);
             if (native) {
                 const result = this.present(native, query);
                 this.manager.emit('debug', `Moonlink.js > Manager <- Native source result for query "${query.query}". LoadType: ${native.loadType}`);
@@ -71,17 +80,9 @@ export class SearchService {
             if (options.deduplicate !== undefined && typeof options.deduplicate !== 'boolean') throw new TypeError('Search deduplicate must be boolean');
             const sourceHealth = options.sourceHealth;
             if (sourceHealth !== undefined && (typeof sourceHealth !== 'boolean')) throw new TypeError('Invalid search sourceHealth option');
-            const source = query.source ?? options.defaultPlatform ?? 'youtube';
-            let isUrl = false;
-            try { const url = new URL(query.query); isUrl = url.protocol === 'http:' || url.protocol === 'https:'; } catch {}
-            const sourceAliases: Readonly<Record<string, string>> = {
-                youtube:'youtube', youtubemusic:'youtube', ytsearch:'youtube', ytmsearch:'youtube',
-                soundcloud:'soundcloud', scsearch:'soundcloud', dzsearch:'deezer', spsearch:'spotify',
-                amsearch:'applemusic', azsearch:'amazonmusic', lfsearch:'lastfm', shsearch:'shazam', szsearch:'shazam', slsearch:'songlink', local:'local'
-            };
-            const preferSource = sourceHealth && !isUrl && Object.hasOwn(sourceAliases, source) ? sourceAliases[source] : undefined;
-            // The newly supported NodeLink-only providers must not be sent to a Lavalink node.
-            const exclusive = !isUrl && ['azsearch', 'lfsearch', 'shsearch', 'szsearch', 'slsearch'].includes(source);
+            const source = sourcePrefix(requested);
+            const preferSource = sourceHealth && !isUrl ? sourceProvider(source) : undefined;
+            const exclusive = !isUrl && requiresNodeLink(source);
             const node = query.node ? this.manager.nodes.nodes.get(query.node) :
                 this.manager.nodes.findNode({ preferSource, ...(exclusive ? { backend: 'nodelink' as const } : {}) });
             if (!node || node.destroyed || !node.connected) throw new Error('No available nodes for searching');
@@ -100,7 +101,7 @@ export class SearchService {
             };
             const fallback = options.fallbackPlatforms ?? [];
             if (!Array.isArray(fallback) || fallback.length > 3 || fallback.some(source => typeof source !== 'string' || !source)) throw new TypeError('Search fallbackPlatforms requires at most three source names');
-            const platforms = isUrl ? [''] : [...new Set([query.source ?? options.defaultPlatform ?? 'youtube', ...fallback])];
+            const platforms = isUrl ? [''] : [...new Set([source, ...fallback.map(sourcePrefix)])].filter(platform => !disabledSource(platform, disabled));
             const settings = options.cache;
             const ttl = settings?.ttlMs ?? 0;
             const capacity = settings?.maxEntries ?? 100;
@@ -123,21 +124,21 @@ export class SearchService {
                 let response: IRESTLoadTracks = { loadType: 'empty', data: {} };
                 for (const platform of platforms) {
                     activeSignal.throwIfAborted();
-                    if (nodeLinkSources.has(platform)) {
+                    if (nodeLinkSources.has(platform) || requiresNodeLink(platform) || platform === 'sprec') {
                         // LavaSrc advertises the same prefix for these sources. Keep the native
                         // NodeLink gate for every other extension and for unverified plugins.
-                        const shared = { spsearch: 'spotify', amsearch: 'applemusic', dzsearch: 'deezer', tdsearch: 'tidal' } as const;
+                        const shared = { spsearch: 'spotify', sprec: 'spotify', amsearch: 'applemusic', dzsearch: 'deezer', tdsearch: 'tidal' } as const;
                         const provider = Object.hasOwn(shared, platform) ? shared[platform as keyof typeof shared] : undefined;
                         const lavaSrc = node.backend?.kind === 'lavalink' && provider !== undefined &&
                             node.backend.plugins.some(plugin => ['lavasrc', 'lavasrc-plugin'].includes(plugin.name.toLowerCase())) &&
                             node.backend.supports(`source:${provider}`);
                         if (!lavaSrc) node.assertFeature(`search:${platform}`);
                     }
-                    const prefix = Object.hasOwn(sources, platform) ? sources[platform as keyof typeof sources] : platform;
-                    const identifier = isUrl ? query.query : `${prefix}:${query.query}`;
+                    const identifier = isUrl ? query.query : `${platform}:${query.query}`;
                     response = await this.wait(node.rest.loadTracks(identifier, { timeoutMs, signal: activeSignal }), activeSignal);
                     validateLoadResponse(response);
-                    if (!['empty', 'error'].includes(response.loadType) && !(response.loadType === 'search' && response.data.length === 0)) break;
+                    // An upstream error is not an empty search. Never bypass provider rejection by falling back.
+                    if (response.loadType !== 'empty' && !(response.loadType === 'search' && response.data.length === 0)) break;
                 }
                 return response;
             };
