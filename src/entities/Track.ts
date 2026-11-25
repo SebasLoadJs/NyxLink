@@ -1,3 +1,4 @@
+import { readHoloTrackMetadata, type HoloTrackMetadata } from '../backends/HoloTrackMetadata';
 import { ITrack, ITrackInfo } from "../typings/Interfaces";
 import { Structure } from "../Util";
 import { TPartialTrackProperties } from "../typings/types";
@@ -119,6 +120,11 @@ export class Track {
             position: () => (this.position = info.position || 0),
             time: () => (this.time = 0)
         };
+    }
+
+    /** Native NodeLink Holo enrichment, when supplied by the backend. */
+    public getHoloMetadata(): HoloTrackMetadata | undefined {
+        return readHoloTrackMetadata(this.pluginInfo);
     }
 
     public isPartialTrack(): boolean {
