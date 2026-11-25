@@ -45,7 +45,7 @@ test('multi-provider recommendations use matching seeds and deduplicate recordin
     }, { recommendationDiscovery: { providers: ['deezer'], maxCandidates: 5 } });
     await RecommendationResolver.update(node, player, seed);
     assert.deepEqual(calls, ['tdrec', 'dzsearch', 'dzrec']);
-    assert.deepEqual(player.recommendations.map(t => t.encoded), [first.encoded, 'tidal:5', second.encoded]);
+    assert.deepEqual(player.recommendations.map(t => t.encoded), [first.encoded, second.encoded, 'tidal:5']);
 });
 
 test('disable autoplay cancels a pending recommendation even when transport ignores abort', async () => {
@@ -66,4 +66,16 @@ test('disable autoplay cancels a pending recommendation even when transport igno
     resolve({ tracks: [track('tidal', '2', null)] });
     await Promise.resolve();
     assert.deepEqual(player.recommendations, []);
+});
+
+test('native YouTube recommendation uses ytrec with an opt-in discovery configuration', async () => {
+    const seed = track('youtube', 'abcdefghijk', null);
+    const { node, player } = fixture(async query => {
+        assert.equal(query.source, 'ytrec');
+        assert.equal(query.query, 'abcdefghijk');
+        return { tracks: [track('youtube', 'abcdefghijl', null)] };
+    }, { recommendationDiscovery: { providers: ['tidal'] } });
+    node.capabilities = new Set(['source:youtube']);
+    await RecommendationResolver.update(node, player, seed);
+    assert.equal(player.recommendations.length, 1);
 });
