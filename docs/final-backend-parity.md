@@ -24,3 +24,9 @@ Scope: a stable TypeScript/JavaScript client for Lavalink v4 and NodeLink. Keep 
 - Each missing contract must be implemented with its tests or explicitly documented as unsupported; do not claim all future plugin APIs are supported.
 
 This document is a scope and acceptance policy, not evidence that every row has been implemented. The initial branch adds LavaSearch transport/validation and selected search routing; all other gates require separate code-level verification.
+
+### Native audio recovery
+
+On migration, the shared playback state is restored independently of NodeLink-only controls. Native fading, crossfade, loudness normalization, audio track selection and extended filters are projected against the destination. Unsupported settings are retained in the live player and omitted from recovery requests; compatible destinations can receive them again. The recovered `playerNodeFailover` report optionally includes `suspendedFeatures` and `manualPreloadDiscarded`. Queue-backed preloads are rebuilt rather than reusing stale source-node encodings.
+
+Explicit native controls remain capability-gated. Applications can use `filters.apply({ compatibleOnly: true })` to apply the compatible subset while preserving the original filter preferences. This is not a guarantee of audible continuity. Plugin-specific filter compatibility, mixer-layer reconstruction and real backend/voice acceptance still require separate verification.
