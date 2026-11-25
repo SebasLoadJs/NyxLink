@@ -140,6 +140,7 @@ export interface IManagerNodeConfig {
 
 export interface IManagerOptionsConfig {
     recommendations?: import('../autoplay/RecommendationPreference').RecommendationPreferences;
+    recommendationDiscovery?: import('../autoplay/RecommendationDiscovery').RecommendationDiscoveryOptions;
     /** Canonical Aurora logging; absent or silent means no output. */
     logging?: AuroraEventOptions;
     telemetry?: OpenTelemetryOptions;
