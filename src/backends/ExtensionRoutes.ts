@@ -39,6 +39,10 @@ const definitions = {
     'lyrics:unsubscribe': { feature: 'lyrics:unsubscribe', method: 'DELETE', path: player + '/lyrics/subscribe', transport: 'json' },
 } as const satisfies Record<string, RouteDefinition>;
 
+/** Native NodeLink feature keys, derived from the actual route catalog. */
+export const nodeLinkExtensionFeatures: readonly string[] = Object.freeze(
+    [...new Set(Object.values(definitions).map(route => route.feature))]
+);
 export type ExtensionOperation = keyof typeof definitions;
 export type ExtensionRoute = RouteDefinition;
 export type ExtensionRouteParameters = { sessionId?: string; guildId?: string; mixId?: string; groupId?: string; query?: URLSearchParams };
