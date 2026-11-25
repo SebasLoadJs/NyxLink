@@ -68,7 +68,7 @@ export function validate<T>(
   errorMessage: string
 ) {
   if (!validator(prop)) {
-    throw new TypeError(`Moonlink.js > ${errorMessage}`);
+    throw new TypeError(`NyxLink > ${errorMessage}`);
   }
 }
 
