@@ -10,6 +10,7 @@ export type { RecommendationProvider, RecommendationDiscoveryOptions } from './s
 export type { RecommendationCandidate, RecommendationPreferences } from './src/autoplay/RecommendationPreference';
 export type { MetadataResolutionOptions } from './src/tracks/MetadataTrackResolver';
 export { diagnoseError } from './src/logging';
+export type { MixRecoveryOptions, MixRecoveryReport } from './src/players/MixRecovery';
 export type { MigrationStage, MigrationStageObservation } from './src/players/PlayerMigration';
 export type { ErrorDiagnostic } from './src/logging';
 export { TerminalDashboard } from './src/observability/TerminalDashboard';
