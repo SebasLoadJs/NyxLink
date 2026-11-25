@@ -1,3 +1,5 @@
+import { normalizeLavaDSPX, supportsLavaDSPX, suspendLavaDSPX, type LavaDSPXKey, type LavaDSPXFilters } from '../backends/LavaDSPXContracts';
+import { FeatureUnavailableError } from '../errors/FeatureUnavailableError';
 import { canSendNativeAudio, suspendNativeFilters } from '../players/AdvancedAudioRecovery';
 import { Player } from "./Player";
 import { IFilters, IEqualizerBand, IKaraoke, ITimescale, ITremolo, IVibrato, IRotation, IDistortion, IChannelMix, ILowPass, IEcho, IChorus, ICompressor, IHighPass, IPhaser, ISpatial } from "../typings/Interfaces";
@@ -378,6 +380,20 @@ export class Filters implements IFilters {
         return this;
     }
 
+    /** Set or remove a typed Lavalink LavaDSPX effect without overwriting other plugin filters. */
+    public setLavaDSPX<K extends LavaDSPXKey>(key: K, value?: NonNullable<LavaDSPXFilters[K]>): this {
+        if (!['high-pass', 'low-pass', 'echo', 'normalization'].includes(key)) throw new TypeError('Unknown LavaDSPX filter');
+        if (value !== undefined && !supportsLavaDSPX(this.player.node.backend)) {
+            throw new FeatureUnavailableError('lavadspx', this.player.node.backend?.kind ?? 'unknown');
+        }
+        const filters = { ...this.pluginFilters };
+        if (value === undefined) delete filters[key];
+        else filters[key] = normalizeLavaDSPX(key, value);
+        this.pluginFilters = filters;
+        this._updateFilters();
+        return this;
+    }
+
     public setPluginFilters(filters: Record<string, any>): this {
         this.pluginFilters = structuredClone(filters);
         this._updateFilters();
@@ -450,6 +466,10 @@ export class Filters implements IFilters {
 
         // Validate the effective payload, including fields originating from presets.
         const suspended = suspendNativeFilters(payload, this.player.node);
+        if (payload.pluginFilters && options.compatibleOnly) {
+            payload.pluginFilters = { ...payload.pluginFilters };
+            suspended.push(...suspendLavaDSPX(payload.pluginFilters, this.player.node.backend));
+        }
         if (suspended.length && !options.compatibleOnly) throw nodeLinkOnlyError("filters");
         options.suspended?.push(...suspended);
         if (payload.equalizer !== undefined) payload.equalizer = this.normalizeBands(payload.equalizer);
