@@ -24,6 +24,8 @@ export type { CapabilityDescription, CapabilityEvidence } from './src/backends/C
 export type { BackendInventoryEntry } from './src/backends/BackendInventory';
 export { ProtocolResponseError } from './src/backends/ProtocolValidation';
 export type { LyricsRequestOptions, SourceHealthStatus, SourceHealthEntry, SourceHealthResponse, SourceHealthEvent, SourceHealthSnapshotEvent, SourceHealthChangeEvent, CrossfadeOptions, QueuePreloadOptions } from './src/backends/NodeLinkContracts';
+export { readHoloTrackMetadata } from './src/backends/HoloTrackMetadata';
+export type { HoloTrackMetadata, HoloAudioTrack } from './src/backends/HoloTrackMetadata';
 export { nodeLinkDiscoveryTypes } from './src/backends/NodeLinkSearchContracts';
 export type { NodeLinkDiscoveryType, NodeLinkDiscoveryOptions } from './src/backends/NodeLinkSearchContracts';
 export { lavaSearchTypes } from './src/backends/LavaSearchContracts';
