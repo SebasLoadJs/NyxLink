@@ -48,7 +48,7 @@ export function lavaSearchParameters(query: string, options: LavaSearchOptions =
         types.some(type => !lavaSearchTypes.includes(type)) || new Set(types).size !== types.length) {
         throw new TypeError('Invalid LavaSearch result types');
     }
-    if (options.timeoutMs !== undefined && (!Number.isSafeInteger(options.timeoutMs) ||
+    if (options.timeoutMs !== undefined && (typeof options.timeoutMs !== 'number' || !Number.isSafeInteger(options.timeoutMs) ||
         options.timeoutMs < 1 || options.timeoutMs > 60000)) {
         throw new TypeError('Invalid LavaSearch timeout');
     }
