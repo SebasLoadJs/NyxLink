@@ -5,6 +5,8 @@ export { createBanner, formatEntry, formatBox, formatSystemStatus, formatFailove
 export type { DiagnosticContext } from './src/logging';
 export { PerformanceMonitor } from './src/observability/PerformanceMonitor';
 export type { PerformanceMetric, PerformanceMonitorOptions, PerformanceSnapshot, DurationSummary } from './src/observability/PerformanceMonitor';
+export { recommendationProviders } from './src/autoplay/RecommendationDiscovery';
+export type { RecommendationProvider, RecommendationDiscoveryOptions } from './src/autoplay/RecommendationDiscovery';
 export type { RecommendationCandidate, RecommendationPreferences } from './src/autoplay/RecommendationPreference';
 export type { MetadataResolutionOptions } from './src/tracks/MetadataTrackResolver';
 export { diagnoseError } from './src/logging';
