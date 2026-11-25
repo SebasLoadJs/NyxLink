@@ -75,3 +75,20 @@ recommendationDiscovery: {
 ```
 
 The shared deadline covers seed lookups and recommendation queries. Provider seeds must match the recording (valid ISRC, or exact normalized title/artist and duration within 3 seconds). Duplicate recordings are removed from history, queue and candidates, with primary provider precedence. Additional discovery is limited to advertised NodeLink sources; it does not claim those providers can stream audio directly. Existing application preference scoring still applies. Stop, newer playback intent and disabled autoplay cancel outstanding discovery.
+
+
+## Selected international source routing
+
+The manager accepts canonical names and verified native prefixes:
+
+| Source | Canonical name | Prefix |
+| --- | --- | --- |
+| Amazon Music | amazonmusic | azsearch |
+| Last.fm | lastfm | lfsearch |
+| Shazam | shazam | shsearch |
+| Songlink | songlink | slsearch |
+
+These prefixes were checked against NodeLink revision `97bbce1e169f18811c69836e3d0fa7f87e1d13fe`. Amazon Music uses the unambiguous `azsearch` prefix rather than its overlapping `amsearch` alias. Last.fm and Shazam are discovery providers; Songlink resolves links rather than supplying an independent audio catalogue. Actual playback remains dependent on the configured backend and provider.
+
+An explicit `node` in Manager.search now routes to that node, without local Spotify/Deezer interception. Provider names and recognized prefix aliases are matched case-insensitively against disabledSources. Empty searches may try configured fallback platforms; a provider error is returned, not silently retried against another provider. Apple Music's pinned NodeLink implementation does not advertise an `amrec` recommendation prefix, so NyxLink uses its existing fallback path.
+
