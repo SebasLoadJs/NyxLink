@@ -33,6 +33,7 @@ test('DSPX effects use pluginFilters and recover only on compatible Lavalink nod
     assert.deepEqual(full.pluginFilters['high-pass'], { cutoffFrequency: 80 });
     player.node = { isNodeLink: true, backend: backend([], true) };
     assert.throws(() => filters.setLavaDSPX('normalization', { maxAmplitude: 0.8 }), FeatureUnavailableError);
+    assert.throws(() => filters.toPayload(), FeatureUnavailableError);
     const suspended = [];
     assert.deepEqual(filters.toPayload({ compatibleOnly: true, suspended }).pluginFilters, { other: { enabled: true } });
     assert.deepEqual(new Set(suspended), new Set(['lavadspx:echo', 'lavadspx:high-pass']));
