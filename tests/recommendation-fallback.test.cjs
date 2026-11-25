@@ -23,7 +23,7 @@ function fixture(results) {
 
 const youtube = { sourceName: 'youtube', identifier: 'dQw4w9WgXcQ' };
 const soundcloud = { sourceName: 'soundcloud', identifier: '12345678901' };
-const recommendation = { sourceName: 'youtube', identifier: 'abcdefghijk' };
+const recommendation = { encoded: 'encoded-recommendation', sourceName: 'youtube', identifier: 'abcdefghijk' };
 
 test('non-native fallback explicitly requests YouTube and skips foreign source results', async () => {
   const { node, player, seed, calls } = fixture([
