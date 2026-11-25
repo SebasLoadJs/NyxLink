@@ -2,7 +2,7 @@ import { observeOperation } from '../observability/OpenTelemetry';
 import type { Node } from '../entities/Node';
 import type { Player } from '../entities/Player';
 import { playbackGuard } from '../players/PlaybackGuard';
-import { delay } from '../Util';
+import { NodeSelector } from './NodeSelector';
 import type { Manager } from '../core/Manager';
 import { RecoveryQueue } from './RecoveryQueue';
 import { retryDelay, retryJitter } from './RetryDelay';
@@ -11,6 +11,21 @@ export type FailoverOptions = { maxAttempts?: number; retryDelayMs?: number; ret
 export type FailoverResult = { status: 'recovered' | 'failed' | 'cancelled'; attempts: number; node?: Node; reason?: 'queue-full' };
 const pending = new WeakMap<Player, Promise<FailoverResult>>();
 const queues = new WeakMap<Manager, RecoveryQueue<FailoverResult>>();
+
+/** A superseding playback command must release a recovery slot immediately. */
+function waitForRetry(ms: number, signal: AbortSignal): Promise<void> {
+    if (signal.aborted || ms <= 0) return Promise.resolve();
+    return new Promise(resolve => {
+        const finish = () => {
+            clearTimeout(timer);
+            signal.removeEventListener('abort', finish);
+            resolve();
+        };
+        const timer = setTimeout(finish, ms);
+        signal.addEventListener('abort', finish, { once: true });
+        if (signal.aborted) finish();
+    });
+}
 
 export class NodeFailover {
     public static move(player: Player, source: Node, options: FailoverOptions = player.manager.options.node?.failover ?? {}): Promise<FailoverResult> {
@@ -66,14 +81,17 @@ export class NodeFailover {
             excluded.add(target.identifier);
             attempts++;
             const transferTicket = ticket + 1;
-            const transferring = player.transferNode(target);
-            // transferNode owns one increment; a listener may already have issued a newer command.
-            if (guard.ticket > ticket) ticket = transferTicket;
             let restored = false;
-            try { restored = await transferring; } catch { /* A different candidate may still recover the snapshot. */ }
+            try {
+                const transferring = player.transferNode(target);
+                // transferNode owns one increment; a listener may already have issued a newer command.
+                if (guard.ticket > ticket) ticket = transferTicket;
+                restored = await transferring;
+            } catch { /* A different candidate may still recover the snapshot. */ }
             if (player.destroyed || source.destroyed || player.manager.destroyed || !guard.isCurrent(ticket)) return { status: 'cancelled', attempts };
             if (restored && player.node === target) {
-                if (target.connected && !target.destroyed) {
+                if (player.manager.nodes.nodes.get(target.identifier) === target &&
+                    NodeSelector.matches(target, player.nodeSelection)) {
                     return { status: 'recovered', attempts, node: target };
                 }
                 // A target may fail immediately after its restoration ACK.
@@ -85,7 +103,9 @@ export class NodeFailover {
                 return { status: 'cancelled', attempts };
             }
             // Exponential backoff: first failure uses baseDelay, subsequent failures grow.
-            if (baseDelay && attempts < maxAttempts) await delay(retryDelay(baseDelay, attempts - 1, jitter, 60000));
+            if (baseDelay && attempts < maxAttempts && !cancelled()) {
+                await waitForRetry(retryDelay(baseDelay, attempts - 1, jitter, 60000), guard.signal);
+            }
         }
         if (cancelled() || player.node !== owner) return { status: 'cancelled', attempts };
         player.manager.emit('playerRecoveryFailed', player);

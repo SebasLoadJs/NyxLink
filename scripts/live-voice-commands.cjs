@@ -54,8 +54,32 @@ async function waitForSnapshot(rest, guildId, matches, label, timeoutMs = 4000) 
   throw new Error(errorMessage);
 }
 
-async function verifyCommandSequence(player, node, tracks) {
-  if (!player || !node?.rest || !Array.isArray(tracks) || tracks.length !== 2) {
+function hasOrderedTrackStarts(events, expected) {
+  if (!Array.isArray(events)) return false;
+  const starts = events.filter(e => e?.type === 'trackStart').map(e => e.track);
+  return starts.length === expected.length && starts.every((track, index) => track === expected[index]);
+}
+
+async function waitForTrackStarts(events, expected, timeoutMs = 20000) {
+  if (!Array.isArray(events) || !Array.isArray(expected) || !expected.length ||
+      !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60000) {
+    throw new TypeError('Track observation requires events, expected starts and a bounded timeout');
+  }
+  const deadline = Date.now() + timeoutMs;
+  while (true) {
+    if (hasOrderedTrackStarts(events, expected)) return;
+    const starts = events.filter(e => e?.type === 'trackStart').map(e => e.track);
+    if (starts.length > expected.length || starts.some((track, index) => track !== expected[index])) {
+      throw new Error('Unexpected live track start sequence');
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new Error('Live backend did not emit expected track starts');
+    await delay(Math.min(100, remaining));
+  }
+}
+
+async function verifyCommandSequence(player, node, tracks, observeStarts) {
+  if (!player || !node?.rest || !Array.isArray(tracks) || tracks.length !== 2 || typeof observeStarts !== 'function') {
     throw new TypeError('Command smoke requires a player, node and exactly two controlled tracks');
   }
   const checks = [];
@@ -64,6 +88,7 @@ async function verifyCommandSequence(player, node, tracks) {
   checks.push('playAcknowledged');
   await waitForSnapshot(node.rest, player.guildId, row => row.track?.encoded === tracks[0].encoded,
     'first track');
+  await withDeadline(() => observeStarts(['A']), 'first track start', 25000);
   checks.push('firstTrackConfirmed');
 
   await withDeadline(() => player.pause(), 'pause');
@@ -74,7 +99,7 @@ async function verifyCommandSequence(player, node, tracks) {
   await waitForSnapshot(node.rest, player.guildId, row => row.paused === false, 'resume');
   checks.push('resumeConfirmed');
 
-  player.setVolume(40);
+  await withDeadline(() => player.setVolumeAsync(40), 'volume');
   await waitForSnapshot(node.rest, player.guildId, row => row.volume === 40, 'volume');
   checks.push('volumeConfirmed');
 
@@ -88,11 +113,16 @@ async function verifyCommandSequence(player, node, tracks) {
   checks.push('skipAcknowledged');
   await waitForSnapshot(node.rest, player.guildId, row => row.track?.encoded === tracks[1].encoded,
     'second track');
+  await withDeadline(() => observeStarts(['A', 'B']), 'second track start', 25000);
   checks.push('secondTrackConfirmed');
+
+  await withDeadline(() => player.stop(), 'stop');
+  await waitForSnapshot(node.rest, player.guildId, row => row.track === null, 'stop');
+  checks.push('stopConfirmed');
   return checks;
 }
 
-module.exports = { withDeadline, waitForSnapshot, verifyCommandSequence, verifyReconnectSequence };
+module.exports = { withDeadline, waitForSnapshot, hasOrderedTrackStarts, waitForTrackStarts, verifyCommandSequence, verifyReconnectSequence };
 
 /**
  * Controlled Discord voice leave/rejoin while track A is active. This checks

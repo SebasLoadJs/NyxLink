@@ -3,6 +3,8 @@ import { Memory } from "../database/Memory";
 import { Local } from "../database/Local";
 import type { StorageAdapter } from '../database/StorageAdapter';
 import { randomUUID } from 'node:crypto';
+import type { RedisGuildLease } from '../database/RedisGuildLeaseCoordinator';
+import { compareAndSetOwnedPlayer } from '../database/RedisPlayerFence';
 import { PlayerSnapshotCodec, SnapshotConflictError, SnapshotValidationError, recordRevision, snapshotJSON, type PlayerSnapshot } from '../database/PlayerSnapshot';
 
 function copyPlayerValue<T>(value: T, ancestors = new Set<object>()): T {
@@ -65,28 +67,57 @@ export class DatabaseManager {
     return value !== undefined && (key === 'players' || /^players\.(\d{17,20})(?:\.|$)/.test(key)) ? copyPlayerValue(value) : value;
   }
 
+  private playerLease(guildId: string): RedisGuildLease | undefined {
+    const ownership = this.manager.guildOwnership;
+    if (!ownership) return undefined;
+    ownership.assertLocal(guildId);
+    return ownership.localLease(guildId);
+  }
+
+  private async assertPlayerLease(guildId: string, lease: RedisGuildLease | undefined): Promise<void> {
+    const ownership = this.manager.guildOwnership;
+    if (!ownership && !lease) return;
+    if (!ownership || !lease || ownership.localLease(guildId) !== lease) throw new SnapshotConflictError();
+    await ownership.assertCurrent(guildId);
+    if (ownership.localLease(guildId) !== lease) throw new SnapshotConflictError();
+  }
+
+  private rejectSharedNamespace(key: string): boolean {
+    return !!this.manager.guildOwnership && (key === 'players' || key.startsWith('players.') && !/^players\.\d{17,20}(?:\.|$)/.test(key));
+  }
+
   public set<T>(key: string, value: T): Promise<void> {
+    if (this.rejectSharedNamespace(key)) return Promise.reject(new SnapshotConflictError());
     if (/^players\.\d{17,20}(?:\.|$)/.test(key)) {
       // Freeze queued input now, before the caller can mutate its metadata.
       let frozen: T;
-      try { frozen = value === undefined ? value : copyPlayerValue(value); }
+      let lease: RedisGuildLease | undefined;
+      try {
+        lease = this.playerLease(key.split('.')[1]);
+        frozen = value === undefined ? value : copyPlayerValue(value);
+      }
       catch (error) { return Promise.reject(error); }
-      return this.mutate(async () => { await this.changePlayer(key, frozen, value === undefined); });
+      return this.mutate(async () => { await this.changePlayer(key, frozen, value === undefined, lease); });
     }
     return this.mutate(() => this.provider.set(key, value));
   }
 
   public remove(key: string): Promise<boolean> {
-    if (/^players\.\d{17,20}(?:\.|$)/.test(key)) return this.mutate(() => this.changePlayer(key, undefined, true));
+    if (this.rejectSharedNamespace(key)) return Promise.reject(new SnapshotConflictError());
+    if (/^players\.\d{17,20}(?:\.|$)/.test(key)) {
+      let lease: RedisGuildLease | undefined;
+      try { lease = this.playerLease(key.split('.')[1]); } catch (error) { return Promise.reject(error); }
+      return this.mutate(() => this.changePlayer(key, undefined, true, lease));
+    }
     return this.mutate(() => this.provider.remove(key));
   }
 
-  private async changePlayer(key: string, value: unknown, deleting: boolean): Promise<boolean> {
+  private async changePlayer(key: string, value: unknown, deleting: boolean, lease: RedisGuildLease | undefined): Promise<boolean> {
     const [namespace, guildId, ...parts] = key.split('.');
     if (parts.some(part => !part || ['__proto__', 'constructor', 'prototype'].includes(part)) || ['revision', 'schemaVersion'].includes(parts[0])) throw new TypeError('Invalid player storage path');
     const root = `${namespace}.${guildId}`;
     for (let attempt = 0; attempt < 8; attempt++) {
-      await this.manager.guildOwnership?.assertCurrent(guildId);
+      await this.assertPlayerLease(guildId, lease);
       const previous = await this.provider.get<Record<string, any>>(root);
       const revision = recordRevision(previous);
       if (deleting && previous === undefined) return false;
@@ -112,17 +143,23 @@ export class DatabaseManager {
         } else parent[field] = value;
       }
       if (next !== undefined) {
+        if (next.guildId !== undefined && next.guildId !== guildId) throw new SnapshotValidationError('Snapshot guild does not match its storage key');
+        if (parts[0] === 'guildId' && (parts.length !== 1 || deleting)) throw new SnapshotValidationError('Cannot remove or mutate a stored guild identity');
         recordRevision(next);
         next.schemaVersion = 1;
         next.revision = randomUUID();
       }
-      await this.manager.guildOwnership?.assertCurrent(guildId);
-      if (await this.replace(root, revision, next)) return true;
+      await this.assertPlayerLease(guildId, lease);
+      if (await this.replace(root, revision, next, lease)) return true;
     }
     throw new SnapshotConflictError();
   }
 
-  private async replace(key: string, revision: string | null, value: unknown): Promise<boolean> {
+  private async replace(key: string, revision: string | null, value: unknown, lease?: RedisGuildLease): Promise<boolean> {
+    if (lease) {
+      const owned = await compareAndSetOwnedPlayer(this.provider, this.manager.guildOwnership, lease, key, revision, value);
+      if (owned !== undefined) return owned;
+    }
     if (this.provider.compareAndSet) return this.provider.compareAndSet(key, revision, value);
     // Legacy adapters retain the manager's serial queue, not cross-process CAS guarantees.
     if (value === undefined) await this.provider.remove(key);
@@ -149,16 +186,18 @@ export class DatabaseManager {
     const guildId = snapshot.data.guildId;
     if (expectedRevision !== null && (typeof expectedRevision !== 'string' || !expectedRevision || expectedRevision.length > 256)) return Promise.reject(new TypeError('Expected snapshot revision is required'));
     if (this.importing.has(guildId) || this.manager.players.has(guildId)) return Promise.reject(new SnapshotConflictError());
+    let lease: RedisGuildLease | undefined;
+    try { lease = this.playerLease(guildId); } catch (error) { return Promise.reject(error); }
     this.importing.add(guildId);
     return this.mutate(async () => {
-      await this.manager.guildOwnership?.assertCurrent(guildId);
+      await this.assertPlayerLease(guildId, lease);
       const key = `players.${guildId}`;
       const previous = await this.provider.get(key);
       if (this.manager.players.has(guildId) || recordRevision(previous) !== expectedRevision) throw new SnapshotConflictError();
       const revision = randomUUID();
       const next = { ...snapshot.data, schemaVersion: 1, revision };
-      await this.manager.guildOwnership?.assertCurrent(guildId);
-      if (!await this.replace(key, expectedRevision, next)) throw new SnapshotConflictError();
+      await this.assertPlayerLease(guildId, lease);
+      if (!await this.replace(key, expectedRevision, next, lease)) throw new SnapshotConflictError();
       return snapshotJSON({ ...snapshot, revision });
     }).finally(() => this.importing.delete(guildId));
   }

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { RedisCommandClient } from './RedisStorage';
+import { registerRedisLeaseCoordinator } from './RedisPlayerFence';
 
 export interface RedisGuildLeaseOptions {
   client: RedisCommandClient;
@@ -66,6 +67,10 @@ export class RedisGuildLeaseCoordinator {
     this.client = options.client;
     this.prefix = 'nyxlink:' + options.namespace + ':';
     this.ttlMs = ttl;
+    registerRedisLeaseCoordinator(this, this.prefix, lease => {
+      if (this.closed || !this.ownsHandle(lease)) return undefined;
+      return this.expected(lease);
+    });
   }
 
   private keys(guildId: string): [string, string] {
@@ -120,7 +125,7 @@ export class RedisGuildLeaseCoordinator {
     const renewed = Number(await this.client.sendCommand(['EVAL', RENEW, '1',
       key, this.expected(lease), String(this.ttlMs)])) === 1;
     if (!renewed && this.ownsHandle(lease)) this.active.delete(lease.guildId);
-    return renewed;
+    return renewed && !this.closed && this.ownsHandle(lease);
   }
 
   public async isCurrent(lease: RedisGuildLease): Promise<boolean> {
@@ -128,7 +133,7 @@ export class RedisGuildLeaseCoordinator {
     const [key] = this.keys(lease.guildId);
     const current = Number(await this.client.sendCommand(['EVAL', CHECK, '1', key, this.expected(lease)])) === 1;
     if (!current && this.ownsHandle(lease)) this.active.delete(lease.guildId);
-    return current;
+    return current && !this.closed && this.ownsHandle(lease);
   }
 
   public async release(lease: RedisGuildLease): Promise<boolean> {

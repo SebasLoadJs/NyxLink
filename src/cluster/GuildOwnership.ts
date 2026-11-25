@@ -1,6 +1,8 @@
 import type { Manager } from '../core/Manager';
+import { performance } from 'node:perf_hooks';
 import { RedisGuildLeaseCoordinator, type RedisGuildLease } from '../database/RedisGuildLeaseCoordinator';
 import { playbackGuard } from '../players/PlaybackGuard';
+import { registerRedisOwnership } from '../database/RedisPlayerFence';
 
 const assignedCoordinators = new WeakSet<RedisGuildLeaseCoordinator>();
 
@@ -23,9 +25,11 @@ export class GuildOwnership {
     private readonly manager: Manager;
     private readonly coordinator: RedisGuildLeaseCoordinator;
     private readonly active = new Map<string, RedisGuildLease>();
+    private readonly expires = new Map<string, number>();
     private readonly pending = new Map<string, Promise<RedisGuildLease>>();
     private readonly interval: NodeJS.Timeout;
     private refreshing = false;
+    private readonly checkTimeoutMs: number;
     private closed = false;
 
     constructor(manager: Manager, options: GuildOwnershipOptions) {
@@ -46,7 +50,9 @@ export class GuildOwnership {
         }
         assignedCoordinators.add(options.coordinator);
         this.manager = manager;
+        this.checkTimeoutMs = interval;
         this.coordinator = options.coordinator;
+        registerRedisOwnership(this, this.coordinator);
         this.interval = setInterval(() => { void this.heartbeat(); }, interval);
         this.interval.unref();
     }
@@ -54,12 +60,28 @@ export class GuildOwnership {
     public get isClosed(): boolean { return this.closed; }
 
     public localLease(guildId: string): RedisGuildLease | undefined {
-        return this.active.get(guildId);
+        const lease = this.active.get(guildId);
+        if (lease && !this.fresh(guildId, lease)) this.drop(guildId, lease, 'local-lease-expired');
+        return this.closed ? undefined : this.active.get(guildId);
+    }
+
+    private fresh(guildId: string, lease: RedisGuildLease): boolean {
+        return !this.closed && this.active.get(guildId) === lease &&
+            performance.now() < (this.expires.get(guildId) ?? 0);
+    }
+
+    private async bounded<T>(operation: () => Promise<T>): Promise<T> {
+        let timer: NodeJS.Timeout | undefined;
+        try {
+            return await Promise.race([Promise.resolve().then(operation), new Promise<never>((_, reject) => {
+                timer = setTimeout(() => reject(new Error('Redis guild lease check timed out')), this.checkTimeoutMs);
+            })]);
+        } finally { if (timer) clearTimeout(timer); }
     }
 
     /** Synchronous fence for immediate gateway sends and legacy create(). */
     public assertLocal(guildId: string): void {
-        if (this.closed || !this.active.has(guildId)) {
+        if (!this.localLease(guildId)) {
             throw new Error('Guild lease is not owned locally: use players.createOwned() or restoreOwned()');
         }
     }
@@ -67,6 +89,7 @@ export class GuildOwnership {
     private drop(guildId: string, lease: RedisGuildLease, reason: string): void {
         if (this.active.get(guildId) !== lease) return;
         this.active.delete(guildId);
+        this.expires.delete(guildId);
         // Stop local health polling and invalidate queued playback intent.
         // Do not send a gateway leave or backend DELETE: ownership may have
         // moved to another shard already.
@@ -81,11 +104,11 @@ export class GuildOwnership {
 
     /** Redis is authoritative. Errors are treated as loss of ownership. */
     public async isCurrent(guildId: string): Promise<boolean> {
-        const lease = this.active.get(guildId);
-        if (this.closed || !lease) return false;
+        const lease = this.localLease(guildId);
+        if (!lease) return false;
         try {
-            const current = await this.coordinator.isCurrent(lease);
-            if (current && !this.closed && this.active.get(guildId) === lease) return true;
+            const current = await this.bounded(() => this.coordinator.isCurrent(lease));
+            if (current && this.fresh(guildId, lease)) return true;
             this.drop(guildId, lease, 'expired-or-replaced');
         } catch {
             this.drop(guildId, lease, 'redis-unavailable');
@@ -106,14 +129,24 @@ export class GuildOwnership {
         const pending = this.pending.get(guildId);
         if (pending) return pending;
         const operation = (async () => {
-            if (await this.isCurrent(guildId)) return this.active.get(guildId)!;
+            if (await this.isCurrent(guildId)) {
+                const held = this.localLease(guildId);
+                if (held) return held;
+            }
+            const requestedAt = performance.now();
             const lease = await this.coordinator.acquire(guildId);
             if (!lease) throw new Error('Guild lease is owned by another process');
             if (this.closed || this.manager.destroyed) {
                 await this.coordinator.release(lease);
                 throw new Error('Guild ownership is closed');
             }
+            const expires = requestedAt + this.coordinator.durationMs;
+            if (performance.now() >= expires) {
+                await this.coordinator.release(lease);
+                throw new Error('Guild lease expired before acquisition was confirmed');
+            }
             this.active.set(guildId, lease);
+            this.expires.set(guildId, expires);
             return lease;
         })();
         this.pending.set(guildId, operation);
@@ -128,6 +161,7 @@ export class GuildOwnership {
         const held = this.active.get(guildId);
         if (!held || expected && held !== expected) return;
         this.active.delete(guildId);
+        this.expires.delete(guildId);
         await this.coordinator.release(held);
     }
 
@@ -136,10 +170,14 @@ export class GuildOwnership {
         this.refreshing = true;
         try {
             await Promise.all([...this.active].map(async ([guildId, lease]) => {
-                if (this.active.get(guildId) !== lease) return;
+                if (this.localLease(guildId) !== lease) return;
+                const requestedAt = performance.now();
                 try {
-                    if (!await this.coordinator.renew(lease)) {
+                    const renewed = await this.bounded(() => this.coordinator.renew(lease));
+                    if (!renewed || !this.fresh(guildId, lease)) {
                         this.drop(guildId, lease, 'renewal-rejected');
+                    } else {
+                        this.expires.set(guildId, requestedAt + this.coordinator.durationMs);
                     }
                 } catch {
                     this.drop(guildId, lease, 'redis-unavailable');
@@ -156,6 +194,7 @@ export class GuildOwnership {
         clearInterval(this.interval);
         await Promise.allSettled([...this.pending.values()]);
         this.active.clear();
+        this.expires.clear();
         await this.coordinator.close();
     }
 }

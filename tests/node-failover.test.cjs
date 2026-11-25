@@ -448,3 +448,65 @@ test('cancelled eject does not destroy newer intent on a connecting target', asy
   assert.equal(source.destroyed, false);
   assert.equal(manager.nodes.nodes.get(source.identifier), source);
 });
+
+
+test('failover cancellation releases a long retry delay without waiting for the timer', { timeout: 2000 }, async t => {
+  const { NodeFailover } = require('../dist/src/nodes/NodeFailover');
+  const { playbackGuard } = require('../dist/src/players/PlaybackGuard');
+  const { manager, node: source, player } = createPlayer(t);
+  candidates(manager);
+  let transfers = 0;
+  player.transferNode = async () => { transfers++; return false; };
+  const moving = NodeFailover.move(player, source, { maxAttempts: 2, retryDelayMs: 60000, retryJitter: 0 });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(transfers, 1);
+  playbackGuard(player).invalidate();
+  const result = await moving;
+  assert.deepEqual(result, { status: 'cancelled', attempts: 1 });
+  assert.equal(transfers, 1);
+});
+
+test('a synchronous transfer rejection does not prevent trying an alternate node', async t => {
+  const { NodeFailover } = require('../dist/src/nodes/NodeFailover');
+  const { manager, node: source, player } = createPlayer(t);
+  const [first, second] = candidates(manager);
+  player.transferNode = target => {
+    if (target === first) throw new Error('synchronous transfer failure');
+    player.node = target;
+    return Promise.resolve(true);
+  };
+  const result = await NodeFailover.move(player, source);
+  assert.equal(result.status, 'recovered');
+  assert.equal(result.attempts, 2);
+  assert.equal(result.node, second);
+});
+
+test('failover never reports recovery on an unregistered acknowledged destination', async t => {
+  const { NodeFailover } = require('../dist/src/nodes/NodeFailover');
+  const { manager, node: source, player } = createPlayer(t);
+  const [first, second] = candidates(manager);
+  player.transferNode = async target => {
+    player.node = target;
+    if (target === first) manager.nodes.nodes.delete(target.identifier);
+    return true;
+  };
+  const result = await NodeFailover.move(player, source);
+  assert.equal(result.status, 'recovered');
+  assert.equal(result.attempts, 2);
+  assert.equal(result.node, second);
+});
+
+test('failover does not certify a destination that becomes draining after its ACK', async t => {
+  const { NodeFailover } = require('../dist/src/nodes/NodeFailover');
+  const { manager, node: source, player } = createPlayer(t);
+  const [first, second] = candidates(manager);
+  player.transferNode = async target => {
+    player.node = target;
+    if (target === first) target.draining = true;
+    return true;
+  };
+  const result = await NodeFailover.move(player, source);
+  assert.equal(result.status, 'recovered');
+  assert.equal(result.attempts, 2);
+  assert.equal(result.node, second);
+});

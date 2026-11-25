@@ -5,6 +5,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { sourceRevision } = require('./test-live-voice.cjs');
+const { hasOrderedTrackStarts } = require('./live-voice-commands.cjs');
 
 const REQUIRED = Object.freeze([
   ['nodelink', 'commands'],
@@ -15,7 +16,7 @@ const REQUIRED = Object.freeze([
 ]);
 const COMMAND_CHECKS = [
   'playAcknowledged', 'firstTrackConfirmed', 'pauseConfirmed', 'resumeConfirmed',
-  'volumeConfirmed', 'seekConfirmed', 'skipAcknowledged', 'secondTrackConfirmed',
+  'volumeConfirmed', 'seekConfirmed', 'skipAcknowledged', 'secondTrackConfirmed', 'stopConfirmed',
 ];
 const RECONNECT_CHECKS = [
   'initialTrackConfirmed', 'disconnectConfirmed', 'voiceReconnected',
@@ -54,7 +55,11 @@ function inspectReports(revision, entries) {
       mode === 'reconnect' ? RECONNECT_CHECKS : null;
     const actual = mode === 'commands' ? report.commandChecks :
       mode === 'reconnect' ? report.reconnectChecks : null;
-    const protocol = expected ? JSON.stringify(actual) === JSON.stringify(expected) :
+    const eventEvidence = mode === 'commands' ? hasOrderedTrackStarts(report.events, ['A', 'B']) :
+      mode === 'reconnect' ? Array.isArray(report.events) &&
+        report.events.some(e => e?.type === 'trackStart' && e.track === 'A') &&
+        report.events.filter(e => e?.type === 'trackStart').every(e => e.track === 'A') : true;
+    const protocol = expected ? eventEvidence && JSON.stringify(actual) === JSON.stringify(expected) :
       report.remainingQueue === 0 && report.crossfadeEventObserved === true &&
       Array.isArray(report.transitionReasons) && report.transitionReasons.includes('crossfading') &&
       Array.isArray(report.events) &&

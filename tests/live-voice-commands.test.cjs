@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { verifyCommandSequence, verifyReconnectSequence, waitForSnapshot, withDeadline } = require('../scripts/live-voice-commands.cjs');
+const { verifyCommandSequence, verifyReconnectSequence, waitForSnapshot, withDeadline, waitForTrackStarts } = require('../scripts/live-voice-commands.cjs');
+
+const observeStarts = async () => {};
 
 function fixture() {
   const calls = [];
@@ -12,9 +14,10 @@ function fixture() {
     async play() { calls.push('play'); state.track = { encoded: tracks[0].encoded }; return true; },
     async pause() { calls.push('pause'); state.paused = true; },
     async resume() { calls.push('resume'); state.paused = false; },
-    setVolume(n) { calls.push('volume'); state.volume = n; return this; },
+    async setVolumeAsync(n) { calls.push('volume'); state.volume = n; return this; },
     async seek(n) { calls.push('seek'); state.state.position = n; },
     async skip() { calls.push('skip'); state.track = { encoded: tracks[1].encoded }; return true; },
+    async stop() { calls.push('stop'); state.track = null; return this; },
   };
   const node = { rest: { async getPlayer(guildId) {
     assert.equal(guildId, player.guildId);
@@ -25,34 +28,40 @@ function fixture() {
 
 test('live command sequence verifies backend acknowledgement without claiming audible output', async () => {
   const { calls, tracks, player, node } = fixture();
-  const checks = await verifyCommandSequence(player, node, tracks);
+  const checks = await verifyCommandSequence(player, node, tracks, observeStarts);
   assert.deepEqual(checks, [
     'playAcknowledged', 'firstTrackConfirmed', 'pauseConfirmed', 'resumeConfirmed',
-    'volumeConfirmed', 'seekConfirmed', 'skipAcknowledged', 'secondTrackConfirmed',
+    'volumeConfirmed', 'seekConfirmed', 'skipAcknowledged', 'secondTrackConfirmed', 'stopConfirmed',
   ]);
   assert.deepEqual(calls.map(v => Array.isArray(v) ? v[0] : v), [
-    'queue', 'play', 'pause', 'resume', 'volume', 'seek', 'skip',
+    'queue', 'play', 'pause', 'resume', 'volume', 'seek', 'skip', 'stop',
   ]);
 });
 
 test('command smoke is rejected when its fixture or playback input is incomplete', async () => {
   const { player, node, tracks } = fixture();
-  await assert.rejects(verifyCommandSequence(null, node, tracks), TypeError);
-  await assert.rejects(verifyCommandSequence(player, node, [tracks[0]]), TypeError);
-  await assert.rejects(verifyCommandSequence(player, {}, tracks), TypeError);
+  await assert.rejects(verifyCommandSequence(null, node, tracks, observeStarts), TypeError);
+  await assert.rejects(verifyCommandSequence(player, node, [tracks[0]], observeStarts), TypeError);
+  await assert.rejects(verifyCommandSequence(player, {}, tracks, observeStarts), TypeError);
 });
 
 test('command smoke stops immediately if initial playback is not accepted', async () => {
   const { calls, player, node, tracks } = fixture();
   player.play = async () => false;
-  await assert.rejects(verifyCommandSequence(player, node, tracks), /rejected initial play/);
+  await assert.rejects(verifyCommandSequence(player, node, tracks, observeStarts), /rejected initial play/);
   assert.equal(calls.filter(x => x === 'pause').length, 0);
 });
 
 test('command smoke treats a rejected skip as a failed acceptance', async () => {
   const { player, node, tracks } = fixture();
   player.skip = async () => false;
-  await assert.rejects(verifyCommandSequence(player, node, tracks), /rejected skip/);
+  await assert.rejects(verifyCommandSequence(player, node, tracks, observeStarts), /rejected skip/);
+});
+
+test('command acceptance rejects a failed stop', async () => {
+  const { player, node, tracks } = fixture();
+  player.stop = async () => { throw new Error('backend rejected stop'); };
+  await assert.rejects(verifyCommandSequence(player, node, tracks, observeStarts), /backend rejected stop/);
 });
 
 test('backend polling detects missing acknowledgements within a bounded interval', async () => {
@@ -158,4 +167,22 @@ test('live command timeout rejects invalid deadlines and unsafe labels', async (
   }
   await assert.rejects(withDeadline(async () => true, 'Bearer secret: http://token', 100), TypeError);
   await assert.rejects(withDeadline(null, 'play', 100), TypeError);
+});
+
+test('command acceptance waits for each track event before pause and stop', async () => {
+  const { calls, player, node, tracks } = fixture();
+  await verifyCommandSequence(player, node, tracks, async expected => {
+    calls.push('observe-' + expected.join(''));
+  });
+  assert.ok(calls.indexOf('observe-A') < calls.indexOf('pause'));
+  assert.ok(calls.indexOf('observe-AB') < calls.indexOf('stop'));
+});
+
+test('missing or unexpected track events cannot pass the observation gate', async () => {
+  const events = [{ type: 'trackStart', track: 'A' }];
+  await assert.rejects(waitForTrackStarts(events, ['A', 'B'], 10), /did not emit/);
+  events.push({ type: 'trackStart', track: 'unexpected' });
+  await assert.rejects(waitForTrackStarts(events, ['A', 'B'], 10), /Unexpected/);
+  events[1].track = 'B';
+  await waitForTrackStarts(events, ['A', 'B'], 10);
 });

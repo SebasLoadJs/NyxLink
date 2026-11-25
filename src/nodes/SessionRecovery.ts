@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { observeOperation } from '../observability/OpenTelemetry';
 import type { Node } from '../entities/Node';
 import type { Player } from '../entities/Player';
@@ -7,14 +8,16 @@ import { playbackGuard } from '../players/PlaybackGuard';
 import { playbackAttempt } from '../players/PlaybackAttempt';
 import { recordRevision } from '../database/PlayerSnapshot';
 
-type Context = { node: Node; sessionId: string; socket: Node['socket'] };
+type Context = { node: Node; sessionId: string; socket: Node['socket']; backend: Node['backend']; registered: Node | undefined };
 type Snapshot = { player: Player; ticket: number; track: Player['current']; position?: number; paused: boolean; playing: boolean; channel: string };
 const pending = new WeakMap<Node, Context & { operation: Promise<void> }>();
 
 function current(context: Context): boolean {
     const { node } = context;
     return !node.destroyed && !node.manager.destroyed && node.connected && node.state === NodeState.READY &&
-        node.sessionId === context.sessionId && node.socket === context.socket;
+        node.sessionId === context.sessionId && node.socket === context.socket && node.backend === context.backend &&
+        node.manager.nodes.nodes.get(node.identifier) === context.registered &&
+        (context.registered === undefined || context.registered === node);
 }
 
 function snapshot(player: Player): Snapshot {
@@ -57,13 +60,22 @@ async function recover(context: Context, known: Map<string, Snapshot>): Promise<
         const rows = await node.rest.getPlayers();
         if (!current(context) || rows == null) return;
         if (!Array.isArray(rows)) throw new TypeError('Invalid resumed player list');
-        const seen = new Set<string>();
+        // An ambiguous backend response must not arbitrarily select the first state.
+        const firstRows = new Map<string, IRESTGetPlayers>();
+        const conflicts = new Set<string>();
+        const processed = new Set<string>();
+        for (const row of rows) {
+            if (!row || typeof row.guildId !== 'string') continue;
+            const first = firstRows.get(row.guildId);
+            if (first && !isDeepStrictEqual(first, row)) conflicts.add(row.guildId);
+            else if (!first) firstRows.set(row.guildId, row);
+        }
         for (const row of rows) {
             if (!current(context)) return;
             try {
                 if (!valid(row)) throw new TypeError('Invalid resumed player state');
-                if (seen.has(row.guildId)) continue;
-                seen.add(row.guildId);
+                if (conflicts.has(row.guildId) || processed.has(row.guildId)) continue;
+                processed.add(row.guildId);
                 if (touched.has(row.guildId)) continue;
                 const saved = known.get(row.guildId);
                 const existing = manager.players.get(row.guildId);
@@ -91,6 +103,7 @@ async function recover(context: Context, known: Map<string, Snapshot>): Promise<
                         ? await manager.players.restoreOwned(options)
                         : manager.players.restore(options);
                 } finally { creating = undefined; }
+                if (!current(context)) return;
                 // A playerCreate callback may already have stopped, replaced or destroyed this player.
                 if (player.destroyed || player.node !== node || manager.players.get(row.guildId) !== player || playbackGuard(player).ticket !== 0 || touched.has(row.guildId)) continue;
                 const initial = snapshot(player);
@@ -113,9 +126,11 @@ async function recover(context: Context, known: Map<string, Snapshot>): Promise<
 
 /** Coalesces one session/socket; a later connection never inherits an older operation's result. */
 export function resumeSessionPlayers(node: Node): Promise<void> {
-    const context: Context = { node, sessionId: node.sessionId, socket: node.socket };
+    const context: Context = { node, sessionId: node.sessionId, socket: node.socket, backend: node.backend,
+        registered: node.manager.nodes.nodes.get(node.identifier) };
     const previous = pending.get(node);
-    if (previous && previous.sessionId === context.sessionId && previous.socket === context.socket) return previous.operation;
+    if (previous && previous.sessionId === context.sessionId && previous.socket === context.socket &&
+        previous.backend === context.backend && previous.registered === context.registered) return previous.operation;
     const known = new Map(node.manager.players.all.map(player => [player.guildId, snapshot(player)]));
     const operation: Promise<void> = Promise.resolve().then(() => observeOperation(node.manager, 'nyxlink.session.restore', () => recover(context, known))).catch(error => {
         if (current(context)) node.manager.emit('nodeError', node, error instanceof Error ? error : new Error(String(error)));
