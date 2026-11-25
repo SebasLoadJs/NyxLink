@@ -73,7 +73,7 @@ export class SearchService {
             const native = query.node ? null : await this.wait(this.native({ ...query, signal }), signal);
             if (native) {
                 const result = this.present(native, query);
-                this.manager.emit('debug', `Moonlink.js > Manager <- Native source result for query "${query.query}". LoadType: ${native.loadType}`);
+                this.manager.emit('debug', `NyxLink > Manager <- Native source result. LoadType: ${native.loadType}`);
                 return result;
             }
             const options = this.manager.options.search ?? {};
@@ -161,7 +161,7 @@ export class SearchService {
                 } catch { /* Non-JSON custom plugin metadata is returned without caching. */ }
             }
             assertCurrentNode();
-            this.manager.emit('debug', `Moonlink.js > Manager <- Search result for query "${query.query}". LoadType: ${response.loadType}`);
+            this.manager.emit('debug', `NyxLink > Manager <- Search result. LoadType: ${response.loadType}`);
             return this.present(response, query, node);
         } finally { clearTimeout(timer); this.pending.delete(controller); }
     }
