@@ -1,8 +1,15 @@
 # Changelog
 
-This changelog describes the unreleased NyxLink 5.3 development line and its verified scope. **No GitHub `v5.3.0` tag or npm `5.3.0` stable package has been published.** Changes may still be refined before the release candidate.
+This changelog documents **NyxLink 5.3.0** (stable release).
 
-## [Unreleased — v5.3]
+## [5.3.0] — 2026-11-25
+
+### Backend parity and stabilization
+
+- Added typed LavaSearch and NodeLink discovery, international provider routing, Holo and LavaSrc metadata, and LavaDSPX plugin filters.
+- Added optional multi-provider recommendation discovery, normalized SponsorBlock and chapter events, native audio preference projection and opt-in mixer reconstruction on migration.
+- Hardened stale-session cancellation, backend identity fencing, REST session paths, provider alias handling and search-cache invalidation.
+- Updated Aurora events and public API declarations. Preserved the release-branch dependency isolation fix without adding a core UI dependency.
 
 ### Observability and terminal
 

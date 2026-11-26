@@ -1,6 +1,6 @@
 # NyxLink 5.3 — release candidate and stable runbook
 
-**Status: PREPARATION ONLY.** This document is not permission to publish. The development manifest is still `0.1.0-dev.3`; neither `v5.3.0-rc.1` nor `v5.3.0` is created by this procedure.
+**Status: RC.2 SOURCE PREPARATION ONLY.** The existing `v5.3.0-rc.1` tag is preserved. The candidate manifest is `5.3.0-rc.2` / `next`. This does not create a tag or grant publication approval. All gates must be satisfied on the exact candidate SHA.
 
 ## Versions and distinct immutable tags
 
@@ -33,15 +33,15 @@ After gathering the five `.runtime/live-voice/` reports on a **clean candidate c
 
 On the `v5.3` release-stabilization branch created from the accepted `dev` integration, after freezing the candidate:
 
-1. Set `package.json.version` to `5.3.0-rc.1` and `publishConfig.tag` to `next`. Update the lockfile if package metadata change requires it.
+1. Set `package.json.version` to `5.3.0-rc.2` and `publishConfig.tag` to `next`. Update the lockfile if package metadata change requires it.
 2. Run the mandatory acceptance commands below, including real backend and 600-second tests, against **the new version commit**. Confirm package `version` is reflected in the compiled public API.
 3. Inspect a clean `npm pack --dry-run` and `pnpm run test:package` report; verify `LICENSE`, `NOTICE.md` and absence of secrets.
    - Run `pnpm run release:check-registry` with the RC manifest. It must report `versionAlreadyPublished: false`; if the intended version is already present, do not attempt to overwrite it. This is not an npm ownership or authorization check.
-4. Only when the candidate SHA is approved, create an **annotated** Git tag `v5.3.0-rc.1` pointing to that exact commit; do not move the tag later.
+4. Only when the candidate SHA is approved, create an **annotated** Git tag `v5.3.0-rc.2` pointing to that exact commit; do not move the tag later.
 5. On the tagged checkout, validate its exact release ref:
 
 ```sh
-GITHUB_REF=refs/tags/v5.3.0-rc.1 pnpm run release:check-tag
+GITHUB_REF=refs/tags/v5.3.0-rc.2 pnpm run release:check-tag
 ```
 
 The ref check is read-only and **only checks manifest/version/tag consistency**. It does not verify CI, npm account ownership, the tag's remote object, audio quality, or approval to publish. The CI workflow must supply an authentic `GITHUB_REF`; setting an environment variable manually is not evidence of a remote tag.
@@ -55,14 +55,14 @@ After the user approves the RC, publish the tagged, reviewed package to **`next`
 ```sh
 # Execute only on the reviewed RC tag, with authorized npm credentials:
 npm publish --access public --tag next
-npm view nyxlink@5.3.0-rc.1 version dist.tarball dist.integrity
+npm view nyxlink@5.3.0-rc.2 version dist.tarball dist.integrity
 npm dist-tag ls nyxlink
 node scripts/test-package.cjs --registry
 ```
 
-The `--registry` test must run with the RC version in the checked-out manifest and the required installed development tools. Verify a fresh independent bot can install `nyxlink@5.3.0-rc.1` (or `nyxlink@next`), import the API and complete the manual real Discord acceptance tests. Confirm npm `latest` **has not changed**.
+The `--registry` test must run with the RC version in the checked-out manifest and the required installed development tools. Verify a fresh independent bot can install `nyxlink@5.3.0-rc.2` (or `nyxlink@next`), import the API and complete the manual real Discord acceptance tests. Confirm npm `latest` **has not changed**.
 
-If a defect requires changing code, prepare **`rc.2`** on a new commit and repeat the gates. Never overwrite an existing npm version or mutate an accepted candidate tag.
+If a defect requires changing code, prepare **`rc.3`** on a new commit and repeat the gates. Never overwrite an existing npm version or mutate an accepted candidate tag.
 
 ## Stable gate and release
 
@@ -79,7 +79,7 @@ Keep `v5.2` untouched. Preserve the previous known-good deployment for rollback;
 Only after **every accepted item in the original 38-task backlog and modernization extensions is implemented or explicitly scoped out**, all final same-SHA CI and real-world gates are passed, and separate approvals are recorded:
 
 1. Merge the completed and reviewed implementation pull requests into `dev`. Do not merge draft PRs, bypass required status checks, or rewrite `dev` history.
-2. Freeze and approve an immutable RC source/version, tag `v5.3.0-rc.1`, and publish `nyxlink@5.3.0-rc.1` to npm `next` **only with explicit approval**. Run an external clean consumer install plus the accepted audible/real-server matrix. If changes are needed, publish `rc.2` from a fresh commit and tag, not an overwritten RC.
+2. Freeze and approve an immutable RC source/version, tag `v5.3.0-rc.2`, and publish `nyxlink@5.3.0-rc.2` to npm `next` **only with explicit approval**. Run an external clean consumer install plus the accepted audible/real-server matrix. If changes are needed, publish `rc.3` from a fresh commit and tag, not an overwritten RC.
 3. After RC acceptance, bump to stable `5.3.0`, re-run all gates on that commit, advance `v5.3` and create immutable tag `v5.3.0` from it, and create the GitHub Release and npm `latest` package **only with separate explicit approval**.
 4. Verify GitHub Release/tag SHA, `npm view nyxlink@5.3.0`, `npm dist-tag ls nyxlink`, a clean install, and preserve rollback evidence. Do not conflate the successful publication with continuous audio acceptance.
 5. **Only after stable release is verified**, inventory *all* branches and open PRs. Retain `dev`, `v5.2`, `v5.3`, any still-supported version branches, release/maintenance branches with documented purpose, and any branches backing active PRs or containing unmerged commits. Produce a deletion proposal listing exact branch names, unique commits, open PRs, tags and remote protection. Ask the owner to explicitly approve the exact deletion list before removing any remote branches. Never delete protected branches, tags, `dev`, `v5.2` or a branch with unmerged work merely because a release succeeded.
