@@ -1,3 +1,4 @@
+import { hlsCreateQuery, hlsReadQuery, hlsTimeout, validateHlsManifest, type NodeLinkHlsOptions, type NodeLinkHlsReadOptions, type NodeLinkHlsManifest } from '../backends/NodeLinkHlsContracts';
 import { assertYoutubeAdmin, youtubeTimeout, youtubeConfig, youtubeConfigBody, youtubeOAuthPath, youtubeOAuthToken, youtubeStreamPath, type LavalinkYoutubeAdminOptions, type LavalinkYoutubeConfig, type LavalinkYoutubeConfigUpdate, type LavalinkYoutubeOAuthToken, type LavalinkYoutubeStreamOptions, type LavalinkYoutubeStream } from '../backends/LavalinkYoutubeContracts';
 import type { BackendPluginRoute, BackendPluginRequest } from '../backends/BackendPluginRoutes';
 import { mediaLookupQuery, validateMediaLookup, type NodeLinkMediaLookup, type NodeLinkMediaLookupResult } from '../backends/NodeLinkMediaLookup';
@@ -989,6 +990,73 @@ export class Rest {
      * representations via POST /v4/loadstream, format:'formats'. This is
      * JSON metadata, NEVER a PCM/audio stream. Older servers may return 400.
      */
+    private async hlsBytes(operation: 'hls:playlist' | 'hls:init' | 'hls:segment', query: URLSearchParams,
+        options: NodeLinkHlsReadOptions): Promise<Buffer> {
+        const route = this.extensionRoute(operation, { query });
+        this.node.assertFeature(route.feature);
+        const backend = this.node.backend, socket = this.node.socket, session = this.node.sessionId;
+        const current = () => !this.node.destroyed && !this.node.manager.destroyed &&
+            this.node.backend === backend && this.node.socket === socket && this.node.sessionId === session;
+        const timeout = hlsTimeout(options.timeoutMs);
+        const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout);
+        signal.throwIfAborted();
+        const limit = operation === 'hls:playlist' ? 4 * 1024 * 1024 : 16 * 1024 * 1024;
+        try {
+            const response = await this.streamRequest(this.url + route.path, { method: 'GET', headers: this.authHeaders, signal }, timeout);
+            const stream = response.stream;
+            const abort = () => stream.destroy();
+            signal.addEventListener('abort', abort, { once: true });
+            try {
+                signal.throwIfAborted();
+                if (!current()) throw new Error('HLS session changed');
+                const mime = response.headers['content-type'];
+                const expected = operation === 'hls:playlist' ? 'application/vnd.apple.mpegurl' : operation === 'hls:init' ? 'video/mp4' : 'video/iso.segment';
+                if (response.statusCode !== 200 || typeof mime !== 'string' || mime.split(';')[0].trim().toLowerCase() !== expected) throw new ProtocolResponseError('NodeLink HLS', 'content type');
+                const length = Number(response.headers['content-length']);
+                if (Number.isFinite(length) && length > limit) throw new ProtocolResponseError('NodeLink HLS', 'response limit');
+                const chunks: Buffer[] = [];
+                let size = 0;
+                for await (const chunk of stream) {
+                    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+                    size += bytes.length;
+                    if (size > limit) throw new ProtocolResponseError('NodeLink HLS', 'response limit');
+                    chunks.push(bytes);
+                }
+                signal.throwIfAborted();
+                if (!current()) throw new Error('HLS session changed');
+                if (!size) throw new ProtocolResponseError('NodeLink HLS', 'empty response');
+                const result = Buffer.concat(chunks);
+                if (operation === 'hls:playlist') validateHlsManifest(result.toString('utf8'), query.get('sessionId')!);
+                backend?.recordFeature(route.feature, 'available');
+                return result;
+            } finally {
+                signal.removeEventListener('abort', abort);
+                if (!stream.complete) stream.destroy();
+            }
+        } catch (error) { this.featureError(route.feature, error, backend, current); }
+    }
+
+    /** Create an isolated native HLS session; no browser-visible node credentials. */
+    public async createHlsSession(encodedTrack: string, options: NodeLinkHlsOptions = {}): Promise<NodeLinkHlsManifest> {
+        const { sessionId, query } = hlsCreateQuery(encodedTrack, options);
+        const bytes = await this.hlsBytes('hls:playlist', query, options);
+        return { sessionId, playlist: bytes.toString('utf8') };
+    }
+
+    public async getHlsPlaylist(sessionId: string, options: NodeLinkHlsReadOptions = {}): Promise<NodeLinkHlsManifest> {
+        const bytes = await this.hlsBytes('hls:playlist', hlsReadQuery(sessionId), options);
+        return { sessionId, playlist: bytes.toString('utf8') };
+    }
+
+    public getHlsInitSegment(sessionId: string, options: NodeLinkHlsReadOptions = {}): Promise<Buffer> {
+        return this.hlsBytes('hls:init', hlsReadQuery(sessionId), options);
+    }
+
+    public getHlsSegment(sessionId: string, index: number, options: NodeLinkHlsReadOptions = {}): Promise<Buffer> {
+        if (index === undefined) throw new TypeError('HLS segment index is required');
+        return this.hlsBytes('hls:segment', hlsReadQuery(sessionId, index), options);
+    }
+
     public async getStreamFormats(encodedTrack: string, options: { itag?: number; signal?: AbortSignal; timeoutMs?: number } = {}): Promise<NodeLinkStreamFormats> {
         this.node.assertFeature('loadstream');
         if (typeof encodedTrack !== 'string' || !encodedTrack.trim()) throw new TypeError('Stream formats require an encoded track');

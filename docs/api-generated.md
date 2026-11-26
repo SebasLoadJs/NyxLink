@@ -3270,6 +3270,42 @@ export declare const nodeLinkDiscoveryTypes: readonly [
 ];
 ```
 
+## NodeLinkHlsManifest
+
+[Source declaration](../src/backends/NodeLinkHlsContracts.ts)
+
+```ts
+export interface NodeLinkHlsManifest {
+    sessionId: string;
+    playlist: string;
+}
+```
+
+## NodeLinkHlsOptions
+
+[Source declaration](../src/backends/NodeLinkHlsContracts.ts)
+
+```ts
+export interface NodeLinkHlsOptions {
+    volume?: number;
+    segmentDuration?: number;
+    filters?: Record<string, unknown>;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+}
+```
+
+## NodeLinkHlsReadOptions
+
+[Source declaration](../src/backends/NodeLinkHlsContracts.ts)
+
+```ts
+export interface NodeLinkHlsReadOptions {
+    signal?: AbortSignal;
+    timeoutMs?: number;
+}
+```
+
 ## NodeLinkLyricAnnotation
 
 [Source declaration](../src/backends/NodeLinkLyricsEvents.ts)
@@ -4567,6 +4603,10 @@ export declare class Rest {
         info: Record<string, any>;
     }>): Promise<string[] | null>;
     trackStream(encodedTrack: string, itag?: number | null): Promise<any | null>;
+    createHlsSession(encodedTrack: string, options?: NodeLinkHlsOptions): Promise<NodeLinkHlsManifest>;
+    getHlsPlaylist(sessionId: string, options?: NodeLinkHlsReadOptions): Promise<NodeLinkHlsManifest>;
+    getHlsInitSegment(sessionId: string, options?: NodeLinkHlsReadOptions): Promise<Buffer>;
+    getHlsSegment(sessionId: string, index: number, options?: NodeLinkHlsReadOptions): Promise<Buffer>;
     getStreamFormats(encodedTrack: string, options?: {
         itag?: number;
         signal?: AbortSignal;

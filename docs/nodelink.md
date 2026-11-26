@@ -92,3 +92,7 @@ These prefixes were checked against NodeLink revision `97bbce1e169f18811c69836e3
 
 An explicit `node` in Manager.search now routes to that node, without local Spotify/Deezer interception. Provider names and recognized prefix aliases are matched case-insensitively against disabledSources. Empty searches may try configured fallback platforms; a provider error is returned, not silently retried against another provider. Apple Music's pinned NodeLink implementation does not advertise an `amrec` recommendation prefix, so NyxLink uses its existing fallback path.
 
+
+## Native HLS (5.4 development)
+
+Use `node.rest.createHlsSession(encodedTrack, { segmentDuration: 4 })` to obtain a manifest and an isolated session ID, `getHlsPlaylist(id)` to refresh it, and `getHlsInitSegment(id)` / `getHlsSegment(id, index)` for bounded binary fMP4 fragments. All requests stay on the configured node, never follow manifest URIs, and use existing authentication. Enable the server's HLS endpoint explicitly. Server-side session expiry remains authoritative; the upstream contract has no close route. This API does not host a browser relay or put the node password into an HLS URL. The upstream live manifest may contain no media segments yet. Actual playback and codec compatibility require real server/player validation. [Pinned upstream route](https://github.com/PerformanC/NodeLink/blob/86c6a00d022cbf1cafdbc5eea39a2b7033637485/src/api/hls.ts).

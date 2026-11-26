@@ -15,7 +15,7 @@ Audit inputs: [NodeLink source 86c6a00](https://github.com/PerformanC/NodeLink/t
 | NodeLink lyrics, chapters, meaning | Rest.loadLyrics/loadChapters/loadMeaning/subscribeLyrics/unsubscribeLyrics | Existing |
 | NodeLink groups, mix, SponsorBlock | Rest group, mix and SponsorBlock methods | Existing |
 | NodeLink source health and YouTube config/OAuth | Rest.getSourceHealth/getYoutubeConfig/updateYoutubeConfig/exchangeYoutubeOAuth | Existing; review administrative contracts |
-| NodeLink HLS relay | hls.ts | Not a typed client API; review relay ownership and authorization |
+| NodeLink HLS relay | Rest.createHlsSession/getHlsPlaylist/getHlsInitSegment/getHlsSegment | Native HLS contracts implemented; real playback pending |
 | NodeLink profiler HTTP/UI/file/socket | profiler modules | Not implemented as a typed SDK client; privileged operational interface, separate security review |
 | NodeLink rich media/lyrics/analysis/visualization/protected audio/AutoMix | Optional 5.4 contracts | Six open upstream proposals; fixture interoperability only |
 | WebSocket playback and plugin events | Node events, nodeRaw, VoiceReceiver | Core exists; audit plugin-specific event schemas |
