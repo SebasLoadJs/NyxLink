@@ -1610,6 +1610,25 @@ export interface ILyricsData {
     lang?: string;
     source?: string;
     lines: ILyricsLine[];
+    name?: string;
+    provider?: string;
+    kind?: 'lyrics' | 'captions';
+    introEndMs?: number;
+    outroStartMs?: number;
+    timing?: {
+        granularity: 'none' | 'line' | 'token';
+        totalLines: number;
+        timedLines: number;
+        tokenTimedLines: number;
+    };
+    attribution?: {
+        name: string;
+        url: string;
+        submitter?: {
+            name: string;
+            url: string;
+        };
+    };
 }
 ```
 
@@ -1622,6 +1641,16 @@ export interface ILyricsLine {
     text: string;
     time: number | null;
     duration: number | null;
+    words?: Array<Record<string, unknown>>;
+    kind?: 'lyric' | 'instrumental';
+    section?: string;
+    agent?: string;
+    isBackground?: boolean;
+    alternatives?: Array<{
+        kind: 'translation' | 'romanization';
+        text: string;
+        language?: string;
+    }>;
 }
 ```
 
@@ -3061,6 +3090,22 @@ export declare class NodeLinkAdapter extends BackendAdapter {
 }
 ```
 
+## NodeLinkAudioProcessingSnapshot
+
+[Source declaration](../src/backends/NodeLinkPlayerTelemetry.ts)
+
+```ts
+export interface NodeLinkAudioProcessingSnapshot {
+    requested_gain: number;
+    applied_gain: number;
+    average_applied_gain: number;
+    max_gain_reduction_db: number;
+    average_gain_reduction_db: number;
+    average_gain_reduction_active_db: number;
+    limiter_active_duration_ms: number;
+}
+```
+
 ## NodeLinkDiscoveryOptions
 
 [Source declaration](../src/backends/NodeLinkSearchContracts.ts)
@@ -3188,6 +3233,49 @@ export interface NodeLinkMediaMetadata {
 }
 ```
 
+## NodeLinkMusicAnalysisSnapshot
+
+[Source declaration](../src/backends/NodeLinkPlayerTelemetry.ts)
+
+```ts
+export interface NodeLinkMusicAnalysisSnapshot {
+    scope: 'processed-output';
+    capturedAt: number;
+    outputWindowStartMs: number;
+    outputWindowEndMs: number;
+    analyzedMs: number;
+    bpm: number | null;
+    bpmConfidence: number;
+    key: string | null;
+    keyConfidence: number;
+    energy: number;
+    estimatedLoudnessLufs: number;
+    peak: number;
+    bands: {
+        low: number;
+        mid: number;
+        high: number;
+    };
+    vocalActivityEstimate: number;
+    brightness: number;
+    beatPositionsMs: number[];
+    onsetPositionsMs: number[];
+    silenceRatio: number;
+}
+```
+
+## NodeLinkPlayerTelemetry
+
+[Source declaration](../src/backends/NodeLinkPlayerTelemetry.ts)
+
+```ts
+export interface NodeLinkPlayerTelemetry {
+    visualization?: NodeLinkVisualizationSnapshot;
+    musicAnalysis?: NodeLinkMusicAnalysisSnapshot;
+    audioProcessing?: NodeLinkAudioProcessingSnapshot;
+}
+```
+
 ## NodeLinkPlayerUpdate
 
 [Source declaration](../src/backends/ProtocolContracts.ts)
@@ -3204,6 +3292,25 @@ export interface NodeLinkPlayerUpdate extends CommonPlayerUpdate {
     fading?: IFadingOptions;
     crossfade?: CrossfadeOptions;
     loudnessNormalizer?: boolean;
+}
+```
+
+## NodeLinkVisualizationSnapshot
+
+[Source declaration](../src/backends/NodeLinkPlayerTelemetry.ts)
+
+```ts
+export interface NodeLinkVisualizationSnapshot {
+    capturedAt: number;
+    outputFrame: number;
+    sampleRate: number;
+    rms: [number, number];
+    peak: [number, number];
+    waveform: number[];
+    spectrum: Array<{
+        hz: number;
+        magnitude: number;
+    }>;
 }
 ```
 
@@ -3891,6 +3998,14 @@ export declare function readLavaSrcTrackMetadata(value: unknown): LavaSrcTrackMe
 
 ```ts
 export declare function readNodeLinkMediaMetadata(pluginInfo: unknown): NodeLinkMediaMetadata | undefined;
+```
+
+## readNodeLinkPlayerTelemetry
+
+[Source declaration](../src/backends/NodeLinkPlayerTelemetry.ts)
+
+```ts
+export declare function readNodeLinkPlayerTelemetry(player: unknown): NodeLinkPlayerTelemetry | undefined;
 ```
 
 ## readSponsorBlockEvent

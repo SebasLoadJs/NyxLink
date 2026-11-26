@@ -1,3 +1,5 @@
+export { readNodeLinkPlayerTelemetry } from './src/backends/NodeLinkPlayerTelemetry';
+export type { NodeLinkPlayerTelemetry, NodeLinkVisualizationSnapshot, NodeLinkMusicAnalysisSnapshot, NodeLinkAudioProcessingSnapshot } from './src/backends/NodeLinkPlayerTelemetry';
 export { readNodeLinkMediaMetadata } from './src/backends/NodeLinkMediaMetadata';
 export type { NodeLinkMediaMetadata, NodeLinkMediaImage, NodeLinkMediaArtist } from './src/backends/NodeLinkMediaMetadata';
 export { readSponsorBlockEvent } from './src/backends/SponsorBlockEvents';

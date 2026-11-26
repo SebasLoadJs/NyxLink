@@ -588,6 +588,16 @@ export interface ILyricsLine {
     text: string;
     time: number | null;
     duration: number | null;
+    words?: Array<Record<string, unknown>>;
+    kind?: 'lyric' | 'instrumental';
+    section?: string;
+    agent?: string;
+    isBackground?: boolean;
+    alternatives?: Array<{
+        kind: 'translation' | 'romanization';
+        text: string;
+        language?: string;
+    }>;
 }
 
 export interface ILyricsData {
@@ -595,6 +605,25 @@ export interface ILyricsData {
     lang?: string;
     source?: string;
     lines: ILyricsLine[];
+    name?: string;
+    provider?: string;
+    kind?: 'lyrics' | 'captions';
+    introEndMs?: number;
+    outroStartMs?: number;
+    timing?: {
+        granularity: 'none' | 'line' | 'token';
+        totalLines: number;
+        timedLines: number;
+        tokenTimedLines: number;
+    };
+    attribution?: {
+        name: string;
+        url: string;
+        submitter?: {
+            name: string;
+            url: string;
+        };
+    };
 }
 
 export interface ILyricsResponse {
