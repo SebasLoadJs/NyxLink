@@ -16,3 +16,7 @@ These are open upstream proposals, not a promise of availability in an official 
 The next release must preserve 5.3 API compatibility, regenerate public declarations and verify unit, packaging, real backend, voice, endurance and npm registry evidence on the exact release commit. No historical tags should be moved. The npm publication workflow remains validation-only.
 
 A read-only registry inventory workflow was added to obtain npm versions and dist-tags without publication credentials. Public npm inventory confirmed latest=5.3.0, next=5.3.0-rc.2 and dev=0.1.0-dev.3 with no 5.4 versions at inspection. PR #53 merged the v5.3 history into dev and verified both prior heads remain ancestors. The development manifest is now 5.4.0-dev.1 with publishConfig.tag=dev. No 5.4 package or Git tag has been published.
+
+## Pinned proposal interoperability matrix
+
+The `NodeLink proposal compatibility` workflow independently compiles each of the six exact fork commits and tests the actual module output against NyxLink readers or the upstream AutoMix safety helpers using synthetic data/PCM. This does not copy or redistribute NodeLink modules. No provider credentials, Discord token, combined upstream build, server network route or audible transition are exercised. Results must be checked in Actions; creating the workflow is not evidence of a pass.

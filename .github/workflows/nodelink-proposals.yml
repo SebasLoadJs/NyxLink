@@ -1,0 +1,67 @@
+name: NodeLink proposal compatibility
+on:
+  workflow_dispatch:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/nodelink-proposals.yml'
+      - 'scripts/test-nodelink-proposal.cjs'
+      - 'src/backends/NodeLink*'
+      - 'src/entities/Track.ts'
+      - 'index.ts'
+permissions:
+  contents: read
+jobs:
+  proposal:
+    name: NodeLink PR ${{ matrix.proposal }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - proposal: '265'
+            revision: 5c1d306b56115c4d17a90a27c3be683b48cf150d
+          - proposal: '266'
+            revision: 51f93dfa4f53110aa506075869d6be3d9e2b4eb9
+          - proposal: '267'
+            revision: 9da45ebc4d390c595e645be180328f2d9cff893b
+          - proposal: '268'
+            revision: 2a0e6211e72767651fa777a4e67471066bf5ff9b
+          - proposal: '269'
+            revision: fa1659c6cb12953b6b6bdf3fc24f80779a689468
+          - proposal: '270'
+            revision: e96ae5ac944a94a903cdb91cc3fc00b66290dba3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: SebasLoadJs/NodeLink
+          ref: ${{ matrix.revision }}
+          path: .runtime/nodelink-proposal
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - name: Confirm exact fork revision
+        working-directory: .runtime/nodelink-proposal
+        env:
+          EXPECTED_REVISION: ${{ matrix.revision }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_REVISION"
+      - name: Install and compile independent NodeLink checkout
+        working-directory: .runtime/nodelink-proposal
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npm run build
+      - name: Verify actual proposal module output against SDK
+        env:
+          NYXLINK_NODELINK_PROPOSAL: ${{ matrix.proposal }}
+          NYXLINK_NODELINK_PROPOSAL_ROOT: .runtime/nodelink-proposal
+          NYXLINK_NODELINK_PROPOSAL_REVISION: ${{ matrix.revision }}
+        run: node --test scripts/test-nodelink-proposal.cjs
