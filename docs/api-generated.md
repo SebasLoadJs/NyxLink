@@ -2972,6 +2972,7 @@ export declare class Node {
     loadLyrics(track: string | ITrack | Track | {
         encoded?: string;
     }, options?: string | LyricsRequestOptions): Promise<NodeLinkResponse<ILyricsData | Record<string, any>> | null>;
+    loadMedia(lookup: NodeLinkMediaLookup): Promise<NodeLinkMediaLookupResult>;
     getSourceHealth(): Promise<SourceHealthResponse>;
     getStreamFormats(track: string | ITrack | Track | {
         encoded?: string;
@@ -3161,6 +3162,18 @@ export interface NodeLinkMediaArtist {
 }
 ```
 
+## NodeLinkMediaCredit
+
+[Source declaration](../src/backends/NodeLinkMediaLookup.ts)
+
+```ts
+export interface NodeLinkMediaCredit {
+    mbid: string;
+    name: string;
+    role: string;
+}
+```
+
 ## NodeLinkMediaImage
 
 [Source declaration](../src/backends/NodeLinkMediaMetadata.ts)
@@ -3171,6 +3184,59 @@ export interface NodeLinkMediaImage {
     width?: number;
     height?: number;
 }
+```
+
+## NodeLinkMediaLookup
+
+[Source declaration](../src/backends/NodeLinkMediaLookup.ts)
+
+```ts
+export type NodeLinkMediaLookup = {
+    isrc: string;
+} | {
+    recordingMbid: string;
+} | {
+    workMbid: string;
+} | {
+    artistMbid: string;
+} | {
+    releaseGroupMbid: string;
+};
+```
+
+## NodeLinkMediaLookupResult
+
+[Source declaration](../src/backends/NodeLinkMediaLookup.ts)
+
+```ts
+export type NodeLinkMediaLookupResult = {
+    provider: 'musicbrainz';
+    isrc: string;
+    recordings: NodeLinkMediaRecording[];
+} | (NodeLinkMediaRecording & {
+    provider: 'musicbrainz';
+    isrcs: string[];
+}) | {
+    provider: 'musicbrainz';
+    mbid: string;
+    title?: string;
+    credits: NodeLinkMediaCredit[];
+    workMbids: string[];
+} | {
+    provider: 'fanart.tv';
+    mbid: string;
+    name?: string;
+    artwork: NodeLinkMediaImage[];
+    banners: NodeLinkMediaImage[];
+    backgrounds: NodeLinkMediaImage[];
+    logos: NodeLinkMediaImage[];
+} | {
+    provider: 'fanart.tv';
+    releaseGroupMbid: string;
+    artistName?: string;
+    artwork: NodeLinkMediaImage[];
+    discArtwork: NodeLinkMediaImage[];
+};
 ```
 
 ## NodeLinkMediaMetadata
@@ -3230,6 +3296,30 @@ export interface NodeLinkMediaMetadata {
         artwork?: NodeLinkMediaImage[];
         banners?: NodeLinkMediaImage[];
     };
+}
+```
+
+## NodeLinkMediaRecording
+
+[Source declaration](../src/backends/NodeLinkMediaLookup.ts)
+
+```ts
+export interface NodeLinkMediaRecording {
+    mbid: string;
+    title: string;
+    artists: Array<{
+        mbid: string;
+        name: string;
+    }>;
+    durationMs?: number;
+    credits: NodeLinkMediaCredit[];
+    workMbids: string[];
+    releaseGroups: Array<{
+        mbid: string;
+        title: string;
+        firstReleaseDate?: string;
+        type?: string;
+    }>;
 }
 ```
 
@@ -4233,6 +4323,7 @@ export declare class Rest {
     removeMixLayer(guildId: string, mixId: string): Promise<void>;
     loadSearch(query: string, options?: LavaSearchOptions): Promise<LavaSearchResult | null>;
     getLavaLyrics(encodedTrack: string, options?: LavaLyricsOptions): Promise<LavaLyricsData | null>;
+    loadMedia(lookup: NodeLinkMediaLookup): Promise<NodeLinkMediaLookupResult>;
     loadLyrics(encodedTrack: string, options?: string | LyricsRequestOptions): Promise<NodeLinkResponse<ILyricsData | Record<string, any>> | null>;
     getSourceHealth(): Promise<SourceHealthResponse>;
     loadChapters(encodedTrack: string): Promise<NodeLinkResponse<IChapter[]> | null>;

@@ -20,6 +20,7 @@ const definitions = {
     'mix:list': { feature: 'mix:list', method: 'GET', path: player + '/mix', transport: 'json' },
     'mix:update': { feature: 'mix:update', method: 'PATCH', path: player + '/mix/:mixId', transport: 'json' },
     'mix:remove': { feature: 'mix:remove', method: 'DELETE', path: player + '/mix/:mixId', transport: 'json' },
+    loadmedia: { feature: 'loadmedia', method: 'GET', path: '/v4/loadmedia', transport: 'json' },
     lyrics: { feature: 'lyrics', method: 'GET', path: '/v4/loadlyrics', transport: 'json' },
     'source-health': { feature: 'source-health', method: 'GET', path: '/v4/sources/health', transport: 'json' },
     chapters: { feature: 'chapters', method: 'GET', path: '/v4/loadchapters', transport: 'json' },

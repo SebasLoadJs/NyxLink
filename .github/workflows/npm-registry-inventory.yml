@@ -1,0 +1,20 @@
+name: Public npm registry inventory
+on:
+  workflow_dispatch:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/npm-registry-inventory.yml'
+      - 'package.json'
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Inspect published versions and distribution tags (read-only)
+        run: npm view nyxlink versions dist-tags --json --registry=https://registry.npmjs.org/ --fetch-retries=0 --fetch-timeout=30000

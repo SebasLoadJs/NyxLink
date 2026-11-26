@@ -1,3 +1,4 @@
+import { mediaLookupQuery, validateMediaLookup, type NodeLinkMediaLookup, type NodeLinkMediaLookupResult } from '../backends/NodeLinkMediaLookup';
 import { sessionPath, playerPath } from '../backends/SessionPath';
 import { nodeLinkDiscoveryIdentifier, type NodeLinkDiscoveryOptions } from '../backends/NodeLinkSearchContracts';
 import { hasLavaSearchPlugin, lavaSearchParameters, validateLavaSearch, type LavaSearchOptions, type LavaSearchResult } from '../backends/LavaSearchContracts';
@@ -604,6 +605,23 @@ export class Rest {
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
+    /** Optional external metadata lookup; provider outages are not node outages. */
+    public async loadMedia(lookup: NodeLinkMediaLookup): Promise<NodeLinkMediaLookupResult> {
+        const { key, id, query } = mediaLookupQuery(lookup);
+        const route = this.extensionRoute('loadmedia', { query });
+        this.node.assertFeature(route.feature);
+        const backend = this.node.backend, socket = this.node.socket, session = this.node.sessionId;
+        const current = () => !this.node.destroyed && this.node.backend === backend && this.node.socket === socket && this.node.sessionId === session;
+        try {
+            // Explicit requests only; no retry or circuit penalty for optional external providers.
+            const raw = await this.request<unknown>(this.url + route.path, { method: 'GET', headers: this.authHeaders, throwOnError: true }, 10000, 0);
+            if (!current()) throw new Error('Media lookup session changed');
+            const result = validateMediaLookup(raw, key, id);
+            backend?.recordFeature(route.feature, 'available');
+            return result;
+        } catch (error) { this.featureError(route.feature, error, backend, current); }
+    }
+
     /** Source-specific lyrics or captions, preserving the legacy language string. */
     public async loadLyrics(encodedTrack: string, options?: string | LyricsRequestOptions): Promise<NodeLinkResponse<ILyricsData | Record<string, any>> | null> {
         this.node.assertFeature("lyrics");

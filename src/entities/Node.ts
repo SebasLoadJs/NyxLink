@@ -1,3 +1,4 @@
+import type { NodeLinkMediaLookup, NodeLinkMediaLookupResult } from '../backends/NodeLinkMediaLookup';
 import { isSessionId } from '../backends/SessionPath';
 import { readSponsorBlockEvent } from '../backends/SponsorBlockEvents';
 import type { NodeLinkDiscoveryOptions } from '../backends/NodeLinkSearchContracts';
@@ -369,6 +370,11 @@ export class Node {
       throw new Error("loadLyrics requires an encoded track string or object with an encoded field.");
     }
     return this.rest.loadLyrics(encoded, options);
+  }
+
+  /** Explicit optional MusicBrainz/Fanart.tv lookup through NodeLink. */
+  public loadMedia(lookup: NodeLinkMediaLookup): Promise<NodeLinkMediaLookupResult> {
+    return this.rest.loadMedia(lookup);
   }
 
   public getSourceHealth(): Promise<SourceHealthResponse> {

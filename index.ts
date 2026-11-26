@@ -1,3 +1,4 @@
+export type { NodeLinkMediaLookup, NodeLinkMediaLookupResult, NodeLinkMediaRecording, NodeLinkMediaCredit } from './src/backends/NodeLinkMediaLookup';
 export { readNodeLinkPlayerTelemetry } from './src/backends/NodeLinkPlayerTelemetry';
 export type { NodeLinkPlayerTelemetry, NodeLinkVisualizationSnapshot, NodeLinkMusicAnalysisSnapshot, NodeLinkAudioProcessingSnapshot } from './src/backends/NodeLinkPlayerTelemetry';
 export { readNodeLinkMediaMetadata } from './src/backends/NodeLinkMediaMetadata';
