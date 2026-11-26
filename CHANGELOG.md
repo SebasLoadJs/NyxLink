@@ -1,6 +1,14 @@
 # Changelog
 
-This changelog documents **NyxLink 5.3.0** (stable release).
+This changelog documents published releases and unreleased development changes.
+
+## [Unreleased — 5.4.0-dev.1]
+
+- Added optional validated rich track media metadata, including artist/album artwork, colors, credits and motion artwork, without changing legacy track payloads.
+- Added explicit NodeLink media lookup with bounded provider identity validation and no node circuit penalty for optional provider outages.
+- Added detached typed snapshots of visualization, musical analysis and Protected audio processing telemetry, plus advanced lyric annotations and a reader for playback lyric events.
+- Reconciled the published 5.3 maintenance history into `dev`, preserving development commits; aligned the manifest with the new development line and the `dev` npm channel.
+- Added public registry inventory and regression tests. Upstream NodeLink proposals and real fork/live acceptance remain pending. No 5.4 npm publication is claimed.
 
 ## [5.3.0] — 2026-11-25
 

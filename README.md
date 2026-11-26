@@ -16,7 +16,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/nyxlink"><img src="https://img.shields.io/npm/v/nyxlink?style=flat-square&amp;color=818cf8&amp;label=npm" alt="Versión publicada en npm"></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-%3E%3D22.12.0-43853d?style=flat-square" alt="Node.js 22.12 o superior"></a>
-  <a href="https://github.com/SebasLoadJs/NyxLink/actions/workflows/pr.yml"><img src="https://github.com/SebasLoadJs/NyxLink/actions/workflows/pr.yml/badge.svg?branch=v5.3" alt="Estado de CI"></a>
+  <a href="https://github.com/SebasLoadJs/NyxLink/actions/workflows/pr.yml"><img src="https://github.com/SebasLoadJs/NyxLink/actions/workflows/pr.yml/badge.svg?branch=dev" alt="Estado de CI"></a>
   <a href="docs/api-generated.md"><img src="https://img.shields.io/badge/TypeScript-types%20included-3178c6?style=flat-square" alt="Declaraciones TypeScript incluidas"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-OSL--3.0-a78bfa?style=flat-square" alt="Licencia OSL-3.0"></a>
 </p>
@@ -72,7 +72,11 @@ Para integrar Discord.js:
 npm install discord.js@14
 ```
 
-Consulta las [versiones publicadas en npm](https://www.npmjs.com/package/nyxlink) y los [releases de GitHub](https://github.com/SebasLoadJs/NyxLink/releases). La rama `v5.3` contiene la candidata a publicación; `dev` conserva la integración de desarrollo. Un tag Git no equivale a una publicación en npm.
+Consulta las [versiones publicadas en npm](https://www.npmjs.com/package/nyxlink) y los [releases de GitHub](https://github.com/SebasLoadJs/NyxLink/releases). La rama `v5.3` conserva la versión estable 5.3; `dev` desarrolla NyxLink 5.4. La versión de desarrollo del repositorio no implica que ese paquete ya esté publicado en npm. Un tag Git no equivale a una publicación en npm.
+
+### Desarrollo de 5.4
+
+La línea 5.4 incorpora contratos opcionales de metadata multimedia, consultas MusicBrainz/Fanart.tv, visualización y análisis musical, telemetría de procesamiento de audio y eventos de letras avanzados. Son compatibles con las propuestas de NodeLink en revisión; no presuponen soporte en nodos antiguos. Consulta el [estado de integración](docs/nodelink-5.4-upstream-audit.md).
 
 <a name="inicio-rapido"></a>
 
