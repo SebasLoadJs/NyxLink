@@ -18,7 +18,7 @@ export abstract class BackendAdapter {
             'nodelink:discovery', 'voiceReceiver', 'youtubeLiveChat',
             'filter:echo', 'filter:chorus', 'filter:compressor', 'filter:highpass', 'filter:phaser', 'filter:spatial'
         ]);
-        const pluginsOnly = new Set(['lavasearch', 'lavalyrics', 'lavalink:sponsorblock', 'lavadspx', 'lavasrc']);
+        const pluginsOnly = new Set(['lavasearch', 'lavalyrics', 'lavalyrics:current', 'lavalyrics:subscribe', 'lavalyrics:unsubscribe', 'lavalink:sponsorblock', 'lavadspx', 'lavasrc']);
         const known = new Set([...native, ...pluginsOnly]);
         const unavailable = kind === 'lavalink' ? native : kind === 'nodelink' ? pluginsOnly : new Set<string>();
         this.registry = new CapabilityRegistry(capabilities, known, unavailable);

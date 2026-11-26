@@ -20,7 +20,7 @@ export interface BackendPluginRequest {
 }
 const identifier = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const segment = /^[a-zA-Z0-9_-]{1,64}$/;
-const reserved = new Set(['sessions','info','stats','version','loadtracks','decodetrack','decodetracks','encodetrack','encodedtracks','routeplanner','connection','workers','youtube','metrics','profiler','hls','loadstream','trackstream','sources','loadlyrics','loadchapters','meaning','loadmedia','loadsearch','lyrics','sponsorblock','mix','websocket']);
+const reserved = new Set(['sessions','players','groups','track','info','stats','version','loadtracks','decodetrack','decodetracks','encodetrack','encodedtracks','routeplanner','connection','workers','youtube','metrics','profiler','hls','loadstream','trackstream','sources','loadlyrics','loadchapters','meaning','loadmedia','loadsearch','lyrics','sponsorblock','mix','websocket']);
 const key = (route: BackendPluginRoute<unknown>) => route.backend + ':' + route.plugin + ':' + route.id;
 export class BackendPluginRouteRegistry {
     private readonly routes = new Map<string, BackendPluginRoute<unknown>>();

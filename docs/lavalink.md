@@ -67,3 +67,14 @@ const trackMetadata = result.tracks[0]?.getLavaSrcMetadata();
 ```
 
 The typed views expose album/artist artwork, preview URL and preview flag, collection type, URL, author and total track count. Unknown fields are preserved in raw `playlistPluginInfo` and track `pluginInfo`. A collection's provider-reported total can differ from the number of tracks returned by a limited search. Metadata does not guarantee direct audio playback. See [LavaSrc](https://github.com/topi314/LavaSrc#plugin-info). Runtime configuration and live plugin acceptance remain separate work.
+
+## LavaLyrics current track and subscriptions (5.4 development)
+
+```ts
+const lyrics = await node.rest.getCurrentLavaLyrics(guildId, { skipTrackSource: true });
+await node.rest.subscribeLavaLyrics(guildId, { skipTrackSource: true });
+// Listen to the existing lyricsFound, lyricsLine and lyricsNotFound events.
+await node.rest.unsubscribeLavaLyrics(guildId);
+```
+
+The player-specific GET uses `/track/lyrics`; POST and DELETE use `/lyrics/subscribe`. A current-track 204 means no lyrics, and subscription 204 means acknowledged—not that lyrics were found. Session/player 404 is preserved as an HTTP error. Operations are Lavalink-plugin-specific; they do not modify NodeLink subscription behavior. Live event and provider acceptance remain separate from the mocked route contract tests.

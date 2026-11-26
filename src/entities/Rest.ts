@@ -7,7 +7,7 @@ import { observeOperation } from '../observability/OpenTelemetry';
 import { getManagerLogRoute } from '../logging/ManagerLogRoute';
 import { requireGroupId, requireGuildId, groupCreateBody, groupPatchBody, validateGroup, validateGroups, validateGroupPatch, sponsorOptionsBody, sponsorSegmentsBody, validateSponsorState, type PlayerGroup, type GroupCreate, type GroupPatch, type GroupPatchResult, type SponsorBlockOptions, type SponsorBlockSegment, type SponsorBlockState } from '../backends/NodeLinkOrchestration';
 import { lyricsParameters, validateSourceHealth, validateNodeLinkStreamFormats, type LyricsRequestOptions, type SourceHealthResponse, type NodeLinkStreamFormats } from '../backends/NodeLinkContracts';
-import { hasLavaLyricsPlugin, lavaLyricsParameters, validateLavaLyrics, type LavaLyricsData, type LavaLyricsOptions } from '../backends/LavaLyricsContracts';
+import { hasLavaLyricsPlugin, lavaLyricsParameters, lavaLyricsPlayerParameters, validateLavaLyrics, type LavaLyricsData, type LavaLyricsOptions } from '../backends/LavaLyricsContracts';
 import { hasLavalinkSponsorBlockPlugin, lavalinkSponsorBlockPath, sponsorBlockCategoryBody, validateSponsorBlockCategories, type LavalinkSponsorBlockCategory } from '../backends/LavalinkSponsorBlockContracts';
 import type http from "node:http";
 import { validateLoadResponse, validateTrackResponse, validatePlayerRead, validatePlayerAcknowledgement, validateSessionResponse, ProtocolResponseError } from "../backends/ProtocolValidation";
@@ -651,6 +651,48 @@ export class Rest {
         validateLavaLyrics(result);
         if (current()) backend.recordFeature('lavalyrics', 'available');
         return result;
+    }
+
+    private async lavaLyricsPlayerRequest(method: 'GET' | 'POST' | 'DELETE', guildId: string, options?: LavaLyricsOptions): Promise<LavaLyricsData | null> {
+        const backend = this.node.backend;
+        const feature = method === 'GET' ? 'lavalyrics:current' : method === 'POST' ? 'lavalyrics:subscribe' : 'lavalyrics:unsubscribe';
+        if (backend?.kind !== 'lavalink' || !hasLavaLyricsPlugin(backend.plugins) ||
+            backend.featureStatus(feature) === 'unavailable') throw new FeatureUnavailableError(feature, backend?.kind ?? 'unknown');
+        const session = this.node.sessionId, socket = this.node.socket;
+        const current = () => !this.node.destroyed && !this.node.manager.destroyed &&
+            this.node.backend === backend && this.node.sessionId === session && this.node.socket === socket;
+        const path = playerPath(session, guildId) + (method === 'GET' ? '/track/lyrics' : '/lyrics/subscribe');
+        const query = lavaLyricsPlayerParameters(options).toString();
+        if (method !== 'GET') await this.node.manager.guildOwnership?.assertCurrent(guildId);
+        if (!current()) throw new Error('LavaLyrics player session changed');
+        let result: unknown;
+        try {
+            result = await this.request<unknown>(this.url + path + (query ? '?' + query : ''), {
+                method, headers: this.authHeaders, throwOnError: true, noContentAsNull: true,
+                allowedOrigins: [new URL(this.url).origin],
+            }, 10000, 0, 1000, 0);
+        } catch (error) { this.featureError(feature, error, backend, current); }
+        if (!current()) throw new Error('LavaLyrics player session changed');
+        if (method !== 'GET') {
+            if (result !== null) throw new ProtocolResponseError('LavaLyrics', 'subscription acknowledgement');
+            backend.recordFeature(feature, 'available');
+            return null;
+        }
+        if (result !== null) validateLavaLyrics(result);
+        backend.recordFeature(feature, 'available');
+        return result;
+    }
+
+    public getCurrentLavaLyrics(guildId: string, options?: LavaLyricsOptions): Promise<LavaLyricsData | null> {
+        return this.lavaLyricsPlayerRequest('GET', guildId, options);
+    }
+
+    public async subscribeLavaLyrics(guildId: string, options?: LavaLyricsOptions): Promise<void> {
+        await this.lavaLyricsPlayerRequest('POST', guildId, options);
+    }
+
+    public async unsubscribeLavaLyrics(guildId: string): Promise<void> {
+        await this.lavaLyricsPlayerRequest('DELETE', guildId);
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */

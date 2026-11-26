@@ -150,3 +150,30 @@ test('late plugin observations cannot update a replacement backend', async t => 
   assert.equal(node.backend.featureStatus('lavalyrics'), 'unknown');
   assert.equal(previous.featureStatus('lavalyrics'), 'unknown');
 });
+
+
+test('LavaLyrics player endpoints have independent contracts and explicit 204 acknowledgement', async t => {
+  const {node,requests}=await setup(t,(req,res)=>{
+    if(req.method==='GET'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(valid()));}
+    else {res.writeHead(204);res.end();}
+  });
+  const guild='123456789012345678';
+  assert.deepEqual(await node.rest.getCurrentLavaLyrics(guild,{skipTrackSource:true}),valid());
+  await node.rest.subscribeLavaLyrics(guild,{skipTrackSource:false});
+  await node.rest.unsubscribeLavaLyrics(guild);
+  assert.deepEqual(requests.map(r=>[r.method,r.url]),[
+    ['GET','/v4/sessions/fixture-session/players/'+guild+'/track/lyrics?skipTrackSource=true'],
+    ['POST','/v4/sessions/fixture-session/players/'+guild+'/lyrics/subscribe?skipTrackSource=false'],
+    ['DELETE','/v4/sessions/fixture-session/players/'+guild+'/lyrics/subscribe']]);
+  for(const feature of ['lavalyrics:current','lavalyrics:subscribe','lavalyrics:unsubscribe'])assert.equal(node.backend.featureStatus(feature),'available');
+  assert.equal(node.backend.featureStatus('lavalyrics'),'unknown');
+});
+test('LavaLyrics player no-track 404 is not absent plugin, malformed ack fails', async t=>{
+  let status=404;
+  const {node}=await setup(t,(_req,res)=>{res.writeHead(status,{'content-type':'application/json'});res.end(status===404?'{"message":"No track playing"}':'{}');});
+  const guild='123456789012345678';
+  await assert.rejects(node.rest.getCurrentLavaLyrics(guild),e=>e.statusCode===404);
+  assert.equal(node.backend.featureStatus('lavalyrics:current'),'unknown');
+  status=200;await assert.rejects(node.rest.subscribeLavaLyrics(guild),{code:'INVALID_PROTOCOL_RESPONSE'});
+  assert.equal(node.backend.featureStatus('lavalyrics:subscribe'),'unknown');
+});

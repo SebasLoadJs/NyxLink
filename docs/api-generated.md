@@ -4464,6 +4464,9 @@ export declare class Rest {
     removeMixLayer(guildId: string, mixId: string): Promise<void>;
     loadSearch(query: string, options?: LavaSearchOptions): Promise<LavaSearchResult | null>;
     getLavaLyrics(encodedTrack: string, options?: LavaLyricsOptions): Promise<LavaLyricsData | null>;
+    getCurrentLavaLyrics(guildId: string, options?: LavaLyricsOptions): Promise<LavaLyricsData | null>;
+    subscribeLavaLyrics(guildId: string, options?: LavaLyricsOptions): Promise<void>;
+    unsubscribeLavaLyrics(guildId: string): Promise<void>;
     loadMedia(lookup: NodeLinkMediaLookup): Promise<NodeLinkMediaLookupResult>;
     loadLyrics(encodedTrack: string, options?: string | LyricsRequestOptions): Promise<NodeLinkResponse<ILyricsData | Record<string, any>> | null>;
     getSourceHealth(): Promise<SourceHealthResponse>;

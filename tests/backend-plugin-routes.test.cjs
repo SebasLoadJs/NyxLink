@@ -14,7 +14,7 @@ test('plugin registry is identity-bound, bounded, detached, and cannot override 
   assert.ok(registry.owns(route));
   assert.equal(registry.owns({...route}),false);
   assert.throws(()=>registry.register(definition),/already registered/);
-  for (const path of ['../info','https://host/path','%2e%2e/info','sessions/abc','lyrics','plugins/other/profile','custom//x','custom?foo']) assert.throws(()=>registry.register({...definition,id:'bad',path}),TypeError);
+  for (const path of ['../info','https://host/path','%2e%2e/info','sessions/abc','track/lyrics','lyrics','plugins/other/profile','custom//x','custom?foo']) assert.throws(()=>registry.register({...definition,id:'bad',path}),TypeError);
   assert.equal(registry.list()[0].decode,undefined);
   registry.list()[0].path='info';
   assert.equal(route.path,'custom/profile');

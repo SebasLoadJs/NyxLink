@@ -61,3 +61,10 @@ export function hasLavaLyricsPlugin(plugins: readonly { name: string }[]): boole
     return plugins.some(plugin => plugin.name.toLowerCase() === 'lavalyrics' ||
         plugin.name.toLowerCase() === 'lavalyrics-plugin');
 }
+
+/** Current-track and live subscriptions have no encoded-track parameter. */
+export function lavaLyricsPlayerParameters(options?: LavaLyricsOptions): URLSearchParams {
+    const params = lavaLyricsParameters('current-track', options);
+    params.delete('track');
+    return params;
+}
