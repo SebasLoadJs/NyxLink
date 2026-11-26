@@ -10,7 +10,9 @@ const extended = workflow('stabilization-endurance.yml');
 const manual = workflow('npm-publish.yml');
 
 test('both release tag types trigger an immutable package gate', () => {
-  assert.match(release, /tags:\s*\n\s*- 'v5\.3\.0-rc\.\*'\s*\n\s*- 'v5\.3\.0'/);
+  assert.ok(release.includes("'v[0-9]*.[0-9]*.[0-9]*-rc.[0-9]*'"));
+  assert.ok(release.includes("'v[0-9]*.[0-9]*.[0-9]*'"));
+  assert.ok(release.includes("'!v*-dev.*'"));
   assert.match(release, /release:check-tag/);
   assert.match(release, /check-npm-registry\.cjs --report-only/);
   assert.match(release, /pnpm run test:package/);
@@ -20,7 +22,9 @@ test('both release tag types trigger an immutable package gate', () => {
 });
 
 test('immutable tags also run extended, not merely smoke, backend endurance', () => {
-  assert.match(extended, /tags:\s*\n\s*- 'v5\.3\.0-rc\.\*'\s*\n\s*- 'v5\.3\.0'/);
+  assert.ok(extended.includes("'v[0-9]*.[0-9]*.[0-9]*-rc.[0-9]*'"));
+  assert.ok(extended.includes("'v[0-9]*.[0-9]*.[0-9]*'"));
+  assert.ok(extended.includes("'!v*-dev.*'"));
   assert.match(extended, /uses: \.\/\.github\/workflows\/endurance\.yml/);
   assert.match(extended, /seconds: '600'/);
 });
@@ -41,4 +45,13 @@ test('the published npm version and channel are validated by a separate prefligh
   assert.match(registry, /versionAlreadyPublished/);
   assert.match(registry, /npmPublishPermissionVerified: false/);
   assert.match(registry, /publicationPerformed: false/);
+});
+
+test('only validated archives are uploaded for manual and tag release preparation', () => {
+  for (const data of [release, manual, workflow('pr.yml')]) {
+    assert.match(data, /pnpm run test:package/);
+    assert.match(data, /path: \.runtime\/validated-distribution\//);
+    assert.match(data, /if-no-files-found: error/);
+    assert.ok(data.indexOf('pnpm run test:package') < data.indexOf('path: .runtime/validated-distribution/'));
+  }
 });

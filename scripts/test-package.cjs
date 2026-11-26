@@ -3,6 +3,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
+const { execFileSync } = require('node:child_process');
 const { spawnSync } = require('node:child_process');
 const root = path.resolve(__dirname, '..');
 const manifest = require('../package.json');
@@ -26,6 +27,7 @@ function run(command, args, cwd) {
 
 async function main() {
   validateReleaseManifest(manifest);
+  if (!fromRegistry) await fs.rm(path.join(root, '.runtime', 'validated-distribution'), { recursive: true, force: true });
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'nyxlink-package-'));
   const checks = [];
   let passed = false;
@@ -193,6 +195,19 @@ async function main() {
     await fs.copyFile(path.join(root, 'examples/node-selection.ts'), path.join(consumer, 'node-selection.ts'));
     run(process.execPath, [tsc, '--noEmit', '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', 'observability.ts', 'node-selection.ts'], consumer);
     checks.push('logging, diagnostics, typed mix and weighted node-selection examples compile from installed package');
+    if (!fromRegistry) {
+      const output = path.join(root, '.runtime', 'validated-distribution');
+      await fs.rm(output, { recursive: true, force: true });
+      await fs.mkdir(output, { recursive: true });
+      const filename = path.basename(archive);
+      const bytes = await fs.readFile(archive);
+      await fs.writeFile(path.join(output, filename), bytes, { flag: 'wx' });
+      const sourceRevision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', timeout: 5000 }).trim();
+      assert.match(sourceRevision, /^[0-9a-f]{40}$/);
+      const sha256 = createHash('sha256').update(bytes).digest('hex');
+      await fs.writeFile(path.join(output, 'integrity.json'), JSON.stringify({ sourceRevision, node: process.version, version: manifest.version, channel: manifest.publishConfig.tag, filename, sha256, checks }, null, 2) + '\n');
+      await fs.writeFile(path.join(output, 'SHA256SUMS'), sha256 + '  ' + filename + '\n');
+    }
     passed = true;
   } finally {
     const report = { timestamp: new Date().toISOString(), scope: fromRegistry ? 'published public npm installation; no Discord' : 'packed local installation; no registry publication or Discord',

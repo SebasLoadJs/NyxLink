@@ -57,6 +57,13 @@ jobs:
       - run: pnpm audit --prod --audit-level=high
       - name: Verify generated public API reference
         run: node scripts/generate-api-reference.cjs --check
+      - name: Upload the exact validated npm archive (not published)
+        uses: actions/upload-artifact@v4
+        with:
+          name: validated-distribution-node-${{ matrix.node }}
+          path: .runtime/validated-distribution/
+          if-no-files-found: error
+          retention-days: 30
 
   backend-integration:
     name: Backend integration (Node 22)
