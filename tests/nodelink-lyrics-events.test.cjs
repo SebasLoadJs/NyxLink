@@ -1,0 +1,10 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {readNodeLinkLyricsEvent}=require('../dist/index.js');
+const guildId='123456789012345678';
+const event=(type,body={})=>({op:'event',type,guildId,...body});
+const line=()=>({timestamp:200,duration:400,line:'text',words:[{text:'text',time:200,duration:400}],plugin:{agent:'v1',isBackground:true,section:'chorus',alternatives:[{kind:'translation',text:'texto',language:'es'}]}});
+test('lyrics found retains explicit synced flag, provider timing and annotations',()=>{const raw=event('LyricsFoundEvent',{lyrics:{sourceName:'spotify',provider:'unison',synced:true,text:'text',lines:[line()]}});const result=readNodeLinkLyricsEvent(raw);assert.equal(result.kind,'found');assert.equal(result.lyrics.synced,true);assert.deepEqual(result.lyrics.lines[0],raw.lyrics.lines[0]);result.lyrics.lines[0].words[0].text='changed';assert.equal(raw.lyrics.lines[0].words[0].text,'text');});
+test('unsynced and legacy lyrics never acquire an inferred sync flag',()=>{for(const synced of [false,undefined]){const result=readNodeLinkLyricsEvent(event('LyricsFoundEvent',{lyrics:{synced,text:'text',lines:[line()]}}));assert.equal(result.lyrics.synced,synced);}});
+test('overlapping line indices preserve simultaneous vocals, absent indices remain absent',()=>{const result=readNodeLinkLyricsEvent(event('LyricsLineEvent',{lineIndex:2,line:line(),skipped:false,activeLineIndices:[1,2,2]}));assert.deepEqual(result.activeLineIndices,[1,2]);assert.equal(result.skipped,false);assert.equal(readNodeLinkLyricsEvent(event('LyricsLineEvent',{lineIndex:2,line:line()})).activeLineIndices,undefined);});
+test('rejects malformed timing, guilds, and indexes',()=>{assert.equal(readNodeLinkLyricsEvent(event('LyricsLineEvent',{lineIndex:2,line:{...line(),timestamp:-1}})),undefined);assert.equal(readNodeLinkLyricsEvent(event('LyricsLineEvent',{lineIndex:2,line:line(),activeLineIndices:[-1]})),undefined);assert.equal(readNodeLinkLyricsEvent(event('LyricsNotFoundEvent',{guildId:'bad'})),undefined);assert.deepEqual(readNodeLinkLyricsEvent(event('LyricsNotFoundEvent')),{guildId,kind:'notFound'});});

@@ -1,3 +1,5 @@
+export { readNodeLinkLyricsEvent } from './src/backends/NodeLinkLyricsEvents';
+export type { NodeLinkLyricWord, NodeLinkLyricAnnotation, NodeLinkPlaybackLyricLine, NodeLinkLyricsObservation } from './src/backends/NodeLinkLyricsEvents';
 export type { NodeLinkMediaLookup, NodeLinkMediaLookupResult, NodeLinkMediaRecording, NodeLinkMediaCredit } from './src/backends/NodeLinkMediaLookup';
 export { readNodeLinkPlayerTelemetry } from './src/backends/NodeLinkPlayerTelemetry';
 export type { NodeLinkPlayerTelemetry, NodeLinkVisualizationSnapshot, NodeLinkMusicAnalysisSnapshot, NodeLinkAudioProcessingSnapshot } from './src/backends/NodeLinkPlayerTelemetry';

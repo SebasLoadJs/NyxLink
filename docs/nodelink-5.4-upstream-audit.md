@@ -5,7 +5,7 @@ The 5.3.0 GitHub release and its RC tags are historical and immutable. Proposed 
 | NodeLink upstream proposal | SDK status at this revision |
 | --- | --- |
 | #265 rich media | Optional, detached typed `Track.getNodeLinkMediaMetadata()` and standalone reader implemented; explicit external `/v4/loadmedia` lookup added with identity validation and no provider outage circuit penalty |
-| #266 advanced lyrics | Existing raw response/events preserve payload; optional provider annotations and timing types added; event typing and runtime validation pending |
+| #266 advanced lyrics | Existing raw response/events preserve payload; optional provider annotations and timing types added; validated, detached playback event reader implemented; raw event payloads remain unchanged |
 | #267 visualization | Optional server player JSON snapshot contract reviewed; validated SDK reader implemented |
 | #268 analysis | Optional processed-output snapshot contract reviewed; validated SDK reader implemented |
 | #269 Protected processing | Existing normalizer boolean does not establish new server options/telemetry; validated resource telemetry reader implemented; server configuration remains server-owned |

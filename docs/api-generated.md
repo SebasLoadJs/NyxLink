@@ -3143,6 +3143,65 @@ export declare const nodeLinkDiscoveryTypes: readonly [
 ];
 ```
 
+## NodeLinkLyricAnnotation
+
+[Source declaration](../src/backends/NodeLinkLyricsEvents.ts)
+
+```ts
+export interface NodeLinkLyricAnnotation {
+    kind?: 'lyric' | 'instrumental';
+    section?: string;
+    agent?: string;
+    isBackground?: boolean;
+    alternatives?: Array<{
+        kind: 'translation' | 'romanization';
+        text: string;
+        language?: string;
+    }>;
+}
+```
+
+## NodeLinkLyricsObservation
+
+[Source declaration](../src/backends/NodeLinkLyricsEvents.ts)
+
+```ts
+export type NodeLinkLyricsObservation = {
+    guildId: string;
+    kind: 'notFound';
+} | {
+    guildId: string;
+    kind: 'found';
+    lyrics: {
+        sourceName?: string;
+        provider?: string;
+        synced?: boolean;
+        text: string;
+        lines: NodeLinkPlaybackLyricLine[];
+    };
+} | {
+    guildId: string;
+    kind: 'line';
+    lineIndex: number;
+    line: NodeLinkPlaybackLyricLine;
+    skipped?: boolean;
+    activeLineIndices?: number[];
+};
+```
+
+## NodeLinkLyricWord
+
+[Source declaration](../src/backends/NodeLinkLyricsEvents.ts)
+
+```ts
+export interface NodeLinkLyricWord {
+    text: string;
+    timestamp?: number;
+    time?: number;
+    duration?: number;
+}
+```
+
 ## NodeLinkMediaArtist
 
 [Source declaration](../src/backends/NodeLinkMediaMetadata.ts)
@@ -3354,6 +3413,20 @@ export interface NodeLinkMusicAnalysisSnapshot {
 }
 ```
 
+## NodeLinkPlaybackLyricLine
+
+[Source declaration](../src/backends/NodeLinkLyricsEvents.ts)
+
+```ts
+export interface NodeLinkPlaybackLyricLine {
+    timestamp: number;
+    duration: number;
+    line: string;
+    words: NodeLinkLyricWord[];
+    plugin: NodeLinkLyricAnnotation;
+}
+```
+
 ## NodeLinkPlayerTelemetry
 
 [Source declaration](../src/backends/NodeLinkPlayerTelemetry.ts)
@@ -3394,8 +3467,14 @@ export interface NodeLinkVisualizationSnapshot {
     capturedAt: number;
     outputFrame: number;
     sampleRate: number;
-    rms: [number, number];
-    peak: [number, number];
+    rms: [
+        number,
+        number
+    ];
+    peak: [
+        number,
+        number
+    ];
     waveform: number[];
     spectrum: Array<{
         hz: number;
@@ -4080,6 +4159,14 @@ export declare function readLavaSrcPlaylistMetadata(value: unknown): LavaSrcPlay
 
 ```ts
 export declare function readLavaSrcTrackMetadata(value: unknown): LavaSrcTrackMetadata | undefined;
+```
+
+## readNodeLinkLyricsEvent
+
+[Source declaration](../src/backends/NodeLinkLyricsEvents.ts)
+
+```ts
+export declare function readNodeLinkLyricsEvent(value: unknown): NodeLinkLyricsObservation | undefined;
 ```
 
 ## readNodeLinkMediaMetadata
