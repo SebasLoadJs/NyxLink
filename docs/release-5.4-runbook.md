@@ -11,3 +11,7 @@ Current source line: 5.4.0-dev.1 on dev. Historical 5.3 tags and npm channels re
 7. Once stable gates pass, use a fresh 5.4.0 commit, immutable v5.4.0 tag, matching GitHub release and npm latest. Never move existing release tags or republish a used npm version.
 
 See [upstream scope audit](nodelink-5.4-upstream-audit.md). No publication is performed by this document.
+
+## Clean distribution artifact
+
+After the full development gates pass on the exact candidate, use `pnpm run pack:release`. The output under `.runtime/distribution/` is the only intended npm publication artifact; it contains the SDK, public Aurora entry points, README assets and required license/notice, without development scripts or devDependency metadata. `test:package` installs this same staging format in an isolated consumer. Do not publish directly from the development checkout. Publication remains an authorized external step; historical registry versions are immutable.

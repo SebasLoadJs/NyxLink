@@ -9,6 +9,7 @@ const manifest = require('../package.json');
 const baseline = require('../tests/fixtures/public-exports.json');
 const { validateReleaseManifest } = require('./release-policy.cjs');
 const { packageManagerCommand } = require('./package-manager-command.cjs');
+const { packDistribution } = require('./pack-distribution.cjs');
 const fromRegistry = process.argv.includes('--registry');
 assert.ok(process.argv.slice(2).every(argument => argument === '--registry'), 'Usage: node scripts/test-package.cjs [--registry]');
 
@@ -31,8 +32,7 @@ async function main() {
   let archive;
   try {
     if (!fromRegistry) {
-      const packed = run('npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', directory], root);
-      const [description] = JSON.parse(packed.stdout);
+      const description = packDistribution(directory);
       archive = path.join(directory, description.filename);
       assert.equal(path.dirname(archive), directory);
     }
@@ -56,6 +56,14 @@ async function main() {
     assert.equal(actual.name, manifest.name); assert.equal(actual.version, manifest.version); assert.equal(actual.private, manifest.private);
     assert.deepEqual(actual.publishConfig, manifest.publishConfig);
     assert.deepEqual(actual.dependencies, manifest.dependencies);
+    if (!fromRegistry) {
+      assert.equal(actual.scripts, undefined, 'Distribution must not contain development scripts');
+      assert.equal(actual.devDependencies, undefined, 'Distribution must not contain development dependency metadata');
+      assert.equal(actual.packageManager, undefined);
+      for (const forbidden of ['tests','scripts','.env.live-voice.example','.github','.runtime']) {
+        await assert.rejects(fs.access(path.join(installed,forbidden)), { code: 'ENOENT' });
+      }
+    }
     assert.equal(actual.peerDependencies, undefined, 'Core consumers must not inherit optional Aurora tooling constraints');
     assert.equal(actual.peerDependenciesMeta, undefined);
     const license = await fs.readFile(path.join(installed, 'LICENSE'));

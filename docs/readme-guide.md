@@ -1,9 +1,9 @@
 <p align="center">
-  <img src="assets/nyxlink_banner.png" alt="NyxLink — Audio infrastructure for Discord" width="100%">
+  <img src="../assets/nyxlink_banner.png" alt="NyxLink — Audio infrastructure for Discord" width="100%">
 </p>
 
 <h1 align="center">NyxLink · Complete SDK guide</h1>
-<p align="center"><a href="README.md">Return to project overview</a></p>
+<p align="center"><a href="../README.md">Return to project overview</a></p>
 
 <p align="center"><strong>One client. Two audio engines. A single control plane.</strong></p>
 <p align="center">A TypeScript SDK for building Discord music experiences with Lavalink v4 and NodeLink.</p>
@@ -18,12 +18,12 @@
   <a href="https://nodejs.org"><img alt="Node.js 22.12+" src="https://img.shields.io/badge/Node.js-22.12%2B-111827?style=flat-square&amp;logo=node.js&amp;logoColor=83cd29"></a>
   <a href="https://www.typescriptlang.org"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-Typed%20SDK-111827?style=flat-square&amp;logo=typescript&amp;logoColor=60a5fa"></a>
   <a href="https://discord.js.org"><img alt="Discord.js" src="https://img.shields.io/badge/Discord.js-v14-111827?style=flat-square&amp;logo=discord&amp;logoColor=a5b4fc"></a>
-  <a href="LICENSE"><img alt="OSL-3.0" src="https://img.shields.io/badge/License-OSL--3.0-111827?style=flat-square&amp;color=a78bfa"></a>
+  <a href="../LICENSE"><img alt="OSL-3.0" src="https://img.shields.io/badge/License-OSL--3.0-111827?style=flat-square&amp;color=a78bfa"></a>
   <a href="https://github.com/SebasLoadJs/NyxLink/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/SebasLoadJs/NyxLink?style=flat-square&amp;color=fbbf24"></a>
 </p>
 
-<p align="center"><a href="#installation">Installation</a> · <a href="#quick-start">Quick start</a> · <a href="#architecture">Architecture</a> · <a href="#aurora">Aurora</a> · <a href="#git-history">Git history</a> · <a href="#documentation">Docs</a> · <a href="README.es.md">Español</a></p>
-<p align="center"><img src="assets/nyxlink-wave.svg" alt="Animated audio waveform: one client, two backends" width="600"></p>
+<p align="center"><a href="#installation">Installation</a> · <a href="#quick-start">Quick start</a> · <a href="#architecture">Architecture</a> · <a href="#aurora">Aurora</a> · <a href="#git-history">Git history</a> · <a href="#documentation">Docs</a> · <a href="readme-es.md">Español</a></p>
+<p align="center"><img src="../assets/nyxlink-wave.svg" alt="Animated audio waveform: one client, two backends" width="600"></p>
 
 ---
 
@@ -44,7 +44,7 @@ NyxLink is a typed client for external audio servers, not an audio encoder or a 
 
 ## Architecture
 
-<p align="center"><img src="assets/nyxlink-architecture.svg" alt="Discord application connects to NyxLink, which uses REST and WebSocket with Lavalink and NodeLink; Redis and Aurora are optional" width="100%"></p>
+<p align="center"><img src="../assets/nyxlink-architecture.svg" alt="Discord application connects to NyxLink, which uses REST and WebSocket with Lavalink and NodeLink; Redis and Aurora are optional" width="100%"></p>
 
 - **Application:** owns commands, permissions, Discord interaction and UI.
 - **NyxLink:** owns SDK control, routing, protocol validation and lifecycle.
@@ -168,7 +168,7 @@ Search accepts text or URLs. Queue an entire playlist with `player.queue.add(res
 | Repeat / autoplay | `player.setLoop('track')` / `player.setAutoPlay(true)` |
 | Migration / cleanup | `await player.transferNode(identifier)` / `await player.destroy()` |
 
-Playback acknowledgement is not proof that audio was heard in Discord. See the [API guide](docs/api-reference.md) for lifecycle, return values and error handling.
+Playback acknowledgement is not proof that audio was heard in Discord. See the [API guide](../docs/api-reference.md) for lifecycle, return values and error handling.
 
 ## Backend compatibility
 
@@ -182,7 +182,7 @@ Playback acknowledgement is not proof that audio was heard in Discord. See the [
 | Crossfade, mixer, streams, groups | Not assumed | Capability-dependent |
 | Failover &amp; recovery | SDK orchestration | SDK orchestration |
 
-The exact server revision, installed plugins and enabled sources determine availability. NyxLink does not pretend an unsupported operation exists. See [backend compatibility](docs/backend-compatibility.md), [Lavalink](docs/lavalink.md) and [NodeLink](docs/nodelink.md).
+The exact server revision, installed plugins and enabled sources determine availability. NyxLink does not pretend an unsupported operation exists. See [backend compatibility](../docs/backend-compatibility.md), [Lavalink](../docs/lavalink.md) and [NodeLink](../docs/nodelink.md).
 
 ### 5.4 · experimental media contracts
 
@@ -217,15 +217,15 @@ manager.on('lyricsLine', (_player, payload) => {
 | [#269 Protected processing](https://github.com/PerformanC/NodeLink/pull/269) | Optional resource telemetry |
 | [#270 AutoMix safety](https://github.com/PerformanC/NodeLink/pull/270) | Server-side changes; client/live acceptance still pending |
 
-See the [upstream integration audit](docs/nodelink-5.4-upstream-audit.md). The above proposals are not a claim of official upstream release or provider availability.
+See the [upstream integration audit](../docs/nodelink-5.4-upstream-audit.md). The above proposals are not a claim of official upstream release or provider availability.
 
 ## Aurora
 
-<p align="center"><img src="assets/nyxlink-aurora.svg" alt="Aurora architecture illustration: Pino events, Consola, inspector and telemetry outputs" width="100%"></p>
+<p align="center"><img src="../assets/nyxlink-aurora.svg" alt="Aurora architecture illustration: Pino events, Consola, inspector and telemetry outputs" width="100%"></p>
 
 A single structured event pipeline, with optional presentation and observability tools. The core does not require React or an interactive terminal.
 
-Install the optional dependencies for your selected profile using the [Aurora installation guide](docs/aurora-installation.md).
+Install the optional dependencies for your selected profile using the [Aurora installation guide](../docs/aurora-installation.md).
 
 ```ts
 import { Manager } from 'nyxlink';
@@ -268,7 +268,7 @@ This demo uses simulated events; it does not measure live audio.
 
 ## Git history
 
-<p align="center"><img src="assets/nyxlink-history.svg" alt="NyxLink development timeline from inherited Git history to 5.3 stable and 5.4 development" width="100%"></p>
+<p align="center"><img src="../assets/nyxlink-history.svg" alt="NyxLink development timeline from inherited Git history to 5.3 stable and 5.4 development" width="100%"></p>
 
 | Milestone | Recorded history |
 | --- | --- |
@@ -279,7 +279,7 @@ This demo uses simulated events; it does not measure live audio.
 | 25 Nov 2026 | [v5.3.0](https://github.com/SebasLoadJs/NyxLink/releases/tag/v5.3.0) stable release |
 | 26 Nov 2026 | [PR #53](https://github.com/SebasLoadJs/NyxLink/pull/53) reconciles 5.3 into development; [5.4 development begins](https://github.com/SebasLoadJs/NyxLink/commit/e41d7db500f32d40b322ca92ffd3c9b3c5cf22a9) |
 
-<p align="center"><a href="https://github.com/SebasLoadJs/NyxLink/commits/dev">Commit history</a> · <a href="https://github.com/SebasLoadJs/NyxLink/network">Network graph</a> · <a href="https://github.com/SebasLoadJs/NyxLink/graphs/contributors">Contributors</a> · <a href="https://github.com/SebasLoadJs/NyxLink/compare/v5.3.0...dev">Compare stable → dev</a> · <a href="CHANGELOG.md">Changelog</a></p>
+<p align="center"><a href="https://github.com/SebasLoadJs/NyxLink/commits/dev">Commit history</a> · <a href="https://github.com/SebasLoadJs/NyxLink/network">Network graph</a> · <a href="https://github.com/SebasLoadJs/NyxLink/graphs/contributors">Contributors</a> · <a href="https://github.com/SebasLoadJs/NyxLink/compare/v5.3.0...dev">Compare stable → dev</a> · <a href="../CHANGELOG.md">Changelog</a></p>
 
 Historical tags are preserved. Inherited tags are not evidence that NyxLink published equivalent npm packages.
 
@@ -287,15 +287,15 @@ Historical tags are preserved. Inherited tags are not evidence that NyxLink publ
 
 | Area | Reference |
 | --- | --- |
-| SDK | [API guide](docs/api-reference.md) · [Generated declarations](docs/api-generated.md) |
-| Examples | [JavaScript](examples/discordjs.cjs) · [TypeScript](examples/discordjs.ts) |
-| Routing | [Node selection](docs/node-selection.md) · [Backend compatibility](docs/backend-compatibility.md) |
-| Playback extensions | [Mixer](docs/mixer.md) · [Extension lifecycle](docs/extensions.md) |
-| Infrastructure | [Redis](docs/redis-storage.md) · [Private metrics](docs/private-metrics.md) |
-| Observability | [Aurora](docs/aurora-installation.md) · [Logging](docs/logging-guide.md) · [OpenTelemetry](docs/aurora-observability.md) |
-| Migration | [From Moonlink](docs/migrating-from-moonlink.md) |
-| Español | [Complete Spanish guide](README.es.md) |
-| Releases | [5.4 release gates](docs/release-5.4-runbook.md) · [Changelog](CHANGELOG.md) |
+| SDK | [API guide](../docs/api-reference.md) · [Generated declarations](../docs/api-generated.md) |
+| Examples | [JavaScript](../examples/discordjs.cjs) · [TypeScript](../examples/discordjs.ts) |
+| Routing | [Node selection](../docs/node-selection.md) · [Backend compatibility](../docs/backend-compatibility.md) |
+| Playback extensions | [Mixer](../docs/mixer.md) · [Extension lifecycle](../docs/extensions.md) |
+| Infrastructure | [Redis](../docs/redis-storage.md) · [Private metrics](../docs/private-metrics.md) |
+| Observability | [Aurora](../docs/aurora-installation.md) · [Logging](../docs/logging-guide.md) · [OpenTelemetry](../docs/aurora-observability.md) |
+| Migration | [From Moonlink](../docs/migrating-from-moonlink.md) |
+| Español | [Complete Spanish guide](readme-es.md) |
+| Releases | [5.4 release gates](../docs/release-5.4-runbook.md) · [Changelog](../CHANGELOG.md) |
 
 ## Development & quality
 
@@ -310,13 +310,13 @@ pnpm run test:package
 pnpm run pack:check
 ```
 
-Integration tests need Linux and Docker or Podman. Check [GitHub Actions](https://github.com/SebasLoadJs/NyxLink/actions?query=branch%3Adev) for exact commit results, and [live acceptance](docs/pending-real-world-acceptance.md) for real-world evidence. A passing fixture test does not establish live playback.
+Integration tests need Linux and Docker or Podman. Check [GitHub Actions](https://github.com/SebasLoadJs/NyxLink/actions?query=branch%3Adev) for exact commit results, and [live acceptance](../docs/pending-real-world-acceptance.md) for real-world evidence. A passing fixture test does not establish live playback.
 
 ## License & credits
 
-Maintained by [SebasLoadJs](https://github.com/SebasLoadJs). Licensed under [OSL-3.0](LICENSE).
+Maintained by [SebasLoadJs](https://github.com/SebasLoadJs). Licensed under [OSL-3.0](../LICENSE).
 
-Derived from [Moonlink.js](https://github.com/Ecliptia/moonlink.js) by 1Lucas1apk and its contributors. See [NOTICE.md](NOTICE.md) for attribution and modifications.
+Derived from [Moonlink.js](https://github.com/Ecliptia/moonlink.js) by 1Lucas1apk and its contributors. See [NOTICE.md](../NOTICE.md) for attribution and modifications.
 
-<p align="center"><img src="assets/nyxlink-wave.svg" alt="NyxLink animated waveform" width="440"></p>
+<p align="center"><img src="../assets/nyxlink-wave.svg" alt="NyxLink animated waveform" width="440"></p>
 <p align="center"><a href="https://github.com/SebasLoadJs/NyxLink/issues">Issues</a> · <a href="https://github.com/SebasLoadJs/NyxLink/releases">Releases</a> · <a href="https://www.npmjs.com/package/nyxlink">npm</a></p>

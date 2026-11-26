@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">NyxLink</h1>
-<p align="center"><a href="README.md">English · Main README</a></p>
+<p align="center"><a href="../README.md">English · Main README</a></p>
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/SebasLoadJs/NyxLink/dev/assets/nyxlink-wave.svg" alt="NyxLink · Audio client for Discord" width="600">
@@ -18,8 +18,8 @@
   <a href="https://www.npmjs.com/package/nyxlink"><img src="https://img.shields.io/npm/v/nyxlink?style=flat-square&amp;color=818cf8&amp;label=npm" alt="Versión publicada en npm"></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-%3E%3D22.12.0-43853d?style=flat-square" alt="Node.js 22.12 o superior"></a>
   <a href="https://github.com/SebasLoadJs/NyxLink/actions/workflows/pr.yml"><img src="https://github.com/SebasLoadJs/NyxLink/actions/workflows/pr.yml/badge.svg?branch=dev" alt="Estado de CI"></a>
-  <a href="docs/api-generated.md"><img src="https://img.shields.io/badge/TypeScript-types%20included-3178c6?style=flat-square" alt="Declaraciones TypeScript incluidas"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-OSL--3.0-a78bfa?style=flat-square" alt="Licencia OSL-3.0"></a>
+  <a href="../docs/api-generated.md"><img src="https://img.shields.io/badge/TypeScript-types%20included-3178c6?style=flat-square" alt="Declaraciones TypeScript incluidas"></a>
+  <a href="../LICENSE"><img src="https://img.shields.io/badge/license-OSL--3.0-a78bfa?style=flat-square" alt="Licencia OSL-3.0"></a>
 </p>
 
 <p align="center">
@@ -77,7 +77,7 @@ Consulta las [versiones publicadas en npm](https://www.npmjs.com/package/nyxlink
 
 ### Desarrollo de 5.4
 
-La línea 5.4 incorpora contratos opcionales de metadata multimedia, consultas MusicBrainz/Fanart.tv, visualización y análisis musical, telemetría de procesamiento de audio y eventos de letras avanzados. Son compatibles con las propuestas de NodeLink en revisión; no presuponen soporte en nodos antiguos. Consulta el [estado de integración](docs/nodelink-5.4-upstream-audit.md).
+La línea 5.4 incorpora contratos opcionales de metadata multimedia, consultas MusicBrainz/Fanart.tv, visualización y análisis musical, telemetría de procesamiento de audio y eventos de letras avanzados. Son compatibles con las propuestas de NodeLink en revisión; no presuponen soporte en nodos antiguos. Consulta el [estado de integración](../docs/nodelink-5.4-upstream-audit.md).
 
 <a name="inicio-rapido"></a>
 
@@ -183,7 +183,7 @@ const collection = result.getLavaSrcMetadata();
 
 Los metadatos dependen del proveedor y pueden estar ausentes. Para buscar en un nodo concreto, pasa su identificador en `node`. Las fuentes internacionales adicionales de NodeLink incluyen Amazon Music (`azsearch`), Last.fm (`lfsearch`), Shazam (`shsearch`) y Songlink (`slsearch`). Last.fm y Shazam aportan descubrimiento; Songlink resuelve enlaces, no es un catálogo de audio independiente.
 
-Para los contratos nativos de descubrimiento `node.loadSearch()` (LavaSearch) y `node.loadNodeLinkSearch()` (NodeLink), consulta las [guías de backends](docs/backend-compatibility.md).
+Para los contratos nativos de descubrimiento `node.loadSearch()` (LavaSearch) y `node.loadNodeLinkSearch()` (NodeLink), consulta las [guías de backends](../docs/backend-compatibility.md).
 
 | Control | API |
 | --- | --- |
@@ -243,7 +243,7 @@ const player = manager.players.create({
 });
 ```
 
-La selección respeta los requisitos de backend, capacidades y región. Las preferencias de audio nativas incompatibles se conservan en memoria y se omiten durante la restauración. El evento `playerNodeFailover` informa las funciones suspendidas y el resultado de la reconstrucción opcional del Mixer. Las migraciones conservan el reproductor de origen hasta confirmar el destino; los fallos desencadenan rollback y limpieza. Las capacidades opcionales pueden devolver `FeatureUnavailableError`. Consulta [selección de nodos](docs/node-selection.md) y [compatibilidad de backends](docs/backend-compatibility.md).
+La selección respeta los requisitos de backend, capacidades y región. Las preferencias de audio nativas incompatibles se conservan en memoria y se omiten durante la restauración. El evento `playerNodeFailover` informa las funciones suspendidas y el resultado de la reconstrucción opcional del Mixer. Las migraciones conservan el reproductor de origen hasta confirmar el destino; los fallos desencadenan rollback y limpieza. Las capacidades opcionales pueden devolver `FeatureUnavailableError`. Consulta [selección de nodos](../docs/node-selection.md) y [compatibilidad de backends](../docs/backend-compatibility.md).
 
 <a name="aurora"></a>
 
@@ -251,7 +251,7 @@ La selección respeta los requisitos de backend, capacidades y región. Las pref
 
 Aurora es el sistema de logging y observabilidad integrado. El núcleo es silencioso por defecto y no impone versiones de React ni de las herramientas visuales a la aplicación anfitriona. Pino procesa los eventos canónicos; Consola y las herramientas de terminal presentan esos eventos sin introducir un segundo motor de logging.
 
-Instala las dependencias opcionales del perfil que utilizarás desde [Aurora installation](docs/aurora-installation.md).
+Instala las dependencias opcionales del perfil que utilizarás desde [Aurora installation](../docs/aurora-installation.md).
 
 ```ts
 import { Manager } from 'nyxlink';
@@ -310,7 +310,7 @@ La demostración usa eventos simulados. La API de logging acepta `options.loggin
 | `sponsorBlockEvent` | Observación normalizada de segmentos o capítulos. |
 | `playerDestroy` | Reproductor destruido. |
 
-Todos los eventos y argumentos se definen en [IManagerEvents](src/typings/Interfaces.ts) y en la [referencia de API generada](docs/api-generated.md).
+Todos los eventos y argumentos se definen en [IManagerEvents](../src/typings/Interfaces.ts) y en la [referencia de API generada](../docs/api-generated.md).
 
 <a name="documentacion"></a>
 
@@ -318,15 +318,15 @@ Todos los eventos y argumentos se definen en [IManagerEvents](src/typings/Interf
 
 | Guía | Contenido |
 | --- | --- |
-| [API](docs/api-reference.md) · [Tipos y exports](docs/api-generated.md) | Contratos públicos, lifecycle y declaraciones. |
-| [JavaScript](examples/discordjs.cjs) · [TypeScript](examples/discordjs.ts) | Integraciones con Discord.js. |
-| [Backends](docs/backend-compatibility.md) · [Nodos](docs/node-selection.md) | Compatibilidad, capacidades y recuperación. |
-| [NodeLink](docs/nodelink.md) · [Lavalink](docs/lavalink.md) | APIs específicas, streaming y plugins. |
-| [Mixer](docs/mixer.md) · [Extensiones](docs/extensions.md) | Funciones opcionales y contratos tipados. |
-| [Redis](docs/redis-storage.md) · [Métricas](docs/private-metrics.md) | Persistencia, control distribuido y observabilidad. |
-| [Aurora](docs/aurora-installation.md) · [Logging](docs/logging-guide.md) · [OpenTelemetry](docs/aurora-observability.md) | Instalación y runtime de diagnóstico. |
-| [Migración desde Moonlink](docs/migrating-from-moonlink.md) | Cambios de API y comportamiento. |
-| [Changelog](CHANGELOG.md) | Historial de cambios. |
+| [API](../docs/api-reference.md) · [Tipos y exports](../docs/api-generated.md) | Contratos públicos, lifecycle y declaraciones. |
+| [JavaScript](../examples/discordjs.cjs) · [TypeScript](../examples/discordjs.ts) | Integraciones con Discord.js. |
+| [Backends](../docs/backend-compatibility.md) · [Nodos](../docs/node-selection.md) | Compatibilidad, capacidades y recuperación. |
+| [NodeLink](../docs/nodelink.md) · [Lavalink](../docs/lavalink.md) | APIs específicas, streaming y plugins. |
+| [Mixer](../docs/mixer.md) · [Extensiones](../docs/extensions.md) | Funciones opcionales y contratos tipados. |
+| [Redis](../docs/redis-storage.md) · [Métricas](../docs/private-metrics.md) | Persistencia, control distribuido y observabilidad. |
+| [Aurora](../docs/aurora-installation.md) · [Logging](../docs/logging-guide.md) · [OpenTelemetry](../docs/aurora-observability.md) | Instalación y runtime de diagnóstico. |
+| [Migración desde Moonlink](../docs/migrating-from-moonlink.md) | Cambios de API y comportamiento. |
+| [Changelog](../CHANGELOG.md) | Historial de cambios. |
 
 ## 🛠️ Desarrollo
 
@@ -341,13 +341,13 @@ pnpm run test:package
 pnpm run pack:check
 ```
 
-Los tests de integración de backends y plugins requieren Linux y Docker o Podman. Consulta los [resultados de CI de dev](https://github.com/SebasLoadJs/NyxLink/actions?query=branch%3Adev), la [matriz de compatibilidad](docs/backend-compatibility.md) y la [aceptación de audio real](docs/pending-real-world-acceptance.md). Los contratos implementados en desarrollo no implican que todos los proveedores estén operativos ni que las nuevas funciones estén publicadas en npm.
+Los tests de integración de backends y plugins requieren Linux y Docker o Podman. Consulta los [resultados de CI de dev](https://github.com/SebasLoadJs/NyxLink/actions?query=branch%3Adev), la [matriz de compatibilidad](../docs/backend-compatibility.md) y la [aceptación de audio real](../docs/pending-real-world-acceptance.md). Los contratos implementados en desarrollo no implican que todos los proveedores estén operativos ni que las nuevas funciones estén publicadas en npm.
 
 ## 📄 Licencia
 
-Mantenido por [SebasLoadJs](https://github.com/SebasLoadJs), bajo la licencia [OSL-3.0](LICENSE).
+Mantenido por [SebasLoadJs](https://github.com/SebasLoadJs), bajo la licencia [OSL-3.0](../LICENSE).
 
-Derivado de [Moonlink.js](https://github.com/Ecliptia/moonlink.js), de 1Lucas1apk y sus colaboradores. Las atribuciones y modificaciones se conservan en [NOTICE.md](NOTICE.md).
+Derivado de [Moonlink.js](https://github.com/Ecliptia/moonlink.js), de 1Lucas1apk y sus colaboradores. Las atribuciones y modificaciones se conservan en [NOTICE.md](../NOTICE.md).
 
 <p align="center">
   <a href="https://github.com/SebasLoadJs/NyxLink/issues">Issues</a> ·

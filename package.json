@@ -37,7 +37,8 @@
     "test:live": "node scripts/test-live-suite.cjs",
     "test:soak": "node scripts/test-soak.cjs",
     "fixtures:live": "node scripts/create-live-fixtures.cjs",
-    "docs:api": "pnpm run build && node scripts/generate-api-reference.cjs"
+    "docs:api": "pnpm run build && node scripts/generate-api-reference.cjs",
+    "pack:release": "pnpm run build && node scripts/pack-distribution.cjs"
   },
   "homepage": "https://github.com/SebasLoadJs/NyxLink#readme",
   "bugs": {
@@ -111,7 +112,16 @@
     "examples/aurora-*.mjs",
     "examples/aurora-*.d.mts",
     "examples/aurora-sdk.cjs",
-    "examples/aurora-sdk.d.cts"
+    "examples/aurora-sdk.d.cts",
+    "assets/nyxlink-wave.svg",
+    "assets/nyxlink-architecture.svg",
+    "assets/nyxlink-aurora.svg",
+    "assets/nyxlink-git-log.svg",
+    "assets/nyxlink-verification.svg",
+    "assets/readme/nyx-hello.svg",
+    "assets/readme/nyx-think.svg",
+    "assets/readme/nyx-ready.svg",
+    "assets/readme/nyx-media.svg"
   ],
   "dependencies": {
     "consola": "3.4.2",

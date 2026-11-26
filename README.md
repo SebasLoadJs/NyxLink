@@ -23,7 +23,7 @@
   <a href="#two-engines-one-client">Backends</a> ·
   <a href="#meet-aurora">Aurora</a> ·
   <a href="#git-history">History</a> ·
-  <a href="README.es.md">Español</a>
+  <a href="docs/readme-es.md">Español</a>
 </p>
 
 <p align="center"><img src="assets/nyxlink-wave.svg" width="600" alt="Animated waveform"></p>
