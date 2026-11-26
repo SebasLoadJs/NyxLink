@@ -20,3 +20,5 @@ A read-only registry inventory workflow was added to obtain npm versions and dis
 ## Pinned proposal interoperability matrix
 
 The `NodeLink proposal compatibility` workflow independently compiles each of the six exact fork commits and tests the actual module output against NyxLink readers or the upstream AutoMix safety helpers using synthetic data/PCM. This does not copy or redistribute NodeLink modules. No provider credentials, Discord token, combined upstream build, server network route or audible transition are exercised. Results must be checked in Actions; creating the workflow is not evidence of a pass.
+
+The six independent proposal jobs succeeded on 37fa0793d7f567cef97a0897091635082c3c943d ([CI evidence](https://github.com/SebasLoadJs/NyxLink/actions/runs/45907683272)). The scope remains synthetic module interoperability, not live server/voice acceptance.
