@@ -2641,7 +2641,7 @@ export interface LavalinkYoutubeOAuthToken {
 export interface LavalinkYoutubeStream {
     stream: NodeJS.ReadableStream;
     statusCode: number;
-    headers: import("node:http").IncomingHttpHeaders;
+    headers: import('node:http').IncomingHttpHeaders;
 }
 ```
 
