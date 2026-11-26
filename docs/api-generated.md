@@ -4024,6 +4024,7 @@ export declare class Rest {
     loadChapters(encodedTrack: string): Promise<NodeLinkResponse<IChapter[]> | null>;
     loadMeaning(encodedTrack: string, lang?: string): Promise<NodeLinkResponse<IMeaningResponse | Record<string, any>> | null>;
     getConnectionStatus(): Promise<NodeLinkResponse<INodeConnectionStatus> | null>;
+    getLavalinkMetrics(names?: readonly string[]): Promise<string | null>;
     getMetrics(): Promise<string | null>;
     getWorkers(): Promise<NodeLinkResponse<any[]> | null>;
     patchWorker(payload: Record<string, any>): Promise<any | null>;
