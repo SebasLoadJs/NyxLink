@@ -323,20 +323,18 @@ Todos los eventos y argumentos se definen en [IManagerEvents](src/typings/Interf
 | [Migración desde Moonlink](docs/migrating-from-moonlink.md) | Cambios de API y comportamiento. |
 | [Changelog](CHANGELOG.md) | Historial de cambios. |
 
-## 🛠️ Desarrollo
+## Desarrollo y validación
+
+Esta rama contiene la distribución fuente estable de NyxLink 5.3. El laboratorio de pruebas, scripts de integración, herramientas de publicación y configuración de aceptación de voz se mantienen en [dev](https://github.com/SebasLoadJs/NyxLink/tree/dev). Los tags publicados conservan su contenido original.
 
 ```sh
-git clone https://github.com/SebasLoadJs/NyxLink.git
-cd NyxLink
 corepack pnpm install --frozen-lockfile
 pnpm run build
-pnpm test
-pnpm run test:types
-pnpm run test:package
-pnpm run pack:check
+pnpm run typecheck:strict
+npm pack --dry-run --ignore-scripts
 ```
 
-Los tests de integración de backends y plugins requieren Linux y Docker o Podman. Consulta los [resultados de CI de dev](https://github.com/SebasLoadJs/NyxLink/actions?query=branch%3Adev), la [matriz de compatibilidad](docs/backend-compatibility.md) y la [aceptación de audio real](docs/pending-real-world-acceptance.md). Los contratos implementados en desarrollo no implican que todos los proveedores estén operativos ni que exista una versión estable publicada.
+Consulta [CI de desarrollo](https://github.com/SebasLoadJs/NyxLink/actions?query=branch%3Adev) y el [registro de aceptación externa](https://github.com/SebasLoadJs/NyxLink/blob/dev/docs/pending-real-world-acceptance.md).
 
 ## 📄 Licencia
 

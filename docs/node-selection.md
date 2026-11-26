@@ -22,7 +22,7 @@ Eligibility, exclusion, circuit/draining checks, health filtering, readiness, re
 
 The caller supplies the preference on each call. There is no global sticky node, retained player reference, polling timer or automatic migration. A disconnected node never survives because of hysteresis. Source-health ranking already incorporates observed provider status/circuit state; node circuit breakers remain hard eligibility gates. This API does not invent server worker statistics or promise regional latency from configured region names.
 
-See [pending acceptance](pending-real-world-acceptance.md) for load/region and audible migration exercises.
+See [pending acceptance](https://github.com/SebasLoadJs/NyxLink/blob/dev/docs/pending-real-world-acceptance.md) for load/region and audible migration exercises.
 
 
 ### Native audio recovery

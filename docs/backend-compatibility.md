@@ -11,7 +11,7 @@ At NyxLink `770053d892939650cd0e44f5603ed8af49727409`, [validation](https://gith
 | NodeLink modern 97bbce1 | Common protocol, Source Health, groups CRUD, SponsorBlock, crossfade control, lyrics/captions request contracts and direct PCM | Actual synchronization, crossfade/AutoMix, audible skipping, populated providers |
 | LavaLyrics 1.1.0 / SponsorBlock 3.0.1 | Pinned plugin detection and enabled/disabled HTTP/WS contracts | Provider permissions/content/rate limits and actual audio effects |
 
-NodeLink seek patch acceptance is tracked separately; it does not certify unpatched images. [Operator acceptance](pending-real-world-acceptance.md) remains pending. The sections below retain historical observations rather than claiming all versions behave identically.
+NodeLink seek patch acceptance is tracked separately; it does not certify unpatched images. [Operator acceptance](https://github.com/SebasLoadJs/NyxLink/blob/dev/docs/pending-real-world-acceptance.md) remains pending. The sections below retain historical observations rather than claiming all versions behave identically.
 
 ## Development contracts (not release certification)
 

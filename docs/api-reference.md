@@ -77,7 +77,7 @@ Playback intent, player registration identity and node/session/transport ownersh
 | VoiceReceiver | Optional NodeLink receiver; explicit application consent, lifecycle and privacy required |
 | YouTubeLiveChat | `node.createYouTubeLiveChat(...)`; separate bounded optional connection lifecycle |
 
-See [NodeLink](nodelink.md), [Lavalink plugins](lavalink.md), [compatibility evidence](backend-compatibility.md) and [real voice acceptance](live-voice-verification.md). No automatic Native Voice, FFmpeg, internal audio backend or client-side source extraction was added.
+See [NodeLink](nodelink.md), [Lavalink plugins](lavalink.md), [compatibility evidence](backend-compatibility.md) and [real voice acceptance](https://github.com/SebasLoadJs/NyxLink/blob/dev/docs/live-voice-verification.md). No automatic Native Voice, FFmpeg, internal audio backend or client-side source extraction was added.
 
 ## Persistence and distributed applications
 

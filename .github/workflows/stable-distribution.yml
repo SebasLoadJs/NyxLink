@@ -1,0 +1,34 @@
+name: Stable source distribution
+on:
+  push:
+    branches: [v5.3]
+  pull_request:
+    branches: [v5.3]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  distribution:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck:strict
+      - run: pnpm run build
+      - name: Validate source distribution and npm allowlist
+        shell: bash
+        run: |
+          test ! -e tests
+          test ! -e scripts
+          test ! -e .env.live-voice.example
+          npm pack --dry-run --ignore-scripts --json > "$RUNNER_TEMP/nyxlink-pack.json"
+          node -e 'const assert=require("node:assert/strict");const [p]=require(process.env.RUNNER_TEMP+"/nyxlink-pack.json");const files=p.files.map(f=>f.path);for(const f of files){assert.match(f,/^(dist\/|assets\/nyxlink_banner\.png$|package\.json$|README\.md$|LICENSE$|NOTICE\.md$|examples\/aurora-[\w-]+\.(?:mjs|d\.mts|cjs|d\.cts)$)/);assert.doesNotMatch(f,/(^|\/)(?:tests?|scripts?|\.env[^/]*|node_modules|\.runtime)(?:\/|$)|\.(?:log|tgz)$/i);}for(const f of ["dist/index.js","dist/index.d.ts","LICENSE","NOTICE.md","README.md","package.json"])assert.ok(files.includes(f),f);console.log("Clean npm inventory:",files.length,"files");'
+      - run: pnpm audit --prod --audit-level=high
