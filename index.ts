@@ -153,3 +153,6 @@ export { AuroraEvents, auroraCatalog, createAuroraPinoEngine, normalizeAuroraEve
 export type { AuroraEvent, AuroraEventCode, AuroraCategory, AuroraLevel, AuroraOutcome, AuroraContext, AuroraPinoTarget, AuroraEventOptions } from './src/logging/AuroraEvents';
 export { OpenTelemetry } from './src/observability/OpenTelemetry';
 export type { OpenTelemetryOptions, TelemetryMeter, TelemetryTracer, TelemetrySpan, TelemetryOperation, TelemetryOutcome, TelemetryObservation, TelemetryGauge } from './src/observability/OpenTelemetry';
+
+export { BackendPluginRouteRegistry } from './src/backends/BackendPluginRoutes';
+export type { BackendPluginMethod, BackendPluginRoute, BackendPluginRequest } from './src/backends/BackendPluginRoutes';

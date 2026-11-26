@@ -1,3 +1,4 @@
+import type { BackendPluginRoute, BackendPluginRequest } from '../backends/BackendPluginRoutes';
 import { mediaLookupQuery, validateMediaLookup, type NodeLinkMediaLookup, type NodeLinkMediaLookupResult } from '../backends/NodeLinkMediaLookup';
 import { sessionPath, playerPath } from '../backends/SessionPath';
 import { nodeLinkDiscoveryIdentifier, type NodeLinkDiscoveryOptions } from '../backends/NodeLinkSearchContracts';
@@ -167,6 +168,54 @@ export class Rest {
             throw new FeatureUnavailableError(feature, backend?.kind ?? 'unknown', error.statusCode);
         }
         throw error;
+    }
+
+    /** Invoke an explicitly registered, advertised plugin endpoint on this node. */
+    public async callPlugin<T>(route: BackendPluginRoute<T>, options: BackendPluginRequest = {}): Promise<T> {
+        const manager = this.node.manager;
+        const registry = manager.pluginRoutes;
+        if (!registry.owns(route)) throw new TypeError('Unregistered backend plugin route');
+        const backend = this.node.backend;
+        const session = this.node.sessionId;
+        const socket = this.node.socket;
+        const feature = 'custom-plugin:' + route.plugin + ':' + route.id;
+        if (manager.destroyed || this.node.destroyed || backend?.kind !== route.backend || !backend.getPlugin(route.plugin) ||
+            backend.featureStatus(feature) === 'unavailable') throw new FeatureUnavailableError(feature, backend?.kind ?? 'unknown');
+        const current = () => !manager.destroyed && !this.node.destroyed && registry.owns(route) &&
+            this.node.backend === backend && this.node.sessionId === session && this.node.socket === socket;
+        const path = route.scope === 'player' ? playerPath(session, options.guildId) + '/' + route.path : '/v4/' + route.path;
+        if (route.scope === 'node' && options.guildId !== undefined) throw new TypeError('Node-scoped plugin route does not accept a guild ID');
+        const timeout = options.timeoutMs ?? 10000;
+        if (!Number.isSafeInteger(timeout) || timeout < 1 || timeout > 60000) throw new TypeError('Invalid plugin request timeout');
+        if (options.query !== undefined && !(options.query instanceof URLSearchParams)) throw new TypeError('Invalid plugin query');
+        const query = options.query?.toString() ?? '';
+        if (query.length > 16384) throw new TypeError('Plugin query too large');
+        let body: string | undefined;
+        if (options.body !== undefined) {
+            if (route.method === 'GET' || !options.body || typeof options.body !== 'object' || Array.isArray(options.body)) throw new TypeError('Invalid plugin request body');
+            body = JSON.stringify(options.body);
+            if (typeof body !== 'string' || Buffer.byteLength(body) > 262144) throw new TypeError('Plugin request body too large');
+        }
+        options.signal?.throwIfAborted();
+        if (route.scope === 'player' && route.method !== 'GET') await manager.guildOwnership?.assertCurrent(options.guildId!);
+        if (!current()) throw new Error('Plugin request context changed');
+        let response: unknown;
+        try {
+            response = await this.request<unknown>(this.url + path + (query ? '?' + query : ''), {
+                method: route.method, headers: body === undefined ? this.authHeaders : this.jsonHeaders,
+                ...(body === undefined ? {} : { body }), signal: options.signal,
+                allowedOrigins: [new URL(this.url).origin], throwOnError: true, noContentAsNull: true,
+            }, timeout, 0, 1000, 0);
+        } catch (error) {
+            this.featureError(feature, error, backend, current);
+        }
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('Plugin request context changed');
+        if (response === undefined) throw new ProtocolResponseError('backend plugin', 'response');
+        const decoded = route.decode(response);
+        if (!current()) throw new Error('Plugin request context changed');
+        backend.recordFeature(feature, 'available');
+        return decoded;
     }
 
     /** Low-level session group API: does not synchronize NyxLink's local queues or player commands. */

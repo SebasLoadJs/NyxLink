@@ -676,6 +676,58 @@ export type BackendPlugin = Readonly<{
 }>;
 ```
 
+## BackendPluginMethod
+
+[Source declaration](../src/backends/BackendPluginRoutes.ts)
+
+```ts
+export type BackendPluginMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+```
+
+## BackendPluginRequest
+
+[Source declaration](../src/backends/BackendPluginRoutes.ts)
+
+```ts
+export interface BackendPluginRequest {
+    guildId?: string;
+    query?: URLSearchParams;
+    body?: Record<string, unknown>;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+}
+```
+
+## BackendPluginRoute
+
+[Source declaration](../src/backends/BackendPluginRoutes.ts)
+
+```ts
+export interface BackendPluginRoute<T> {
+    readonly backend: BackendKind;
+    readonly plugin: string;
+    readonly id: string;
+    readonly scope: 'node' | 'player';
+    readonly method: BackendPluginMethod;
+    readonly path: string;
+    readonly decode: (response: unknown) => T;
+}
+```
+
+## BackendPluginRouteRegistry
+
+[Source declaration](../src/backends/BackendPluginRoutes.ts)
+
+```ts
+export declare class BackendPluginRouteRegistry {
+    register<T>(definition: BackendPluginRoute<T>): BackendPluginRoute<T>;
+    owns(route: BackendPluginRoute<unknown>): boolean;
+    remove(route: BackendPluginRoute<unknown>): boolean;
+    list(): Omit<BackendPluginRoute<unknown>, 'decode'>[];
+    close(): void;
+}
+```
+
 ## BootstrapOptions
 
 [Source declaration](../src/logging/AuroraBootstrap.ts)
@@ -2739,6 +2791,7 @@ export declare class Manager extends EventEmitter<IManagerEvents> {
     send: (guildId: string, payload: any) => void;
     clientId: string;
     readonly nodes: NodeManager;
+    readonly pluginRoutes: BackendPluginRouteRegistry;
     readonly players: PlayerManager;
     guildOwnership?: GuildOwnership;
     get database(): DatabaseManager;
@@ -4364,6 +4417,7 @@ export interface RedisStorageOptions {
 export declare class Rest {
     constructor(node: Node);
     get url(): string;
+    callPlugin<T>(route: BackendPluginRoute<T>, options?: BackendPluginRequest): Promise<T>;
     getGroups(): Promise<PlayerGroup[]>;
     getGroup(groupId: string): Promise<PlayerGroup>;
     createGroup(options: GroupCreate): Promise<PlayerGroup>;

@@ -27,3 +27,7 @@ Synchronous/async hook failures are caught and reported through `extensionError(
 Removal, setup failure, timeout and manager shutdown abort the signal and detach all host-managed listeners. Setup defaults to a 10-second deadline and cleanup to 1 second; `ExtensionOptions` allows 1..60000 ms for either. An extension must honor the signal and release its own resources: the host cannot sandbox code, interrupt synchronous work or forcibly cancel an arbitrary Promise. Late async results are fenced out of host-managed hooks.
 
 Manager shutdown attempts cleanup for all registered extensions and still attempts the remaining manager resources when an extension fails. Lifecycle errors are returned to callers; they are not falsely reported as successful cleanup. Tests cover failed/late setup, duplicate identity, observer isolation, error-recursion prevention, timeout, removal and shutdown.
+
+## Server plugin endpoints
+
+For custom REST endpoints advertised by a Lavalink or NodeLink plugin, see [custom backend plugins](custom-backend-plugins.md). This is distinct from the in-process NyxExtension lifecycle.

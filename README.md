@@ -410,6 +410,10 @@ if (player.node.backend?.supports('lavadspx')) {
 
 Plugin names, installed versions and provider configuration determine availability. Read [Lavalink support](docs/lavalink.md) for SponsorBlock, LavaLyrics, LavaSrc metadata and filter semantics.
 
+### Your own server plugins (5.4 development)
+
+Register a fixed, typed REST contract in `manager.pluginRoutes`, then call it with `node.rest.callPlugin`. This works with explicitly advertised server plugins on Lavalink and NodeLink. See [custom backend plugins](docs/custom-backend-plugins.md) and the [API coverage inventory](docs/backend-api-coverage.md).
+
 ## When a node goes away
 
 Playback state and backend-specific capabilities are different things. A destination might support ordinary playback while not supporting the current source's mixer, filters or native transitions.
