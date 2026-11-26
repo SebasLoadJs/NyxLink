@@ -1,3 +1,5 @@
+export { readNodeLinkMediaMetadata } from './src/backends/NodeLinkMediaMetadata';
+export type { NodeLinkMediaMetadata, NodeLinkMediaImage, NodeLinkMediaArtist } from './src/backends/NodeLinkMediaMetadata';
 export { readSponsorBlockEvent } from './src/backends/SponsorBlockEvents';
 export type { SponsorBlockObservation, SponsorSegment, SponsorChapter } from './src/backends/SponsorBlockEvents';
 export type { LavaDSPXFilters, LavaDSPXKey, LavaDSPXPassFilter, LavaDSPXEchoFilter, LavaDSPXNormalizationFilter } from './src/backends/LavaDSPXContracts';

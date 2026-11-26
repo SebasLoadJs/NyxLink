@@ -3097,6 +3097,97 @@ export declare const nodeLinkDiscoveryTypes: readonly [
 ];
 ```
 
+## NodeLinkMediaArtist
+
+[Source declaration](../src/backends/NodeLinkMediaMetadata.ts)
+
+```ts
+export interface NodeLinkMediaArtist {
+    name: string;
+    id?: string;
+    url?: string;
+    artwork?: NodeLinkMediaImage[];
+    banners?: NodeLinkMediaImage[];
+    biography?: {
+        text: string;
+        source?: string;
+        summary?: string;
+    };
+}
+```
+
+## NodeLinkMediaImage
+
+[Source declaration](../src/backends/NodeLinkMediaMetadata.ts)
+
+```ts
+export interface NodeLinkMediaImage {
+    url: string;
+    width?: number;
+    height?: number;
+}
+```
+
+## NodeLinkMediaMetadata
+
+[Source declaration](../src/backends/NodeLinkMediaMetadata.ts)
+
+```ts
+export interface NodeLinkMediaMetadata {
+    provider: string;
+    artists: NodeLinkMediaArtist[];
+    album?: {
+        name?: string;
+        id?: string;
+        artwork?: NodeLinkMediaImage[];
+        url?: string;
+        releaseDate?: string;
+        copyright?: string;
+        label?: string;
+        type?: string;
+        trackCount?: number;
+        discCount?: number;
+    };
+    artwork?: NodeLinkMediaImage[];
+    canvas?: {
+        url: string;
+        id?: string;
+        uri?: string;
+        fileId?: string;
+        type?: string;
+    };
+    motionArtwork?: {
+        url: string;
+        scope?: 'track' | 'album';
+        variants?: Array<NodeLinkMediaImage & {
+            aspectRatio: '1:1' | '3:4' | '9:16';
+        }>;
+    };
+    identifiers?: {
+        isrc?: string;
+        upc?: string;
+        ean?: string;
+    };
+    credits?: Array<{
+        name: string;
+        role: string;
+    }>;
+    colors?: {
+        dark?: string;
+        light?: string;
+        raw?: string;
+        palette?: Record<string, unknown>;
+    };
+    catalog?: Record<string, unknown>;
+    channel?: {
+        name?: string;
+        id?: string;
+        artwork?: NodeLinkMediaImage[];
+        banners?: NodeLinkMediaImage[];
+    };
+}
+```
+
 ## NodeLinkPlayerUpdate
 
 [Source declaration](../src/backends/ProtocolContracts.ts)
@@ -3792,6 +3883,14 @@ export declare function readLavaSrcPlaylistMetadata(value: unknown): LavaSrcPlay
 
 ```ts
 export declare function readLavaSrcTrackMetadata(value: unknown): LavaSrcTrackMetadata | undefined;
+```
+
+## readNodeLinkMediaMetadata
+
+[Source declaration](../src/backends/NodeLinkMediaMetadata.ts)
+
+```ts
+export declare function readNodeLinkMediaMetadata(pluginInfo: unknown): NodeLinkMediaMetadata | undefined;
 ```
 
 ## readSponsorBlockEvent
@@ -4636,6 +4735,7 @@ export declare class Track {
     constructor(data: ITrack | Record<string, any>, requester?: any, origin?: string, partialTrackOptions?: readonly TPartialTrackProperties[]);
     getHoloMetadata(): HoloTrackMetadata | undefined;
     getLavaSrcMetadata(): LavaSrcTrackMetadata | undefined;
+    getNodeLinkMediaMetadata(): NodeLinkMediaMetadata | undefined;
     isPartialTrack(): boolean;
     get thumbnail(): string | null;
     setRequester(requester: any): this;

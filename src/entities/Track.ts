@@ -1,3 +1,4 @@
+import { readNodeLinkMediaMetadata, type NodeLinkMediaMetadata } from '../backends/NodeLinkMediaMetadata';
 import { readLavaSrcTrackMetadata, type LavaSrcTrackMetadata } from '../backends/LavaSrcMetadata';
 import { readHoloTrackMetadata, type HoloTrackMetadata } from '../backends/HoloTrackMetadata';
 import { ITrack, ITrackInfo } from "../typings/Interfaces";
@@ -131,6 +132,11 @@ export class Track {
     /** Optional LavaSrc-compatible provider metadata, not a playback guarantee. */
     public getLavaSrcMetadata(): LavaSrcTrackMetadata | undefined {
         return readLavaSrcTrackMetadata(this.pluginInfo);
+    }
+
+    /** Optional rich media supplied by a compatible NodeLink server. */
+    public getNodeLinkMediaMetadata(): NodeLinkMediaMetadata | undefined {
+        return readNodeLinkMediaMetadata(this.pluginInfo);
     }
 
     public isPartialTrack(): boolean {
