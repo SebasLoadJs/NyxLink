@@ -61,6 +61,11 @@ async function verify(context) {
     // SponsorBlock 3.0.1 stores no guild entry until PUT. In that
     // revision GET before PUT and GET after DELETE explicitly return 404
     // "Guild not found", not an empty JSON array.
+    stage = 'LYRICS_SUBSCRIPTIONS';
+    await assert.rejects(node.rest.getCurrentLavaLyrics(guildId), error => error?.statusCode === 404);
+    await node.rest.subscribeLavaLyrics(guildId, { skipTrackSource: true });
+    await node.rest.unsubscribeLavaLyrics(guildId);
+    checks.push('real LavaLyrics current-track no-track 404 and subscribe/unsubscribe 204 without Discord');
     stage = 'SPONSORBLOCK_GET';
     await assert.rejects(node.getLavalinkSponsorBlockCategories(guildId),
       error => error?.statusCode === 404);

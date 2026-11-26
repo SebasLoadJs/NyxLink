@@ -2584,6 +2584,80 @@ export declare const lavalinkSponsorBlockCategories: readonly [
 export type LavalinkSponsorBlockCategory = typeof lavalinkSponsorBlockCategories[number];
 ```
 
+## LavalinkYoutubeAdminOptions
+
+[Source declaration](../src/backends/LavalinkYoutubeContracts.ts)
+
+```ts
+export interface LavalinkYoutubeAdminOptions {
+    allowSensitive: true;
+    allowLoopbackHttp?: boolean;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+}
+```
+
+## LavalinkYoutubeConfig
+
+[Source declaration](../src/backends/LavalinkYoutubeContracts.ts)
+
+```ts
+export interface LavalinkYoutubeConfig {
+    refreshToken: string | null;
+}
+```
+
+## LavalinkYoutubeConfigUpdate
+
+[Source declaration](../src/backends/LavalinkYoutubeContracts.ts)
+
+```ts
+export interface LavalinkYoutubeConfigUpdate {
+    refreshToken?: string | null;
+    skipInitialization?: boolean;
+    poToken?: string | null;
+    visitorData?: string | null;
+}
+```
+
+## LavalinkYoutubeOAuthToken
+
+[Source declaration](../src/backends/LavalinkYoutubeContracts.ts)
+
+```ts
+export interface LavalinkYoutubeOAuthToken {
+    access_token: string;
+    expires_in: number;
+    scope: string;
+    token_type: string;
+}
+```
+
+## LavalinkYoutubeStream
+
+[Source declaration](../src/backends/LavalinkYoutubeContracts.ts)
+
+```ts
+export interface LavalinkYoutubeStream {
+    stream: NodeJS.ReadableStream;
+    statusCode: number;
+    headers: import("node:http").IncomingHttpHeaders;
+}
+```
+
+## LavalinkYoutubeStreamOptions
+
+[Source declaration](../src/backends/LavalinkYoutubeContracts.ts)
+
+```ts
+export interface LavalinkYoutubeStreamOptions {
+    itag?: number;
+    withClient?: string;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+}
+```
+
 ## LavaLyricsData
 
 [Source declaration](../src/backends/LavaLyricsContracts.ts)
@@ -4477,6 +4551,10 @@ export declare class Rest {
     getMetrics(): Promise<string | null>;
     getWorkers(): Promise<NodeLinkResponse<any[]> | null>;
     patchWorker(payload: Record<string, any>): Promise<any | null>;
+    getLavalinkYoutubeConfig(options: LavalinkYoutubeAdminOptions): Promise<LavalinkYoutubeConfig>;
+    updateLavalinkYoutubeConfig(payload: LavalinkYoutubeConfigUpdate, options: LavalinkYoutubeAdminOptions): Promise<void>;
+    exchangeLavalinkYoutubeOAuth(refreshToken: string, options: LavalinkYoutubeAdminOptions): Promise<LavalinkYoutubeOAuthToken>;
+    loadLavalinkYoutubeStream(videoId: string, options?: LavalinkYoutubeStreamOptions): Promise<LavalinkYoutubeStream>;
     getYoutubeConfig(validate?: boolean): Promise<any | null>;
     updateYoutubeConfig(payload: {
         refreshToken?: string;

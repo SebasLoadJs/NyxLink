@@ -1,3 +1,4 @@
+import { assertYoutubeAdmin, youtubeTimeout, youtubeConfig, youtubeConfigBody, youtubeOAuthPath, youtubeOAuthToken, youtubeStreamPath, type LavalinkYoutubeAdminOptions, type LavalinkYoutubeConfig, type LavalinkYoutubeConfigUpdate, type LavalinkYoutubeOAuthToken, type LavalinkYoutubeStreamOptions, type LavalinkYoutubeStream } from '../backends/LavalinkYoutubeContracts';
 import type { BackendPluginRoute, BackendPluginRequest } from '../backends/BackendPluginRoutes';
 import { mediaLookupQuery, validateMediaLookup, type NodeLinkMediaLookup, type NodeLinkMediaLookupResult } from '../backends/NodeLinkMediaLookup';
 import { sessionPath, playerPath } from '../backends/SessionPath';
@@ -829,6 +830,81 @@ export class Rest {
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
+    private youtubePluginContext(feature: string) {
+        const backend = this.node.backend, socket = this.node.socket, session = this.node.sessionId;
+        if (this.node.destroyed || this.node.manager.destroyed || backend?.kind !== 'lavalink' ||
+            !backend.getPlugin('youtube-plugin') || backend.featureStatus(feature) === 'unavailable') {
+            throw new FeatureUnavailableError(feature, backend?.kind ?? 'unknown');
+        }
+        const current = () => !this.node.destroyed && !this.node.manager.destroyed &&
+            this.node.backend === backend && this.node.socket === socket && this.node.sessionId === session;
+        return { backend, current };
+    }
+
+    private async youtubeAdminRequest<T>(feature: string, path: string, method: 'GET' | 'POST',
+        options: LavalinkYoutubeAdminOptions, decode: (value: unknown) => T, body?: LavalinkYoutubeConfigUpdate): Promise<T> {
+        assertYoutubeAdmin(this.url, options);
+        const { backend, current } = this.youtubePluginContext(feature);
+        let raw: unknown;
+        try {
+            raw = await this.request<unknown>(this.url + path, {
+                method, headers: body === undefined ? this.authHeaders : this.jsonHeaders,
+                ...(body === undefined ? {} : { body }), signal: options.signal,
+                allowedOrigins: [new URL(this.url).origin], throwOnError: true, noContentAsNull: true,
+            }, youtubeTimeout(options.timeoutMs), 0, 1000, 0);
+        } catch (error) {
+            // Remote error bodies and native error causes can echo OAuth tokens.
+            // Keep the status only; never expose the request URL or remote text.
+            if (error instanceof HttpError) this.featureError(feature, new HttpError(error.statusCode), backend, current);
+            throw new Error('YouTube plugin administrative request failed');
+        }
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('YouTube plugin session changed');
+        const result = decode(raw);
+        backend.recordFeature(feature, 'available');
+        return result;
+    }
+
+    public getLavalinkYoutubeConfig(options: LavalinkYoutubeAdminOptions): Promise<LavalinkYoutubeConfig> {
+        return this.youtubeAdminRequest('lavalink:youtube:config:get', '/youtube', 'GET', options, youtubeConfig);
+    }
+
+    public async updateLavalinkYoutubeConfig(payload: LavalinkYoutubeConfigUpdate, options: LavalinkYoutubeAdminOptions): Promise<void> {
+        const body = youtubeConfigBody(payload);
+        await this.youtubeAdminRequest('lavalink:youtube:config:update', '/youtube', 'POST', options, value => {
+            if (value !== null) throw new ProtocolResponseError('YouTube plugin', 'configuration acknowledgement');
+        }, body);
+    }
+
+    public exchangeLavalinkYoutubeOAuth(refreshToken: string, options: LavalinkYoutubeAdminOptions): Promise<LavalinkYoutubeOAuthToken> {
+        return this.youtubeAdminRequest('lavalink:youtube:oauth', youtubeOAuthPath(refreshToken), 'GET', options, youtubeOAuthToken);
+    }
+
+    /** Return original audio/video bytes; not decoded PCM and not a seek API. */
+    public async loadLavalinkYoutubeStream(videoId: string, options: LavalinkYoutubeStreamOptions = {}): Promise<LavalinkYoutubeStream> {
+        const feature = 'lavalink:youtube:stream';
+        const path = youtubeStreamPath(videoId, options);
+        const timeout = youtubeTimeout(options.timeoutMs);
+        options.signal?.throwIfAborted();
+        const { backend, current } = this.youtubePluginContext(feature);
+        try {
+            const response = await this.streamRequest(this.url + path, {
+                method: 'GET', headers: this.authHeaders, signal: options.signal,
+            }, timeout);
+            const media = response.headers['content-type'];
+            if (!current() || options.signal?.aborted) {
+                response.stream.destroy();
+                throw new Error('YouTube stream session changed');
+            }
+            if (response.statusCode !== 200 || typeof media !== 'string' || !/^(?:audio|video)\//i.test(media)) {
+                response.stream.destroy();
+                throw new ProtocolResponseError('YouTube plugin', 'stream content type');
+            }
+            backend.recordFeature(feature, 'available');
+            return response;
+        } catch (error) { this.featureError(feature, error, backend, current); }
+    }
+
     public async getYoutubeConfig(validate: boolean = false): Promise<any | null> {
         this.node.assertFeature("youtube:config");
 

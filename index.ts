@@ -156,3 +156,5 @@ export type { OpenTelemetryOptions, TelemetryMeter, TelemetryTracer, TelemetrySp
 
 export { BackendPluginRouteRegistry } from './src/backends/BackendPluginRoutes';
 export type { BackendPluginMethod, BackendPluginRoute, BackendPluginRequest } from './src/backends/BackendPluginRoutes';
+
+export type { LavalinkYoutubeAdminOptions, LavalinkYoutubeConfig, LavalinkYoutubeConfigUpdate, LavalinkYoutubeOAuthToken, LavalinkYoutubeStream, LavalinkYoutubeStreamOptions } from './src/backends/LavalinkYoutubeContracts';

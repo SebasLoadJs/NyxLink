@@ -78,3 +78,11 @@ await node.rest.unsubscribeLavaLyrics(guildId);
 ```
 
 The player-specific GET uses `/track/lyrics`; POST and DELETE use `/lyrics/subscribe`. A current-track 204 means no lyrics, and subscription 204 means acknowledged—not that lyrics were found. Session/player 404 is preserved as an HTTP error. Operations are Lavalink-plugin-specific; they do not modify NodeLink subscription behavior. Live event and provider acceptance remain separate from the mocked route contract tests.
+
+## YouTube Source plugin REST (5.4 development)
+
+The official `youtube-plugin` advertises a separate, unversioned API. NyxLink implements `getLavalinkYoutubeConfig`, `updateLavalinkYoutubeConfig`, `exchangeLavalinkYoutubeOAuth` and `loadLavalinkYoutubeStream`. None use NodeLink's native YouTube routes.
+
+Administrative calls require `{ allowSensitive: true }` and HTTPS (explicit `allowLoopbackHttp: true` is permitted only for literal loopback). Returned credentials must never be logged. The upstream server itself can log tokens and carries the OAuth refresh token in the URL; restrict those routes to a private administrative connection and review server/proxy logging. NyxLink strips remote administrative error bodies and never automatically retries or follows redirects. The configuration update requires an explicit PO-token/visitor-data pair or two null values because the upstream implementation can clear those settings when they are omitted. Do not pass arbitrary user input or credentials to playback commands.
+
+`loadLavalinkYoutubeStream(videoId, { itag, withClient, signal })` returns original audio/video bytes (not PCM or a seek operation). Consume or destroy the stream; the server and provider determine whether a particular format is available. Contract source: [youtube-source e41dd95](https://github.com/lavalink-devs/youtube-source/blob/e41dd95f8bd134b51e75080fb28cc805fecb431a/plugin/src/main/java/dev/lavalink/youtube/plugin/YoutubeRestHandler.java). Real provider availability remains unverified.

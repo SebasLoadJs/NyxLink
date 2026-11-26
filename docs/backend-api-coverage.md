@@ -24,7 +24,7 @@ Audit inputs: [NodeLink source 86c6a00](https://github.com/PerformanC/NodeLink/t
 
 | Plugin in official directory | Current client surface | Remaining work |
 | --- | --- | --- |
-| YouTube source | Core load/search via advertised source | Verify dedicated configuration/OAuth endpoints against exact plugin |
+| YouTube source | Core load/search plus four explicit YouTube plugin REST operations | Pinned plugin runtime and live provider tests |
 | Google Cloud TTS | Source-based loading when advertised | Pinned runtime and credential-dependent tests |
 | SponsorBlock | Native category methods and normalized events | Live skip and chapter acceptance |
 | LavaSrc | Collection and track metadata views, core sources | Pin provider-specific metadata and live access |
@@ -43,11 +43,11 @@ Cloudflare Tunnel changes server deployment rather than playback protocol. The s
 ## Additional upstream source review
 
 - [LavaLyrics at 725185e](https://github.com/topi314/LavaLyrics/blob/725185e086a2bb26144c7df1c85a4f1fb82f41a0/plugin/src/main/java/com/github/topi314/lavalyrics/plugin/LavaLyricsPlugin.kt): current track GET and subscribe POST/DELETE now have separate client operations, explicit 204 semantics, guild fencing and independent capability observations. Fixture tests do not establish real lyrics delivery.
-- [YouTube plugin at e41dd95](https://github.com/lavalink-devs/youtube-source/blob/e41dd95f8bd134b51e75080fb28cc805fecb431a/plugin/src/main/java/dev/lavalink/youtube/plugin/YoutubeRestHandler.java): distinct unversioned `/youtube`, `/youtube/stream/{videoId}`, `/youtube/oauth/{refreshToken}` and POST `/youtube` routes. These must not be sent to NodeLink's `/v4/youtube/*` endpoints. OAuth secrets in path/server logs and stream transport need a separate implementation review.
+- [YouTube plugin at e41dd95](https://github.com/lavalink-devs/youtube-source/blob/e41dd95f8bd134b51e75080fb28cc805fecb431a/plugin/src/main/java/dev/lavalink/youtube/plugin/YoutubeRestHandler.java): distinct unversioned `/youtube`, `/youtube/stream/{videoId}`, `/youtube/oauth/{refreshToken}` and POST `/youtube` routes. These must not be sent to NodeLink's `/v4/youtube/*` endpoints. All four client operations implemented with independent capability keys. Administrative calls require explicit sensitive access and HTTPS (opt-in literal loopback HTTP for tests). Upstream logs may still contain secrets. Real provider/stream acceptance is not established.
 
 ## Priorities
 
-1. Verify the exact upstream route methods, input/output and optional endpoint behavior, especially YouTube plugin APIs.
+1. Verify the exact upstream route methods, input/output and optional endpoint behavior, especially NodeLink administrative and diagnostic APIs.
 2. Complete event schema and plugin version matrix; compare against stable public exports.
 3. Add pinned plugin runtime tests separately from simulated payload tests. Preserve no-credentials cases as untested, not passed.
 4. Keep privileged profiler/relay operations out of normal player control until the authorization and transport contract is reviewed.
