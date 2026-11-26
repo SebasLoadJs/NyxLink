@@ -662,6 +662,29 @@ export class Rest {
         return res ? normalizeNodeLinkResponse(res, "connection") : null;
     }
 
+    /**
+     * Lavalink Prometheus endpoint (default /metrics). This is an optional
+     * operational endpoint, distinct from NodeLink's /v4/metrics.
+     * The node operator must enable Prometheus in Lavalink.
+     */
+    public async getLavalinkMetrics(names: readonly string[] = []): Promise<string | null> {
+        if (this.node.backend?.kind !== 'lavalink') {
+            throw new FeatureUnavailableError('lavalink:metrics', this.node.backend?.kind ?? 'unknown');
+        }
+        if (!Array.isArray(names) || names.some(name => typeof name !== 'string' || !/^[a-zA-Z_:][a-zA-Z0-9_:]*$/.test(name))) {
+            throw new TypeError('Invalid Prometheus metric name');
+        }
+        const params = new URLSearchParams();
+        for (const name of names) params.append('name[]', name);
+        const query = params.toString();
+        const response = await this.request<unknown>(this.url + '/metrics' + (query ? '?' + query : ''), {
+            method: 'GET', headers: { ...this.authHeaders, Accept: 'text/plain' }, throwOnError: true
+        }, 10000, 0);
+        if (response == null) return null;
+        if (typeof response !== 'string') throw new TypeError('Invalid Prometheus metrics response');
+        return response;
+    }
+
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
     public async getMetrics(): Promise<string | null> {
         this.node.assertFeature("metrics");
