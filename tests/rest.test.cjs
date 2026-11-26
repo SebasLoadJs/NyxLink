@@ -94,3 +94,31 @@ test('a delayed player ownership check cannot send an update to a replacement se
     await rejected;
   } finally { manager.guildOwnership = oldOwnership; }
 });
+
+
+test('Lavalink metrics uses native endpoint and repeated metric filters', async t => {
+  const { node } = createPlayer(t);
+  node.rest.getInfoWithHeaders = async () => ({ data: { version: { semver: '4.2.2' }, sourceManagers: [], filters: [] }, headers: {} });
+  await node.open();
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    requests.push(req.url);
+    res.writeHead(200, { 'content-type': 'text/plain' });
+    res.end('jvm_memory_used_bytes 42\n');
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => server.close());
+  node.port = server.address().port;
+  node.secure = false;
+  const rest = new Rest(node);
+  assert.equal(await rest.getLavalinkMetrics(['jvm_memory_used_bytes', 'process_cpu_seconds_total']), 'jvm_memory_used_bytes 42\n');
+  const url = new URL(requests[0], 'http://localhost');
+  assert.equal(url.pathname, '/metrics');
+  assert.deepEqual(url.searchParams.getAll('name[]'), ['jvm_memory_used_bytes', 'process_cpu_seconds_total']);
+  await assert.rejects(rest.getLavalinkMetrics(['bad name']), TypeError);
+  assert.equal(requests.length, 1);
+  node.backend = undefined;
+  await assert.rejects(rest.getLavalinkMetrics());
+  assert.equal(requests.length, 1);
+});
