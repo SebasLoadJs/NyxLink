@@ -98,7 +98,7 @@ NyxLink does **not** decode audio, operate its own music catalogue or replace yo
 | Core player controls | Native | Native |
 | Extended discovery | LavaSearch + provider plugins | Native search modifiers |
 | Track metadata | LavaSrc plugin | Holo Tracks, native pluginInfo |
-| Lyrics | LavaLyrics plugin | Native lyrics and subscriptions |
+| Lyrics | LavaLyrics, Lyrics.kt and Java Timed Lyrics | Native lyrics and subscriptions |
 | DSP filters | Common filters + LavaDSPX | Common and native extended filters |
 | SponsorBlock | Plugin | Native extension |
 | Crossfade, AutoMix, audio layers | Not assumed | Native when supported |
@@ -339,6 +339,21 @@ const { stream, headers, statusCode } = await node.loadSourceStream(track, {
 
 Source passthrough and decoded PCM are different transports. An HTTP 200 response does not establish that a Range was honored. The known HTTP WAV seek incident is tracked in [the seek investigation](docs/nodelink-seek-incident.md).
 
+### Operational APIs (5.4 development)
+
+The typed REST surface also covers backend inventory, NodeLink connection diagnostics, native track encoding, stream metadata, HLS segments and authenticated metrics. Administrative worker termination, YouTube configuration and profiler commands require explicit authorization or confirmation, and sensitive calls require HTTPS unless literal-loopback HTTP is explicitly permitted for local tests.
+
+```ts
+const inventory = await node.rest.getBackendInfo();
+if (inventory.kind === 'nodelink') {
+  const connection = await node.rest.getNodeLinkConnectionSnapshot();
+  const formats = await node.rest.getStreamFormats(track.encoded);
+  console.log(connection.status, formats.formats.length);
+}
+```
+
+These methods do not perform audio processing in the SDK. Review the [NodeLink reference](docs/nodelink.md) and [generated public declarations](docs/api-generated.md) before enabling privileged operations.
+
 ### 5.4: building richer music experiences
 
 <p align="center"><img src="assets/readme/nyx-media.svg" width="100%" alt="Illustrative presentation of artwork, timed lyrics, waveform and audio telemetry"></p>
@@ -410,9 +425,71 @@ if (player.node.backend?.supports('lavadspx')) {
 
 Plugin names, installed versions and provider configuration determine availability. Read [Lavalink support](docs/lavalink.md) for SponsorBlock, LavaLyrics, LavaSrc metadata and filter semantics.
 
+### Lyrics providers are not interchangeable (5.4 development)
+
+| Installed plugin | Typed REST entry points |
+| --- | --- |
+| LavaLyrics | `getLavaLyrics`, `getCurrentLavaLyrics`, subscribe / unsubscribe |
+| Lyrics.kt | `getLyricsKt`, `getCurrentLyricsKt`, `searchLyricsKt` |
+| Java Timed Lyrics | `getJavaTimedLyrics`, `getCurrentJavaTimedLyrics`, `searchJavaTimedLyrics`, `searchJavaTimedLyricsGenius` |
+
+The last method requires a configured Genius provider. The Java LavaLyrics module is a provider for LavaLyrics, not the standalone Java REST plugin. These APIs validate their own advertised plugin and never automatically substitute another provider.
+
 ### Your own server plugins (5.4 development)
 
-Register a fixed, typed REST contract in `manager.pluginRoutes`, then call it with `node.rest.callPlugin`. This works with explicitly advertised server plugins on Lavalink and NodeLink. See [custom backend plugins](docs/custom-backend-plugins.md) and the [API coverage inventory](docs/backend-api-coverage.md).
+A custom plugin can declare routes, binary responses and event schemas without a NyxLink fork. This example assumes the node advertises a **hypothetical** plugin named `example` implementing the shown route and event:
+
+```ts
+const remove = await manager.useExtension({
+  name: 'profile-observer',
+  setup(context) {
+    const route = context.registerPluginRoute({
+      backend: 'lavalink',
+      plugin: 'example',
+      id: 'profile',
+      scope: 'node',
+      method: 'GET',
+      path: 'example/profile/:id',
+      decode(value: unknown) {
+        if (!value || typeof value !== 'object' ||
+            !('name' in value) || typeof value.name !== 'string') {
+          throw new TypeError('Invalid profile');
+        }
+        return value.name;
+      },
+    });
+
+    context.onPluginEvent({
+      backend: 'lavalink',
+      plugin: 'example',
+      type: 'ProfileChanged',
+      scope: 'node',
+      decode(value: unknown) {
+        if (!value || typeof value !== 'object' ||
+            !('profile' in value) || typeof value.profile !== 'string') {
+          throw new TypeError('Invalid profile event');
+        }
+        return value.profile;
+      },
+    }, async (profile, { node }) => {
+      console.log(await node.rest.callPlugin(route, {
+        params: { id: profile },
+      }));
+    });
+  },
+});
+
+// Removing the extension also removes its route and event registrations.
+await remove();
+```
+
+Player-scoped requests are fenced against migration and destruction. Binary responses must declare allowed media types and bounded sizes. For registration details and lifetime rules, see [custom backend plugins](docs/custom-backend-plugins.md).
+
+### Real plugin compatibility
+
+The runtime lab verifies official artifact digests, boots the pinned Lavalink image, detects plugin versions and loads a generated local audio fixture. The five initial plugin integrations passed; the expanded workflow adds XM and both Java Timed Lyrics variants. Provider searches, credentials and audible Discord playback are separate acceptance criteria.
+
+[Expanded plugin matrix](https://github.com/SebasLoadJs/NyxLink/actions/workflows/lavalink-plugin-matrix.yml) · [API coverage inventory](docs/backend-api-coverage.md).
 
 ## When a node goes away
 

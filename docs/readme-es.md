@@ -44,7 +44,7 @@ NyxLink es un cliente TypeScript para bots musicales de Discord que conecta **La
 | **Recuperación** | Reconexión, reanudación de sesiones, circuit breaker, drenado de nodos y control de concurrencia. |
 | **Búsqueda** | Resolución entre backends, descubrimiento de catálogo, fuentes configurables, timeout, cancelación, fallback y caché TTL/LRU. |
 | **NodeLink** | Contratos para letras, capítulos, mixer, crossfade, AutoMix, streaming y grupos, según capacidades del servidor. |
-| **Lavalink** | Protocolo v4, LavaSearch, LavaSrc, LavaLyrics, SponsorBlock y LavaDSPX según plugins instalados y capacidades. |
+| **Lavalink** | Protocolo v4, LavaSearch, LavaSrc, LavaLyrics, Lyrics.kt, Java Timed Lyrics, SponsorBlock y LavaDSPX según plugins instalados y capacidades. |
 | **Persistencia** | Memoria, almacenamiento local, Redis, snapshots versionados y control de propiedad de guilds. |
 | **Aurora** | Motor único Pino, presentación Consola, terminal interactiva, diagnósticos y OpenTelemetry opcional. |
 | **Desarrollo** | Tipos TypeScript, eventos, conectores, extensiones, API pública y métricas privadas. |
@@ -78,6 +78,8 @@ Consulta las [versiones publicadas en npm](https://www.npmjs.com/package/nyxlink
 ### Desarrollo de 5.4
 
 La línea 5.4 incorpora contratos opcionales de metadata multimedia, consultas MusicBrainz/Fanart.tv, visualización y análisis musical, telemetría de procesamiento de audio y eventos de letras avanzados. Son compatibles con las propuestas de NodeLink en revisión; no presuponen soporte en nodos antiguos. Consulta el [estado de integración](../docs/nodelink-5.4-upstream-audit.md).
+
+También incorpora diagnósticos, codificación, streaming y métricas nativas tipadas; operaciones administrativas con autorización explícita; y un registro de rutas, respuestas binarias y eventos personalizados vinculado al ciclo de vida de las extensiones. La [matriz de plugins reales](https://github.com/SebasLoadJs/NyxLink/actions/workflows/lavalink-plugin-matrix.yml) separa instalación/protocolo de disponibilidad real de proveedores y escucha en Discord. Consulta el [inventario de API](backend-api-coverage.md) y la [guía de plugins personalizados](custom-backend-plugins.md).
 
 <a name="inicio-rapido"></a>
 
