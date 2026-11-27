@@ -64,3 +64,11 @@ test('matrix isolates each verified plugin and disables credential-dependent pro
  assert.match(renderConfig(2333,password,matrixProfile('lavasrc')), /spotify: false/);
  assert.match(renderConfig(2333,password,matrixProfile('dunctebot')), /tumblr: false/);
 });
+
+test('XM and both Java Timed Lyrics variants use explicit independent profiles',()=>{
+ const {matrixProfile,trackerModule}=require('./helpers/lavalink-plugin-lab.cjs');
+ for(const id of ['xm','java-lyrics','java-lavalyrics'])validateProfile(matrixProfile(id));
+ assert.equal(matrixProfile('java-lyrics').plugins.length,1);
+ assert.deepEqual(matrixProfile('java-lavalyrics').plugins.map(p=>p.name),['lavalyrics-plugin','lavalyrics']);
+ const module=trackerModule();assert.equal(module.length,2172);assert.equal(module.toString('ascii',1080,1084),'M.K.');assert.equal(module.readUInt16BE(42),32);
+});

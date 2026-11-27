@@ -22,5 +22,30 @@
     "repository": "DuncteBot/skybot-lavalink-plugin",
     "sha256": "d53876857d29980aabeef64b1e7a0c0bcb4f49866b0b00761f7a5d68e1d4bd0d",
     "size": 843413
+  },
+  "xm": {
+    "name": "lava-xm-plugin",
+    "advertised": "lava-xm-plugin",
+    "version": "0.2.8",
+    "tag": "v0.2.8",
+    "repository": "esmBot/lava-xm-plugin",
+    "sha256": "05999770b3f7aecdd9264daa164c5402875e9cfbf8ae66e30f74b4d4abe21af2",
+    "size": 1544365
+  },
+  "java-lyrics": {
+    "name": "lyrics",
+    "advertised": "java-lyrics-plugin",
+    "version": "1.6.6",
+    "repository": "DuncteBot/java-timed-lyrics",
+    "sha256": "37f1a80966c630f63ac0ebfc620d99bb7267b3b92bc4185792859ddb4af1fcbc",
+    "size": 33777
+  },
+  "java-lavalyrics": {
+    "name": "lavalyrics",
+    "advertised": "java-lavalyrics",
+    "version": "1.6.6",
+    "repository": "DuncteBot/java-timed-lyrics",
+    "sha256": "4e81cd7870718062fb9252161bace9cf66508c7ed80481026d466cc6fc35a914",
+    "size": 2664189
   }
 }

@@ -15,16 +15,34 @@ const id=process.argv[2];
     const ready=event(manager,'nodeReady',20000);
     await manager.init('823456789012345678');
     const [node]=await ready;
-    const installed=context.versions[0];
-    const metadata=node.backend?.getPlugin(installed.name);
+    const installed=context.versions.at(-1);
     assert.equal(node.backend?.kind,'lavalink');
-    assert.equal(metadata?.version,installed.version);
     const info=await node.rest.getBackendInfo();
-    assert.ok(info.plugins.some(p=>p.name.toLowerCase()===installed.name.toLowerCase()&&p.version===installed.version));
+    for(const expected of context.versions){
+     const metadata=node.backend?.getPlugin(expected.name);
+     assert.equal(metadata?.version,expected.version);
+     assert.ok(info.plugins.some(p=>p.name.toLowerCase()===expected.name.toLowerCase()&&p.version===expected.version));
+    }
     const load=await node.rest.loadTracks(context.mediaUrl);
     assert.equal(load?.loadType,'track');
     assert.equal(typeof load.data?.encoded,'string');
-    return {passed:true,plugin:installed,jars:context.jars,image:context.image,checks:['advertised exact plugin version','typed info inventory','local generated WAV load'],providersConfigured:false,providerPlaybackVerified:false,discordVoice:false};
+    const checks=['advertised exact plugin version','typed info inventory','local generated WAV load'];
+    if(id==='xm'){
+     const tracker=await node.rest.loadTracks(context.moduleUrl);
+     assert.equal(tracker?.loadType,'track');
+     assert.equal(typeof tracker.data?.encoded,'string');
+     checks.push('generated ProTracker MOD recognized and encoded');
+    }
+    if(id==='java-lyrics'){
+     // A paused player without a track exercises the actual REST route
+     // without contacting YouTube or Genius.
+     const guild='923456789012345678';
+     await node.rest.updatePlayer(guild,{volume:0,paused:true});
+     try {await assert.rejects(node.rest.getCurrentJavaTimedLyrics(guild),e=>e.statusCode===400);}
+     finally {await node.rest.destroyPlayer(guild);}
+     checks.push('standalone Java Timed Lyrics current-track no-track response');
+    }
+    return {passed:true,plugin:installed,plugins:context.versions,jars:context.jars,image:context.image,checks,providersConfigured:false,providerPlaybackVerified:false,discordVoice:false};
    }finally{await manager.shutdown();}
   },profile);
   report={profile:id,...result};

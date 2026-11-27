@@ -15,7 +15,8 @@ const profile = pins.lavalinkPlugins;
 const matrix = require('../integration/lavalink-plugin-matrix.json');
 function matrixProfile(id) {
   assert.ok(Object.hasOwn(matrix,id),'Unknown plugin matrix profile');
-  return { image:pins.lavalink.image, plugins:[{...matrix[id]}], matrix:id };
+  const plugins = id === 'java-lavalyrics' ? [{...pins.lavalinkPlugins.plugins[0]},{...matrix[id]}] : [{...matrix[id]}];
+  return { image:pins.lavalink.image, plugins, matrix:id };
 }
 
 function validateProfile(value = profile) {
@@ -23,7 +24,7 @@ function validateProfile(value = profile) {
   assert.match(value.image, /^ghcr\.io\/lavalink-devs\/lavalink@sha256:[a-f0-9]{64}$/);
   if (value.matrix !== undefined) {
     assert.ok(Object.hasOwn(matrix,value.matrix),'Unknown matrix profile');
-    assert.deepEqual(value.plugins,[matrix[value.matrix]]);
+    assert.deepEqual(value.plugins,matrixProfile(value.matrix).plugins);
     return;
   }
   assert.equal(value.plugins.length, 2);
@@ -44,7 +45,7 @@ function renderConfig(port, password, value = profile) {
   validateProfile(value);
   assert.ok(Number.isInteger(port) && port > 0 && port <= 65535);
   assert.match(password, /^[a-f0-9]{48}$/);
-  const pluginConfig = value.matrix === 'youtube' ? ['  youtube:', '    enabled: true', '    clients: [WEB]', '    allowSearch: false'] : value.matrix === 'lavasrc' ? ['  lavasrc:', '    sources:', ...['spotify','applemusic','deezer','yandexmusic','flowerytts','youtube','vkmusic','tidal','qobuz','ytdlp','jiosaavn'].map(s=>'      '+s+': false'), '    lyrics-sources:', ...['spotify','deezer','youtube','yandexmusic','vkmusic','lrcLib'].map(s=>'      '+s+': false')] : value.matrix === 'dunctebot' ? ['  dunctebot:', '    sources:', ...['getyarn','clypit','tts','pornhub','reddit','ocremix','tiktok','mixcloud','soundgasm','pixeldrain','tumblr'].map(s=>'      '+s+': false')] : ['  lavalyrics:', '    sources: []'];
+  const pluginConfig = value.matrix === 'youtube' ? ['  youtube:', '    enabled: true', '    clients: [WEB]', '    allowSearch: false'] : value.matrix === 'lavasrc' ? ['  lavasrc:', '    sources:', ...['spotify','applemusic','deezer','yandexmusic','flowerytts','youtube','vkmusic','tidal','qobuz','ytdlp','jiosaavn'].map(s=>'      '+s+': false'), '    lyrics-sources:', ...['spotify','deezer','youtube','yandexmusic','vkmusic','lrcLib'].map(s=>'      '+s+': false')] : value.matrix === 'dunctebot' ? ['  dunctebot:', '    sources:', ...['getyarn','clypit','tts','pornhub','reddit','ocremix','tiktok','mixcloud','soundgasm','pixeldrain','tumblr'].map(s=>'      '+s+': false')] : value.matrix === 'xm' ? ['  xm:', '    ampFactor: 1'] : value.matrix === 'java-lyrics' || value.matrix === 'java-lavalyrics' ? ['  lyrics:', '    countryCode: US'] : ['  lavalyrics:', '    sources: []'];
   return [
     'server:', '  address: 127.0.0.1', '  port: ' + port,
     'lavalink:', '  pluginsDir: "/opt/Lavalink/plugins"',
@@ -71,6 +72,24 @@ function wav() {
   for (let n = 0; n < samples; n++) {
     data.writeInt16LE(Math.round(Math.sin(n * 2 * Math.PI * 440 / 48000) * 2000), 44 + n * 2);
   }
+  return data;
+}
+
+/** Original generated ProTracker module: one pattern, one looping sine-wave sample. */
+function trackerModule() {
+  const data=Buffer.alloc(1084+1024+64);
+  data.write('NyxLink fixture',0,'ascii');
+  data.write('Generated sine',20,'ascii');
+  data.writeUInt16BE(32,42);
+  data[45]=32;
+  data.writeUInt16BE(32,48);
+  data[950]=1;
+  data.write('M.K.',1080,'ascii');
+  const period=428;
+  data[1084]=period>>8;
+  data[1085]=period&255;
+  data[1086]=0x10;
+  for(let i=0;i<64;i++) data.writeInt8(Math.round(Math.sin(i*Math.PI/32)*64),2108+i);
   return data;
 }
 
@@ -120,11 +139,12 @@ async function withLavalinkPluginLab(run, selectedProfile = profile) {
   const port = await nextPort();
   const config = path.join(directory, 'application.yml');
   const name = 'nyxlink-plugins-' + process.pid + '-' + randomBytes(4).toString('hex');
-  const media = wav();
+  const wave = wav(), module = trackerModule();
   const server = http.createServer((req, res) => {
-    if (req.url !== '/tone.wav' || !['GET', 'HEAD'].includes(req.method)) {
+    if (!['/tone.wav','/fixture.mod'].includes(req.url) || !['GET', 'HEAD'].includes(req.method)) {
       res.writeHead(404); res.end(); return;
     }
+    const media=req.url === '/fixture.mod' ? module : wave;
     const match = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range || '');
     const start = match ? Number(match[1]) : 0;
     const end = match?.[2] ? Math.min(Number(match[2]), media.length - 1) : media.length - 1;
@@ -132,7 +152,7 @@ async function withLavalinkPluginLab(run, selectedProfile = profile) {
       res.writeHead(416); res.end(); return;
     }
     res.writeHead(match ? 206 : 200, {
-      'content-type': 'audio/wav',
+      'content-type': req.url === '/fixture.mod' ? 'application/octet-stream' : 'audio/wav',
       'content-length': end - start + 1,
       'accept-ranges': 'bytes',
       ...(match ? { 'content-range': 'bytes ' + start + '-' + end + '/' + media.length } : {})
@@ -190,6 +210,7 @@ async function withLavalinkPluginLab(run, selectedProfile = profile) {
       node: { identifier: 'lavalink-plugins', host: '127.0.0.1', port,
         password, secure: false, version: info.version.semver },
       mediaUrl: 'http://127.0.0.1:' + mediaPort + '/tone.wav',
+      moduleUrl: 'http://127.0.0.1:' + mediaPort + '/fixture.mod',
       image: selectedProfile.image,
       versions: selectedProfile.plugins.map(p => ({ name: p.advertised ?? p.name, version: p.version })),
       jars
@@ -219,4 +240,4 @@ async function withLavalinkPluginLab(run, selectedProfile = profile) {
   }
 }
 
-module.exports = { matrixProfile, validateProfile, renderConfig, startupErrorCode, PluginLabFailure, withLavalinkPluginLab };
+module.exports = { trackerModule, matrixProfile, validateProfile, renderConfig, startupErrorCode, PluginLabFailure, withLavalinkPluginLab };

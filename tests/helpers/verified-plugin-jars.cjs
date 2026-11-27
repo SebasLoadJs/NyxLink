@@ -23,9 +23,9 @@ function jarUrl(plugin) {
   }
   if (plugin.repository !== undefined) {
     const pinned = Object.values(releasePins).find(p => p.name === plugin.name && p.repository === plugin.repository && p.version === plugin.version);
-    if (!pinned || pinned.sha256 !== plugin.sha256 || pinned.size !== plugin.size || pinned.advertised !== plugin.advertised) throw new PluginIntegrityError('PLUGIN_INVALID_RELEASE_PIN');
+    if (!pinned || pinned.sha256 !== plugin.sha256 || pinned.size !== plugin.size || pinned.advertised !== plugin.advertised || pinned.tag !== plugin.tag) throw new PluginIntegrityError('PLUGIN_INVALID_RELEASE_PIN');
     const filename = plugin.name + '-' + plugin.version + '.jar';
-    return {url:'https://github.com/' + pinned.repository + '/releases/download/' + pinned.version + '/' + filename, filename};
+    return {url:'https://github.com/' + pinned.repository + '/releases/download/' + (pinned.tag ?? pinned.version) + '/' + filename, filename};
   }
   const parts = plugin.dependency?.split(':');
   if (!parts || parts.length !== 3 ||

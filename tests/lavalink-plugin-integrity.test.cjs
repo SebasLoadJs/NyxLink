@@ -92,3 +92,10 @@ test('GitHub release pins constrain exact owner, filename, digest and redirect h
  await assert.rejects(verifiedJar(pin,async()=>++count===1?response(null,302,{location:'https://release-assets.githubusercontent.com/fixture'}):response(bytes)),{code:'PLUGIN_ARTIFACT_HASH_MISMATCH'});
  assert.equal(count,2);
 });
+
+test('release tag and artifact names may differ from advertised plugin name but are pinned',()=>{
+ const matrix=require('./integration/lavalink-plugin-matrix.json');
+ assert.equal(jarUrl(matrix.xm).url,'https://github.com/esmBot/lava-xm-plugin/releases/download/v0.2.8/lava-xm-plugin-0.2.8.jar');
+ assert.equal(jarUrl(matrix['java-lyrics']).filename,'lyrics-1.6.6.jar');
+ assert.throws(()=>jarUrl({...matrix.xm,tag:'v0.2.9'}),{code:'PLUGIN_INVALID_RELEASE_PIN'});
+});
