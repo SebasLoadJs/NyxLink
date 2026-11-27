@@ -1,0 +1,26 @@
+[
+  {
+    "id": "lavasearch",
+    "release": "https://github.com/topi314/LavaSearch/releases/download/1.0.0/lavasearch-plugin-1.0.0.jar",
+    "assetId": 138715477,
+    "size": 1987703,
+    "mirror": "https://maven.lavalink.dev/releases/com/github/topi314/lavasearch/lavasearch-plugin/1.0.0/lavasearch-plugin-1.0.0.jar"
+  },
+  {
+    "id": "lyrics-kt",
+    "release": "https://github.com/DRSchlaubi/lyrics.kt/releases/download/2.6.1/lavalink-2.6.1.jar",
+    "assetId": 206601087,
+    "size": 7638135,
+    "mirror": "https://maven.lavalink.dev/releases/dev/schlaubi/lyrics/lavalink/2.6.1/lavalink-2.6.1.jar"
+  },
+  {
+    "id": "google-tts",
+    "release": "https://github.com/DuncteBot/tts-plugin/releases/download/1.0.1/tts-plugin-1.0.1.jar",
+    "assetId": 53354878,
+    "size": 2013996
+  },
+  {
+    "id": "lavadspx",
+    "release": "https://jitpack.io/com/github/devoxin/lavadspx-plugin/0.0.5/lavadspx-plugin-0.0.5.jar"
+  }
+]

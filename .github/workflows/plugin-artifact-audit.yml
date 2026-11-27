@@ -1,0 +1,29 @@
+name: Plugin artifact provenance audit
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'tests/integration/plugin-artifact-candidates.json'
+      - 'scripts/audit-plugin-artifact-candidates.cjs'
+      - '.github/workflows/plugin-artifact-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test tests/plugin-artifact-candidates.test.cjs
+      - run: node scripts/audit-plugin-artifact-candidates.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: candidate-plugin-hashes
+          path: .runtime/plugin-artifact-audit/report.json
+          if-no-files-found: warn
+          retention-days: 30
