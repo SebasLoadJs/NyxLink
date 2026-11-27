@@ -1,0 +1,222 @@
+{
+  "upstream": "86c6a00d022cbf1cafdbc5eea39a2b7033637485",
+  "optionalProposal": "loadmedia",
+  "routes": [
+    {
+      "operation": "groups:list",
+      "method": "GET",
+      "path": "/v4/sessions/session/groups",
+      "transport": "json"
+    },
+    {
+      "operation": "groups:get",
+      "method": "GET",
+      "path": "/v4/sessions/session/groups/group",
+      "transport": "json"
+    },
+    {
+      "operation": "groups:create",
+      "method": "POST",
+      "path": "/v4/sessions/session/groups",
+      "transport": "json"
+    },
+    {
+      "operation": "groups:update",
+      "method": "PATCH",
+      "path": "/v4/sessions/session/groups/group",
+      "transport": "json"
+    },
+    {
+      "operation": "groups:delete",
+      "method": "DELETE",
+      "path": "/v4/sessions/session/groups/group",
+      "transport": "json"
+    },
+    {
+      "operation": "sponsorblock:get",
+      "method": "GET",
+      "path": "/v4/sessions/session/players/guild/sponsorblock",
+      "transport": "json"
+    },
+    {
+      "operation": "sponsorblock:update",
+      "method": "PATCH",
+      "path": "/v4/sessions/session/players/guild/sponsorblock",
+      "transport": "json"
+    },
+    {
+      "operation": "sponsorblock:segments",
+      "method": "POST",
+      "path": "/v4/sessions/session/players/guild/sponsorblock",
+      "transport": "json"
+    },
+    {
+      "operation": "sponsorblock:clear",
+      "method": "DELETE",
+      "path": "/v4/sessions/session/players/guild/sponsorblock",
+      "transport": "json"
+    },
+    {
+      "operation": "mix:add",
+      "method": "POST",
+      "path": "/v4/sessions/session/players/guild/mix",
+      "transport": "json"
+    },
+    {
+      "operation": "mix:list",
+      "method": "GET",
+      "path": "/v4/sessions/session/players/guild/mix",
+      "transport": "json"
+    },
+    {
+      "operation": "mix:update",
+      "method": "PATCH",
+      "path": "/v4/sessions/session/players/guild/mix/layer",
+      "transport": "json"
+    },
+    {
+      "operation": "mix:remove",
+      "method": "DELETE",
+      "path": "/v4/sessions/session/players/guild/mix/layer",
+      "transport": "json"
+    },
+    {
+      "operation": "hls:playlist",
+      "method": "GET",
+      "path": "/v4/hls/playlist.m3u8",
+      "transport": "stream"
+    },
+    {
+      "operation": "hls:init",
+      "method": "GET",
+      "path": "/v4/hls/init.mp4",
+      "transport": "stream"
+    },
+    {
+      "operation": "hls:segment",
+      "method": "GET",
+      "path": "/v4/hls/segment.m4s",
+      "transport": "stream"
+    },
+    {
+      "operation": "loadmedia",
+      "method": "GET",
+      "path": "/v4/loadmedia",
+      "transport": "json"
+    },
+    {
+      "operation": "lyrics",
+      "method": "GET",
+      "path": "/v4/loadlyrics",
+      "transport": "json"
+    },
+    {
+      "operation": "source-health",
+      "method": "GET",
+      "path": "/v4/sources/health",
+      "transport": "json"
+    },
+    {
+      "operation": "chapters",
+      "method": "GET",
+      "path": "/v4/loadchapters",
+      "transport": "json"
+    },
+    {
+      "operation": "meaning",
+      "method": "GET",
+      "path": "/v4/meaning",
+      "transport": "json"
+    },
+    {
+      "operation": "connection",
+      "method": "GET",
+      "path": "/v4/connection",
+      "transport": "json"
+    },
+    {
+      "operation": "metrics",
+      "method": "GET",
+      "path": "/v4/metrics",
+      "transport": "json"
+    },
+    {
+      "operation": "profiler:status",
+      "method": "GET",
+      "path": "/v4/profiler",
+      "transport": "json"
+    },
+    {
+      "operation": "profiler:command",
+      "method": "POST",
+      "path": "/v4/profiler",
+      "transport": "json"
+    },
+    {
+      "operation": "workers:get",
+      "method": "GET",
+      "path": "/v4/workers",
+      "transport": "json"
+    },
+    {
+      "operation": "workers:patch",
+      "method": "PATCH",
+      "path": "/v4/workers",
+      "transport": "json"
+    },
+    {
+      "operation": "youtube:config:get",
+      "method": "GET",
+      "path": "/v4/youtube/config",
+      "transport": "json"
+    },
+    {
+      "operation": "youtube:config:update",
+      "method": "PATCH",
+      "path": "/v4/youtube/config",
+      "transport": "json"
+    },
+    {
+      "operation": "youtube:oauth",
+      "method": "POST",
+      "path": "/v4/youtube/oauth",
+      "transport": "json"
+    },
+    {
+      "operation": "encodetrack",
+      "method": "GET",
+      "path": "/v4/encodetrack",
+      "transport": "json"
+    },
+    {
+      "operation": "encodedtracks",
+      "method": "POST",
+      "path": "/v4/encodedtracks",
+      "transport": "json"
+    },
+    {
+      "operation": "trackstream",
+      "method": "GET",
+      "path": "/v4/trackstream",
+      "transport": "json"
+    },
+    {
+      "operation": "loadstream",
+      "method": "POST",
+      "path": "/v4/loadstream",
+      "transport": "stream"
+    },
+    {
+      "operation": "lyrics:subscribe",
+      "method": "POST",
+      "path": "/v4/sessions/session/players/guild/lyrics/subscribe",
+      "transport": "json"
+    },
+    {
+      "operation": "lyrics:unsubscribe",
+      "method": "DELETE",
+      "path": "/v4/sessions/session/players/guild/lyrics/subscribe",
+      "transport": "json"
+    }
+  ]
+}
