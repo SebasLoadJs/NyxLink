@@ -637,6 +637,39 @@ export declare class BackendDetector {
 }
 ```
 
+## BackendInfoOptions
+
+[Source declaration](../src/backends/BackendRestContracts.ts)
+
+```ts
+export interface BackendInfoOptions {
+    timeoutMs?: number;
+    signal?: AbortSignal;
+}
+```
+
+## BackendInfoSnapshot
+
+[Source declaration](../src/backends/BackendRestContracts.ts)
+
+```ts
+export interface BackendInfoSnapshot {
+    kind: BackendKind;
+    version: string;
+    protocolVersion: number;
+    buildTime?: number;
+    runtime?: string;
+    voice?: {
+        name: string;
+        version: string;
+    };
+    sourceManagers: string[];
+    filters: string[];
+    plugins: BackendPlugin[];
+    sourceHealthEnabled?: boolean;
+}
+```
+
 ## BackendInventoryEntry
 
 [Source declaration](../src/backends/BackendInventory.ts)
@@ -3850,6 +3883,72 @@ export interface NodeLinkProfilerSnapshot {
 }
 ```
 
+## NodeLinkStreamFormat
+
+[Source declaration](../src/backends/NodeLinkContracts.ts)
+
+```ts
+export interface NodeLinkStreamFormat {
+    itag: number | null;
+    type: 'audio' | 'video' | 'muxed' | null;
+    format: string | null;
+    codec: string | null;
+    mimeType: string | null;
+    bitrate: number | null;
+    quality: string | null;
+    width: number | null;
+    height: number | null;
+    fps: number | null;
+    contentLength: number | null;
+}
+```
+
+## NodeLinkStreamFormats
+
+[Source declaration](../src/backends/NodeLinkContracts.ts)
+
+```ts
+export interface NodeLinkStreamFormats {
+    source: string;
+    protocol: string;
+    format: string | null;
+    mimeType: string;
+    itag: number | null;
+    seekable: boolean;
+    byteRangeSupported: boolean;
+    formats: NodeLinkStreamFormat[];
+}
+```
+
+## NodeLinkTrackStreamInfo
+
+[Source declaration](../src/backends/BackendRestContracts.ts)
+
+```ts
+export interface NodeLinkTrackStreamInfo {
+    url?: string;
+    protocol?: string;
+    format?: string | Record<string, unknown>;
+    isLive?: boolean;
+    isEncrypted?: boolean;
+    newTrack?: Record<string, unknown>;
+    trackInfo?: Record<string, unknown>;
+    additionalData?: Record<string, unknown>;
+}
+```
+
+## NodeLinkTrackStreamOptions
+
+[Source declaration](../src/backends/BackendRestContracts.ts)
+
+```ts
+export interface NodeLinkTrackStreamOptions {
+    itag?: number;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+}
+```
+
 ## NodeLinkVisualizationSnapshot
 
 [Source declaration](../src/backends/NodeLinkPlayerTelemetry.ts)
@@ -4887,6 +4986,7 @@ export declare class Rest {
     }): Promise<IRESTLoadTracks>;
     decodeTrack(encodedTrack: string): Promise<ITrack | null>;
     decodeTracks(encodedTracks: string[]): Promise<ITrack[] | null>;
+    getBackendInfo(options?: BackendInfoOptions): Promise<BackendInfoSnapshot>;
     getInfo(): Promise<any | null>;
     getInfoWithHeaders(): Promise<ResponseWithHeaders<any> | null>;
     getVersion(timeout?: number, retries?: number): Promise<string | null>;
@@ -4943,6 +5043,7 @@ export declare class Rest {
         encoded: string;
         info: Record<string, any>;
     }>): Promise<string[] | null>;
+    getNodeLinkTrackStreamInfo(encodedTrack: string, options?: NodeLinkTrackStreamOptions): Promise<NodeLinkTrackStreamInfo>;
     trackStream(encodedTrack: string, itag?: number | null): Promise<any | null>;
     createHlsSession(encodedTrack: string, options?: NodeLinkHlsOptions): Promise<NodeLinkHlsManifest>;
     getHlsPlaylist(sessionId: string, options?: NodeLinkHlsReadOptions): Promise<NodeLinkHlsManifest>;

@@ -1,0 +1,22 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+const http=require('node:http'),{once}=require('node:events');
+const {BackendDetector}=require('../dist'),{createPlayer}=require('./helpers/player.cjs');
+test('typed backend info and stream metadata use validated isolated transports',async t=>{
+ const {node}=createPlayer(t),calls=[];
+ let info={version:{semver:'3.10.0'},sourceManagers:['youtube'],filters:['volume'],plugins:[{name:'example',version:'1',path:'/private/path'}],node:'v24.0.0',sourceHealth:{enabled:true}};
+ let stream={url:'https://example.com/audio?token=fixture',protocol:'https',format:{itag:251},isEncrypted:false,additionalData:{a:1}},status=200;
+ const server=http.createServer((req,res)=>{calls.push(req.url);const isInfo=req.url==='/v4/info';res.writeHead(isInfo?200:status,{'content-type':'application/json',IamNodelink:'true'});res.end(JSON.stringify(isInfo?info:stream));});
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ t.after(()=>{server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
+ node.port=server.address().port;node.backend=BackendDetector.detect(info,{IamNodelink:'true'});node.isNodeLink=true;
+ const snapshot=await node.rest.getBackendInfo();
+ assert.deepEqual(snapshot,{kind:'nodelink',version:'3.10.0',protocolVersion:4,runtime:'v24.0.0',sourceManagers:['youtube'],filters:['volume'],plugins:[{name:'example',version:'1'}],sourceHealthEnabled:true});
+ assert.equal(JSON.stringify(snapshot).includes('/private/path'),false);
+ assert.deepEqual(await node.rest.getNodeLinkTrackStreamInfo('a+b',{itag:251}),stream);
+ assert.deepEqual(calls,['/v4/info','/v4/trackstream?encodedTrack=a%2Bb&itag=251']);
+ await assert.rejects(node.rest.getNodeLinkTrackStreamInfo('a',{itag:-1}),TypeError);
+ stream={url:42};await assert.rejects(node.rest.getNodeLinkTrackStreamInfo('a'),{code:'INVALID_PROTOCOL_RESPONSE'});
+ status=500;stream={message:'private-provider-url'};await assert.rejects(node.rest.getNodeLinkTrackStreamInfo('a'),e=>e.statusCode===500&&!JSON.stringify(e).includes('private-provider-url'));
+ status=404;stream={message:'The requested route was not found.'};await assert.rejects(node.rest.getNodeLinkTrackStreamInfo('a'),{code:'FEATURE_UNAVAILABLE'});
+ assert.equal(node.backend.featureStatus('trackstream'),'unavailable');
+});

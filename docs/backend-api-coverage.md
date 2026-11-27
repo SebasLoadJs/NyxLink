@@ -54,3 +54,5 @@ Cloudflare Tunnel changes server deployment rather than playback protocol. The s
 5. No claim of complete API parity or release acceptance until the remaining contracts and real backend evidence are recorded.
 
 - [Lyrics.kt at d0dfbb1](https://github.com/DRSchlaubi/lyrics.kt/blob/d0dfbb1385f528a335460d16c2dd9023de70baf5/lavalink/src/main/kotlin/LyricsRestHandler.kt): three independent GET routes, advertised plugin name `lyrics`, timed/text union, nullable line ranges, search metadata and provider absence. Unlike LavaLyrics, the current-track route ends in `/lyrics`, not `/track/lyrics`. Client fixture tests are not proof of provider or runtime compatibility.
+
+- Typed `Rest.getBackendInfo()` and `Rest.getNodeLinkTrackStreamInfo()` are additive to preserve existing consumers of raw `/info` and `/trackstream` responses. Stream URL resolution is metadata only; provider URLs may contain credentials and are not fetched by the SDK. `NodeLinkStreamFormat` and `NodeLinkStreamFormats` are exported from the package root.

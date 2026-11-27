@@ -381,3 +381,8 @@ void [lyricsKt, lyricsKtSearch];
 
 const detachPluginEvent = manager.pluginEvents.register({ backend:'lavalink',plugin:'example',type:'CustomEvent',scope:'player',decode:(_value:unknown)=>42 }, (value, context)=>{const n:number=value;const guild:string|undefined=context.player?.guildId;void [n,guild];});
 void detachPluginEvent;
+
+const backendInfoSnapshot: Promise<import('../../dist').BackendInfoSnapshot> = node.rest.getBackendInfo();
+const streamInfo: Promise<import('../../dist').NodeLinkTrackStreamInfo> = node.rest.getNodeLinkTrackStreamInfo('fixture', {itag:251});
+const exportedFormats: Promise<import('../../dist').NodeLinkStreamFormats> = node.rest.getStreamFormats('fixture');
+void [backendInfoSnapshot,streamInfo,exportedFormats];

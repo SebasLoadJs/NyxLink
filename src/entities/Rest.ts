@@ -1,3 +1,4 @@
+import { backendRestTimeout, readBackendInfoSnapshot, nodeLinkTrackStreamParameters, readNodeLinkTrackStreamInfo, type BackendInfoSnapshot, type BackendInfoOptions, type NodeLinkTrackStreamOptions, type NodeLinkTrackStreamInfo } from '../backends/BackendRestContracts';
 import { lyricsKtVideoPath, lyricsKtSearchPath, lyricsKtTimeout, readLyricsKtResult, readLyricsKtSearch, type LyricsKtOptions, type LyricsKtResult, type LyricsKtSearchTrack } from '../backends/LyricsKtContracts';
 import { assertNodeLinkAdmin, readNodeLinkYoutubeConfig, nodeLinkYoutubeConfigBody, readNodeLinkYoutubeConfigAcknowledgement, nodeLinkWorkerTerminationBody, readNodeLinkWorkerTermination, type NodeLinkAdminOptions, type NodeLinkYoutubeConfig, type NodeLinkYoutubeConfigUpdate, type NodeLinkYoutubeConfigAcknowledgement, type NodeLinkWorkerTarget, type NodeLinkWorkerTerminationOptions, type NodeLinkWorkerTermination } from '../backends/NodeLinkAdminContracts';
 import { profilerQuery, diagnosticsTimeout, readNodeLinkProfilerSnapshot, readNodeLinkWorkerSnapshots, type NodeLinkProfilerOptions, type NodeLinkProfilerSnapshot, type NodeLinkWorkerSnapshot } from '../backends/NodeLinkDiagnostics';
@@ -460,6 +461,24 @@ export class Rest {
         if (!Array.isArray(res)) throw new ProtocolResponseError('decode tracks', 'track array');
         for (const track of res) validateTrackResponse(track, 'decode tracks');
         return res;
+    }
+
+    /** Typed backend metadata without replacing legacy raw info or mutating detection state. */
+    public async getBackendInfo(options: BackendInfoOptions = {}): Promise<BackendInfoSnapshot> {
+        const timeout = backendRestTimeout(options.timeoutMs);
+        const backend = this.node.backend, socket = this.node.socket, session = this.node.sessionId;
+        const current = () => !this.node.destroyed && !this.node.manager.destroyed &&
+            this.node.backend === backend && this.node.socket === socket && this.node.sessionId === session;
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('Backend info context changed');
+        const result = await this.request<unknown>(this.url + '/v4/info', {
+            method: 'GET', headers: this.authHeaders, signal: options.signal,
+            returnHeaders: true, throwOnError: true, allowedOrigins: [new URL(this.url).origin],
+        }, timeout, 0, 1000, 0);
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('Backend info context changed');
+        if (!result) throw new ProtocolResponseError('backend REST', 'info response');
+        return readBackendInfoSnapshot(result.data, result.headers);
     }
 
     public async getInfo(): Promise<any | null> {
@@ -1131,6 +1150,41 @@ export class Rest {
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
+    /** Resolve provider metadata only; does not open or proxy the returned stream URL. */
+    public async getNodeLinkTrackStreamInfo(encodedTrack: string, options: NodeLinkTrackStreamOptions = {}): Promise<NodeLinkTrackStreamInfo> {
+        const query = nodeLinkTrackStreamParameters(encodedTrack, options);
+        const timeout = backendRestTimeout(options.timeoutMs);
+        const route = this.extensionRoute('trackstream', {query});
+        this.node.assertFeature(route.feature);
+        const backend = this.node.backend, socket = this.node.socket, session = this.node.sessionId;
+        const current = () => !this.node.destroyed && !this.node.manager.destroyed &&
+            this.node.backend === backend && this.node.socket === socket && this.node.sessionId === session;
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('NodeLink track stream context changed');
+        let raw: unknown;
+        try {
+            raw = await this.request<unknown>(this.url + route.path, {
+                method: route.method, headers: this.authHeaders, signal: options.signal,
+                allowedOrigins: [new URL(this.url).origin], throwOnError: true,
+            }, timeout, 0, 1000, 0);
+        } catch (error) {
+            if (error instanceof HttpError) {
+                const message = error.body && typeof error.body === 'object' && 'message' in error.body ? String(error.body.message) : '';
+                if (error.statusCode === 501 || [403,404].includes(error.statusCode) && /requested route was not found|unknown (?:route|endpoint)|(?:endpoint|feature).*disabled/i.test(message)) {
+                    if (current()) backend?.recordFeature(route.feature, 'unavailable');
+                    throw new FeatureUnavailableError(route.feature, backend?.kind ?? 'unknown', error.statusCode);
+                }
+                throw new HttpError(error.statusCode);
+            }
+            throw new Error('NodeLink track stream request failed');
+        }
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('NodeLink track stream context changed');
+        const result = readNodeLinkTrackStreamInfo(raw);
+        backend?.recordFeature(route.feature, 'available');
+        return result;
+    }
+
     public async trackStream(encodedTrack: string, itag?: number | null): Promise<any | null> {
         this.node.assertFeature("trackstream");
 

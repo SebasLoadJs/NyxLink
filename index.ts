@@ -38,7 +38,7 @@ export { CapabilityRegistry } from './src/backends/CapabilityRegistry';
 export type { CapabilityDescription, CapabilityEvidence } from './src/backends/CapabilityRegistry';
 export type { BackendInventoryEntry } from './src/backends/BackendInventory';
 export { ProtocolResponseError } from './src/backends/ProtocolValidation';
-export type { LyricsRequestOptions, SourceHealthStatus, SourceHealthEntry, SourceHealthResponse, SourceHealthEvent, SourceHealthSnapshotEvent, SourceHealthChangeEvent, CrossfadeOptions, QueuePreloadOptions } from './src/backends/NodeLinkContracts';
+export type { NodeLinkStreamFormat, NodeLinkStreamFormats, LyricsRequestOptions, SourceHealthStatus, SourceHealthEntry, SourceHealthResponse, SourceHealthEvent, SourceHealthSnapshotEvent, SourceHealthChangeEvent, CrossfadeOptions, QueuePreloadOptions } from './src/backends/NodeLinkContracts';
 export { readHoloTrackMetadata } from './src/backends/HoloTrackMetadata';
 export type { HoloTrackMetadata, HoloAudioTrack } from './src/backends/HoloTrackMetadata';
 export { nodeLinkDiscoveryTypes } from './src/backends/NodeLinkSearchContracts';
@@ -169,3 +169,5 @@ export type { LyricsKtTrack, LyricsKtLine, LyricsKtResult, LyricsKtSearchTrack, 
 
 export { BackendPluginEventRegistry } from './src/backends/BackendPluginEvents';
 export type { BackendPluginEventContext, BackendPluginEventDefinition, BackendPluginEventListener } from './src/backends/BackendPluginEvents';
+
+export type { BackendInfoSnapshot, BackendInfoOptions, NodeLinkTrackStreamOptions, NodeLinkTrackStreamInfo } from './src/backends/BackendRestContracts';
