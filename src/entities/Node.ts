@@ -915,6 +915,9 @@ export class Node {
     const messageSocket = this.socket;
     const messageGeneration = this.backendGeneration;
     this.manager.emit("nodeRaw", this, payload);
+    const currentPluginEvent = () => !this.destroyed && !this.manager.destroyed &&
+        this.socket === messageSocket && this.backendGeneration === messageGeneration;
+    this.manager.pluginEvents?.dispatch(this, payload, currentPluginEvent);
 
     if (payload.op === 'event' && (payload.type === 'SourceHealthSnapshotEvent' || payload.type === 'SourceHealthChangeEvent')) {
       await this.backendReady;

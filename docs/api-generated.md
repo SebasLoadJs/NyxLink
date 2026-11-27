@@ -676,6 +676,55 @@ export type BackendPlugin = Readonly<{
 }>;
 ```
 
+## BackendPluginEventContext
+
+[Source declaration](../src/backends/BackendPluginEvents.ts)
+
+```ts
+export interface BackendPluginEventContext {
+    readonly node: Node;
+    readonly player: Player | undefined;
+    readonly backend: BackendKind;
+    readonly plugin: string;
+    readonly type: string;
+}
+```
+
+## BackendPluginEventDefinition
+
+[Source declaration](../src/backends/BackendPluginEvents.ts)
+
+```ts
+export interface BackendPluginEventDefinition<T> {
+    readonly backend: BackendKind;
+    readonly plugin: string;
+    readonly type: string;
+    readonly scope: 'node' | 'player';
+    readonly decode: (payload: unknown) => T;
+}
+```
+
+## BackendPluginEventListener
+
+[Source declaration](../src/backends/BackendPluginEvents.ts)
+
+```ts
+export type BackendPluginEventListener<T> = (value: T, context: BackendPluginEventContext) => void | Promise<void>;
+```
+
+## BackendPluginEventRegistry
+
+[Source declaration](../src/backends/BackendPluginEvents.ts)
+
+```ts
+export declare class BackendPluginEventRegistry {
+    register<T>(definition: BackendPluginEventDefinition<T>, listener: BackendPluginEventListener<T>): () => void;
+    list(): Omit<BackendPluginEventDefinition<unknown>, 'decode'>[];
+    dispatch(node: Node, payload: unknown, current: () => boolean): void;
+    close(): void;
+}
+```
+
 ## BackendPluginMethod
 
 [Source declaration](../src/backends/BackendPluginRoutes.ts)
@@ -2962,6 +3011,7 @@ export declare class Manager extends EventEmitter<IManagerEvents> {
     clientId: string;
     readonly nodes: NodeManager;
     readonly pluginRoutes: BackendPluginRouteRegistry;
+    readonly pluginEvents: BackendPluginEventRegistry;
     readonly players: PlayerManager;
     guildOwnership?: GuildOwnership;
     get database(): DatabaseManager;

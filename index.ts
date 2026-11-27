@@ -166,3 +166,6 @@ export type { NodeLinkProfilerScope, NodeLinkProfilerOptions, NodeLinkProcessMem
 export type { NodeLinkAdminOptions, NodeLinkYoutubeConfig, NodeLinkYoutubeConfigUpdate, NodeLinkYoutubeConfigAcknowledgement, NodeLinkWorkerTarget, NodeLinkWorkerTerminationOptions, NodeLinkWorkerTermination } from './src/backends/NodeLinkAdminContracts';
 
 export type { LyricsKtTrack, LyricsKtLine, LyricsKtResult, LyricsKtSearchTrack, LyricsKtOptions } from './src/backends/LyricsKtContracts';
+
+export { BackendPluginEventRegistry } from './src/backends/BackendPluginEvents';
+export type { BackendPluginEventContext, BackendPluginEventDefinition, BackendPluginEventListener } from './src/backends/BackendPluginEvents';

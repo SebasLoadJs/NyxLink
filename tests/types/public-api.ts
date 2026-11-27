@@ -378,3 +378,6 @@ void pluginResult;
 const lyricsKt: Promise<import('../../dist').LyricsKtResult | null> = node.rest.getLyricsKt('abcdefghijk');
 const lyricsKtSearch: Promise<import('../../dist').LyricsKtSearchTrack[]> = node.rest.searchLyricsKt('fixture');
 void [lyricsKt, lyricsKtSearch];
+
+const detachPluginEvent = manager.pluginEvents.register({ backend:'lavalink',plugin:'example',type:'CustomEvent',scope:'player',decode:(_value:unknown)=>42 }, (value, context)=>{const n:number=value;const guild:string|undefined=context.player?.guildId;void [n,guild];});
+void detachPluginEvent;

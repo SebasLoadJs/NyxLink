@@ -38,3 +38,18 @@ For plugin events use the existing `nodeRaw` event with a trusted schema validat
 ## Dynamic paths and unversioned plugins
 
 Use named single-segment placeholders after a literal namespace, such as `my_music/profiles/:profileId`, and pass `{ params: { profileId: 'studio-1' } }` to `callPlugin`. Missing, extra, repeated, encoded or path-like values are rejected before transport. For a node-scoped unversioned API, set `prefix: 'root'` and use the exact advertised plugin name as the first path segment or `plugins/<plugin-name>/...`. The default remains `/v4/`; core endpoints and version prefixes cannot be overridden. These restrictions deliberately exclude arbitrary external URLs and untrusted path fragments.
+
+## Typed custom WebSocket events
+
+```ts
+const unsubscribe = manager.pluginEvents.register({
+  backend: 'lavalink', plugin: 'my-music-plugin', type: 'ProfileChanged', scope: 'player',
+  decode(value: unknown) {
+    if (!value || typeof value !== 'object' || !('profile' in value) || typeof value.profile !== 'string') throw new TypeError('Invalid profile');
+    return value.profile;
+  },
+}, (profile, { player }) => { console.log(player?.guildId, profile); });
+// Later: unsubscribe();
+```
+
+Events must match the declared backend, advertised plugin, event type and scope. The registry validates current player ownership, detaches the payload before decoding, isolates listener failures and clears on manager shutdown. An event matching a declared schema does not prove which plugin emitted it when the wire protocol has no plugin identity. Core dispatch and legacy raw events remain independent. Listeners are trusted application code; async work already started is not cancelled by unsubscribe.

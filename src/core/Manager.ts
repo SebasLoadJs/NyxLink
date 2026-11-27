@@ -1,3 +1,4 @@
+import { BackendPluginEventRegistry } from '../backends/BackendPluginEvents';
 import { BackendPluginRouteRegistry } from '../backends/BackendPluginRoutes';
 import { SearchService } from '../search/SearchService';
 import type { SearchResult } from '../structures/SearchResult';
@@ -36,6 +37,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
     public clientId: string = "";
     public readonly nodes: NodeManager;
     public readonly pluginRoutes = new BackendPluginRouteRegistry();
+    public readonly pluginEvents = new BackendPluginEventRegistry();
     public readonly players: PlayerManager;
     /** Optional, explicitly configured per-guild owner fencing. */
     public guildOwnership?: GuildOwnership;
@@ -285,6 +287,7 @@ export class Manager extends EventEmitter<IManagerEvents> {
             };
             await Promise.all([...this.privateMetricsServers].map(endpoint => attempt(() => endpoint.close())));
             this.pluginRoutes.close();
+            this.pluginEvents.close();
             await attempt(() => this.extensionHost?.close());
             await attempt(() => this.performanceMonitor?.close());
             this.privateMetricsServers.clear();
