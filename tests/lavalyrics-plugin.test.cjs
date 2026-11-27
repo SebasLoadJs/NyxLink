@@ -146,7 +146,7 @@ test('late plugin observations cannot update a replacement backend', async t => 
   await entered.promise;
   node.backend = lavalink();
   release.resolve();
-  assert.equal(await pending, null);
+  await assert.rejects(pending, /context changed/);
   assert.equal(node.backend.featureStatus('lavalyrics'), 'unknown');
   assert.equal(previous.featureStatus('lavalyrics'), 'unknown');
 });
@@ -176,4 +176,11 @@ test('LavaLyrics player no-track 404 is not absent plugin, malformed ack fails',
   assert.equal(node.backend.featureStatus('lavalyrics:current'),'unknown');
   status=200;await assert.rejects(node.rest.subscribeLavaLyrics(guild),{code:'INVALID_PROTOCOL_RESPONSE'});
   assert.equal(node.backend.featureStatus('lavalyrics:subscribe'),'unknown');
+});
+
+test('LavaLyrics refuses redirects before sending backend authentication to a second route',async t=>{
+ const {node,requests}=await setup(t,(_req,res)=>{res.writeHead(302,{location:'/unexpected'});res.end();});
+ await assert.rejects(node.rest.getLavaLyrics('encoded'));
+ assert.equal(requests.length,1);
+ assert.equal(node.backend.featureStatus('lavalyrics'),'unknown');
 });

@@ -776,26 +776,28 @@ export class Rest {
         }
         const socket = this.node.socket;
         const session = this.node.sessionId;
-        const current = () => !this.node.destroyed && this.node.backend === backend &&
+        const current = () => !this.node.destroyed && !this.node.manager.destroyed && this.node.backend === backend &&
             this.node.socket === socket && this.node.sessionId === session;
+        if (!current()) throw new Error('LavaLyrics context changed');
         const result = await this.node.circuit.run(async () => {
             try {
                 return await this.request<unknown>(this.url + '/v4/lyrics?' + params.toString(), {
                     method: 'GET', headers: this.authHeaders, throwOnError: true,
-                    noContentAsNull: true
-                }, 10000, 0);
+                    noContentAsNull: true, allowedOrigins: [new URL(this.url).origin],
+                }, 10000, 0, 1000, 0);
             } catch (error) {
                 this.featureError('lavalyrics', error, backend, current);
             }
         });
+        if (!current()) throw new Error('LavaLyrics context changed');
         // HTTP 204 is null even if the server labels the empty body JSON.
         // Malformed 200 responses (including {}) still fail validation.
         if (result === null) {
-            if (current()) backend.recordFeature('lavalyrics', 'available');
+            backend.recordFeature('lavalyrics', 'available');
             return null;
         }
         validateLavaLyrics(result);
-        if (current()) backend.recordFeature('lavalyrics', 'available');
+        backend.recordFeature('lavalyrics', 'available');
         return result;
     }
 
