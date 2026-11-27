@@ -1,0 +1,26 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+const http=require('node:http'),{once}=require('node:events');
+const {BackendDetector}=require('../dist'),{createPlayer}=require('./helpers/player.cjs');
+test('typed native chapters and meaning preserve distinct wire contracts and reject stale responses',async t=>{
+ const {node}=createPlayer(t);node.isNodeLink=true;node.sessionId='fixture';
+ node.backend=BackendDetector.detect({version:{semver:'3.10.0'},isNodelink:true});
+ const calls=[];let body=[{title:'Intro',startTime:0,endTime:1000,duration:1000,thumbnails:[{url:'https://example.com/a',width:60,height:60}]}],status=200,change=false;
+ const server=http.createServer((req,res)=>{calls.push(req.url);if(change)node.sessionId='changed';res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(body));});
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
+ node.port=server.address().port;
+ assert.deepEqual(await node.rest.getNodeLinkChapters('encoded+track'),body);
+ assert.equal(new URL(calls[0],'http://localhost').searchParams.get('encodedTrack'),'encoded+track');
+ body={loadType:'meaning',data:{title:'Fixture',paragraphs:['original'],translation:null}};
+ assert.deepEqual(await node.rest.getNodeLinkMeaning('encoded','es-PY'),body);
+ assert.equal(new URL(calls[1],'http://localhost').searchParams.get('lang'),'es-PY');
+ body={loadType:'empty',data:{}};assert.deepEqual(await node.rest.getNodeLinkMeaning('encoded'),body);
+ body={loadType:'meaning',data:JSON.parse('{"__proto__":{"polluted":true}}')};
+ await assert.rejects(node.rest.getNodeLinkMeaning('encoded'),{code:'INVALID_PROTOCOL_RESPONSE'});
+ body=[{title:'Bad',startTime:20,endTime:10}];await assert.rejects(node.rest.getNodeLinkChapters('encoded'),{code:'INVALID_PROTOCOL_RESPONSE'});
+ await assert.rejects(node.rest.getNodeLinkMeaning('encoded','../'),TypeError);
+ status=503;body={message:'fixture provider unavailable'};await assert.rejects(node.rest.getNodeLinkMeaning('encoded'),e=>e.statusCode===503);
+ status=200;body=[];change=true;await assert.rejects(node.rest.getNodeLinkChapters('encoded'),/context changed/);
+ node.isNodeLink=false;node.backend=BackendDetector.detect({version:{semver:'4.2.2'}});
+ await assert.rejects(node.rest.getNodeLinkChapters('encoded'),{code:'FEATURE_UNAVAILABLE'});
+});

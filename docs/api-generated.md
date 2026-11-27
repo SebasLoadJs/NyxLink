@@ -3812,6 +3812,30 @@ export interface NodeLinkMediaRecording {
 }
 ```
 
+## NodeLinkJsonValue
+
+[Source declaration](../src/backends/BackendRestContracts.ts)
+
+```ts
+export type NodeLinkJsonValue = string | number | boolean | null | NodeLinkJsonValue[] | {
+    [key: string]: NodeLinkJsonValue;
+};
+```
+
+## NodeLinkMeaningResult
+
+[Source declaration](../src/backends/BackendRestContracts.ts)
+
+```ts
+export type NodeLinkMeaningResult = {
+    loadType: 'meaning';
+    data: NodeLinkJsonValue;
+} | {
+    loadType: 'empty';
+    data: Record<string, never>;
+};
+```
+
 ## NodeLinkMetricsAuthorization
 
 [Source declaration](../src/backends/BackendRestContracts.ts)
@@ -5200,6 +5224,8 @@ export declare class Rest {
     loadMedia(lookup: NodeLinkMediaLookup): Promise<NodeLinkMediaLookupResult>;
     loadLyrics(encodedTrack: string, options?: string | LyricsRequestOptions): Promise<NodeLinkResponse<ILyricsData | Record<string, any>> | null>;
     getSourceHealth(): Promise<SourceHealthResponse>;
+    getNodeLinkChapters(encodedTrack: string, options?: BackendInfoOptions): Promise<IChapter[]>;
+    getNodeLinkMeaning(encodedTrack: string, lang?: string, options?: BackendInfoOptions): Promise<NodeLinkMeaningResult>;
     loadChapters(encodedTrack: string): Promise<NodeLinkResponse<IChapter[]> | null>;
     loadMeaning(encodedTrack: string, lang?: string): Promise<NodeLinkResponse<IMeaningResponse | Record<string, any>> | null>;
     getNodeLinkConnectionSnapshot(options?: BackendInfoOptions): Promise<NodeLinkConnectionSnapshot>;

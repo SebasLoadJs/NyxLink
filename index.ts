@@ -175,3 +175,5 @@ export type { BackendInfoSnapshot, BackendInfoOptions, NodeLinkTrackStreamOption
 export type { NodeLinkProfilerAction, NodeLinkProfilerCommandOptions, NodeLinkProfilerCommandProcess, NodeLinkProfilerCommandResult } from './src/backends/NodeLinkDiagnostics';
 
 export type { NodeLinkConnectionQuality, NodeLinkConnectionSnapshot, NodeLinkTrackEncodeInput } from './src/backends/BackendRestContracts';
+
+export type { NodeLinkJsonValue, NodeLinkMeaningResult } from './src/backends/BackendRestContracts';

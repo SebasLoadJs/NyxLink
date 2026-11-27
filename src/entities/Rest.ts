@@ -1,4 +1,4 @@
-import { readNodeLinkConnectionSnapshot, nodeLinkEncodeInput, readNodeLinkEncodedTrack, readNodeLinkEncodedTracks, type NodeLinkConnectionSnapshot, type NodeLinkTrackEncodeInput, nodeLinkMetricsHeader, type NodeLinkMetricsOptions, backendRestTimeout, readBackendInfoSnapshot, nodeLinkTrackStreamParameters, readNodeLinkTrackStreamInfo, type BackendInfoSnapshot, type BackendInfoOptions, type NodeLinkTrackStreamOptions, type NodeLinkTrackStreamInfo } from '../backends/BackendRestContracts';
+import { nodeLinkMediaQuery, readNodeLinkMeaningResult, readNodeLinkChapters, type NodeLinkMeaningResult, readNodeLinkConnectionSnapshot, nodeLinkEncodeInput, readNodeLinkEncodedTrack, readNodeLinkEncodedTracks, type NodeLinkConnectionSnapshot, type NodeLinkTrackEncodeInput, nodeLinkMetricsHeader, type NodeLinkMetricsOptions, backendRestTimeout, readBackendInfoSnapshot, nodeLinkTrackStreamParameters, readNodeLinkTrackStreamInfo, type BackendInfoSnapshot, type BackendInfoOptions, type NodeLinkTrackStreamOptions, type NodeLinkTrackStreamInfo } from '../backends/BackendRestContracts';
 import { javaTimedLyricsSearchPath, lyricsKtVideoPath, lyricsKtSearchPath, lyricsKtTimeout, readLyricsKtResult, readLyricsKtSearch, type LyricsKtOptions, type LyricsKtResult, type LyricsKtSearchTrack } from '../backends/LyricsKtContracts';
 import { assertNodeLinkAdmin, readNodeLinkYoutubeConfig, nodeLinkYoutubeConfigBody, readNodeLinkYoutubeConfigAcknowledgement, nodeLinkWorkerTerminationBody, readNodeLinkWorkerTermination, type NodeLinkAdminOptions, type NodeLinkYoutubeConfig, type NodeLinkYoutubeConfigUpdate, type NodeLinkYoutubeConfigAcknowledgement, type NodeLinkWorkerTarget, type NodeLinkWorkerTerminationOptions, type NodeLinkWorkerTermination } from '../backends/NodeLinkAdminContracts';
 import { profilerCommandBody, readProfilerCommandResult, type NodeLinkProfilerCommandOptions, type NodeLinkProfilerCommandResult, profilerQuery, diagnosticsTimeout, readNodeLinkProfilerSnapshot, readNodeLinkWorkerSnapshots, type NodeLinkProfilerOptions, type NodeLinkProfilerSnapshot, type NodeLinkWorkerSnapshot } from '../backends/NodeLinkDiagnostics';
@@ -878,6 +878,16 @@ export class Rest {
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
+    /** Typed native chapter array; legacy envelope method remains available. */
+    public async getNodeLinkChapters(encodedTrack: string, options: BackendInfoOptions = {}): Promise<IChapter[]> {
+        return this.readNativeDiagnostic('chapters',{query:nodeLinkMediaQuery(encodedTrack)},options,readNodeLinkChapters);
+    }
+
+    /** Provider-dependent meaning payload; empty results are distinct from HTTP failures. */
+    public async getNodeLinkMeaning(encodedTrack: string, lang?: string, options: BackendInfoOptions = {}): Promise<NodeLinkMeaningResult> {
+        return this.readNativeDiagnostic('meaning',{query:nodeLinkMediaQuery(encodedTrack,lang)},options,readNodeLinkMeaningResult);
+    }
+
     public async loadChapters(encodedTrack: string): Promise<NodeLinkResponse<IChapter[]> | null> {
         this.node.assertFeature("chapters");
 

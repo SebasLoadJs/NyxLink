@@ -251,3 +251,56 @@ export function readNodeLinkEncodedTracks(value: unknown, expected: number): str
     if (!Array.isArray(value) || value.length !== expected) return invalid('encoded track count');
     return value.map(readNodeLinkEncodedTrack);
 }
+
+export type NodeLinkJsonValue = string | number | boolean | null | NodeLinkJsonValue[] | { [key: string]: NodeLinkJsonValue };
+export type NodeLinkMeaningResult = { loadType: 'meaning'; data: NodeLinkJsonValue } | { loadType: 'empty'; data: Record<string, never> };
+
+function copyProviderJson(value: unknown, depth=0, budget={remaining:20000}): NodeLinkJsonValue {
+    if (--budget.remaining < 0 || depth > 32) return invalid('provider payload complexity');
+    if (value === null || typeof value === 'boolean') return value;
+    if (typeof value === 'string' && value.length <= 262144) return value;
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (Array.isArray(value)) return value.map(item=>copyProviderJson(item,depth+1,budget));
+    if (!record(value)) return invalid('provider JSON value');
+    const entries = Object.entries(value).map(([key,item])=>{
+        if (key.length > 512 || ['__proto__','constructor','prototype'].includes(key)) return invalid('provider JSON key');
+        return [key,copyProviderJson(item,depth+1,budget)] as const;
+    });
+    return Object.fromEntries(entries);
+}
+export function nodeLinkMediaQuery(encodedTrack: string, language?: string): URLSearchParams {
+    if (!text(encodedTrack,65536) || !encodedTrack.trim()) throw new TypeError('Invalid encoded track');
+    const params = new URLSearchParams({encodedTrack});
+    if (language !== undefined) {
+        if (!/^[a-zA-Z]{2,8}(?:-[a-zA-Z0-9]{1,8}){0,4}$/.test(language)) throw new TypeError('Invalid meaning language');
+        params.set('lang',language);
+    }
+    return params;
+}
+export function readNodeLinkMeaningResult(value: unknown): NodeLinkMeaningResult {
+    if (!record(value)) return invalid('meaning envelope');
+    if (value.loadType === 'empty' && record(value.data) && Object.keys(value.data).length===0) return {loadType:'empty',data:{}};
+    if (value.loadType !== 'meaning') return invalid('meaning result');
+    return {loadType:'meaning',data:copyProviderJson(value.data)};
+}
+export function readNodeLinkChapters(value: unknown): import('../typings/Interfaces').IChapter[] {
+    if (!Array.isArray(value) || value.length>4096) return invalid('chapter array');
+    return value.map(item=>{
+        if (!record(item) || !text(item.title,4096) || !finiteNonnegative(item.startTime)) return invalid('chapter');
+        const chapter: import('../typings/Interfaces').IChapter={title:item.title,startTime:item.startTime};
+        for (const key of ['endTime','duration'] as const) if (item[key]!==undefined) {
+            if (!finiteNonnegative(item[key]) || key==='endTime' && item[key]<item.startTime) return invalid('chapter '+key);
+            chapter[key]=item[key];
+        }
+        if (item.thumbnails!==undefined) {
+            if (!Array.isArray(item.thumbnails)||item.thumbnails.length>128) return invalid('chapter thumbnails');
+            chapter.thumbnails=item.thumbnails.map(image=>{
+                if (!record(image)||!text(image.url,8192)||!finiteNonnegative(image.width)||!finiteNonnegative(image.height)) return invalid('chapter thumbnail');
+                let url:URL;try{url=new URL(image.url);}catch{return invalid('chapter thumbnail URL');}
+                if (!['https:','http:'].includes(url.protocol)||url.username||url.password) return invalid('chapter thumbnail URL');
+                return {url:image.url,width:image.width,height:image.height};
+            });
+        }
+        return chapter;
+    });
+}
