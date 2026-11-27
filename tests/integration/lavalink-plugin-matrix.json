@@ -47,5 +47,21 @@
     "repository": "DuncteBot/java-timed-lyrics",
     "sha256": "4e81cd7870718062fb9252161bace9cf66508c7ed80481026d466cc6fc35a914",
     "size": 2664189
+  },
+  "lavasearch": {
+    "name": "lavasearch-plugin",
+    "advertised": "lavasearch-plugin",
+    "version": "1.0.0",
+    "repository": "topi314/LavaSearch",
+    "sha256": "9c30dad4db97ce9f003a14edd09a2cd58b628924a10d6376d50a68ee93b93b53",
+    "size": 1987703
+  },
+  "lyrics-kt": {
+    "name": "lavalink",
+    "advertised": "lyrics",
+    "version": "2.6.1",
+    "repository": "DRSchlaubi/lyrics.kt",
+    "sha256": "1fc300ec80d4b1705eff0a3b2b4dae21177467c95a7f1e393ecf018c10f2aaf3",
+    "size": 7638135
   }
 }

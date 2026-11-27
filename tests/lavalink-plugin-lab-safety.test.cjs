@@ -76,3 +76,9 @@ test('XM and both Java Timed Lyrics variants use explicit independent profiles',
 test('startup diagnostics distinguish linkage, dependency and native-library failures',()=>{
  for(const [message,code] of [['java.lang.NoClassDefFoundError: private','PLUGIN_CLASS_MISSING'],['java.lang.NoSuchMethodError: private','PLUGIN_BINARY_INCOMPATIBLE'],['java.lang.UnsatisfiedLinkError: private','PLUGIN_NATIVE_LIBRARY_FAILURE'],['No qualifying bean of type private','PLUGIN_REQUIRED_BEAN_MISSING'],['BeanDefinitionOverrideException: private','PLUGIN_BEAN_CONFLICT']])assert.equal(startupErrorCode(message),code);
 });
+
+test('mirror-matched release candidates become exact verified profiles only after review',()=>{
+ const {matrixProfile}=require('./helpers/lavalink-plugin-lab.cjs');
+ for(const id of ['lavasearch','lyrics-kt']){const p=matrixProfile(id);validateProfile(p);assert.match(p.plugins[0].sha256,/^[a-f0-9]{64}$/);}
+ assert.throws(()=>matrixProfile('google-tts'));
+});

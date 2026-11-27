@@ -40,15 +40,15 @@ const id=process.argv[2];
      assert.equal(typeof tracker.data?.encoded,'string');
      checks.push('generated ProTracker MOD recognized and encoded');
     }
-    if(id==='java-lyrics'){
+    if(id==='java-lyrics'||id==='lyrics-kt'){
      // A paused player without a track exercises the actual REST route
      // without contacting YouTube or Genius.
      stage='JAVA_CURRENT_TRACK';
      const guild='923456789012345678';
      await node.rest.updatePlayer(guild,{volume:0,paused:true});
-     try {await assert.rejects(node.rest.getCurrentJavaTimedLyrics(guild),e=>e.statusCode===400);}
+     try {await assert.rejects(id==='java-lyrics'?node.rest.getCurrentJavaTimedLyrics(guild):node.rest.getCurrentLyricsKt(guild),e=>e.statusCode===400);}
      finally {await node.rest.destroyPlayer(guild);}
-     checks.push('standalone Java Timed Lyrics current-track no-track response');
+     checks.push('standalone lyrics current-track no-track response');
     }
     return {passed:true,plugin:installed,plugins:context.versions,jars:context.jars,image:context.image,checks,providersConfigured:false,providerPlaybackVerified:false,discordVoice:false};
    }catch(error){
