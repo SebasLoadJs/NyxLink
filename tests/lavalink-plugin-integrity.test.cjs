@@ -99,3 +99,9 @@ test('release tag and artifact names may differ from advertised plugin name but 
  assert.equal(jarUrl(matrix['java-lyrics']).filename,'lyrics-1.6.6.jar');
  assert.throws(()=>jarUrl({...matrix.xm,tag:'v0.2.9'}),{code:'PLUGIN_INVALID_RELEASE_PIN'});
 });
+
+test('JitPack pin is restricted to audited exact coordinates',()=>{
+ const p=require('./integration/lavalink-plugin-matrix.json').lavadspx;
+ assert.equal(jarUrl(p).url,'https://jitpack.io/com/github/devoxin/lavadspx-plugin/0.0.5/lavadspx-plugin-0.0.5.jar');
+ assert.throws(()=>jarUrl({...p,jitpack:'com/github/other/other'}),{code:'PLUGIN_INVALID_RELEASE_PIN'});
+});

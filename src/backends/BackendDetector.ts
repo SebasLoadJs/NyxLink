@@ -34,11 +34,11 @@ export class BackendDetector {
         if (Array.isArray(data.plugins)) {
             for (const item of data.plugins) {
                 const plugin = object(item);
-                if (typeof plugin?.name !== 'string' || !namePattern.test(plugin.name) ||
+                if (typeof plugin?.name !== 'string' || (!namePattern.test(plugin.name) && plugin.name !== 'Google Cloud TTS') ||
                     typeof plugin.version !== 'string' || !plugin.version.trim() || plugin.version.length > 128 || /[\x00-\x1f\x7f]/.test(plugin.version)) continue;
                 const key = plugin.name.toLowerCase();
                 if (!plugins.has(key)) plugins.set(key, { name: plugin.name, version: plugin.version });
-                capabilities.add(`plugin:${key}`);
+                capabilities.add(`plugin:${key === 'google cloud tts' ? 'google-cloud-tts' : key}`);
             }
         }
         // Presence of the flag advertises the diagnostic endpoint, even when monitoring is disabled.

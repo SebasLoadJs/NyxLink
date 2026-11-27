@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile: [youtube, lavasrc, dunctebot, xm, java-lyrics, java-lavalyrics, lavasearch, lyrics-kt]
+        profile: [youtube, lavasrc, dunctebot, xm, java-lyrics, java-lavalyrics, lavasearch, lyrics-kt, google-tts, lavadspx]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

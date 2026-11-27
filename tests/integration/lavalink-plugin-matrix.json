@@ -63,5 +63,23 @@
     "repository": "DRSchlaubi/lyrics.kt",
     "sha256": "1fc300ec80d4b1705eff0a3b2b4dae21177467c95a7f1e393ecf018c10f2aaf3",
     "size": 7638135
+  },
+  "google-tts": {
+    "name": "tts-plugin",
+    "advertised": "Google Cloud TTS",
+    "version": "1.0.1",
+    "repository": "DuncteBot/tts-plugin",
+    "sha256": "7f5654ea434cd2b305e1e5b12441c7aebf05afd9730eeeecbf26e2377ed19970",
+    "size": 2013996,
+    "provenance": "single-source-audited"
+  },
+  "lavadspx": {
+    "name": "lavadspx-plugin",
+    "advertised": "lavadspx-plugin",
+    "version": "0.0.5",
+    "jitpack": "com/github/devoxin/lavadspx-plugin",
+    "sha256": "3ed3c7203630ed0468e89c46d3a3c33939e320c9fbd35b0ce4cdb174482e018c",
+    "size": 15287,
+    "provenance": "single-source-audited"
   }
 }

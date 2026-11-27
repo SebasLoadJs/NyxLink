@@ -80,7 +80,7 @@ test('startup diagnostics distinguish linkage, dependency and native-library fai
 test('mirror-matched release candidates become exact verified profiles only after review',()=>{
  const {matrixProfile}=require('./helpers/lavalink-plugin-lab.cjs');
  for(const id of ['lavasearch','lyrics-kt']){const p=matrixProfile(id);validateProfile(p);assert.match(p.plugins[0].sha256,/^[a-f0-9]{64}$/);}
- assert.throws(()=>matrixProfile('google-tts'));
+ assert.equal(matrixProfile('google-tts').plugins[0].provenance,'single-source-audited');
 });
 
 test('XM local source is isolated and Spring failure classification never exposes arbitrary text',()=>{
@@ -96,4 +96,10 @@ test('only Java LavaLyrics gets an isolated loopback route planner and XM fixtur
  assert.match(renderConfig(2333,password,matrixProfile('java-lavalyrics')), /ipBlocks: \["127\.0\.0\.0\/30"\]/);
  assert.doesNotMatch(renderConfig(2333,password,matrixProfile('java-lyrics')), /ratelimit:/);
  const xm=xmModule();assert.equal(xm.toString('ascii',0,17),'Extended Module: ');assert.equal(xm.readUInt16LE(58),0x104);assert.equal(xm.readUInt16LE(70),1);
+});
+
+test('single-source profiles are explicit and TTS never gets provider credentials',()=>{
+ const {matrixProfile}=require('./helpers/lavalink-plugin-lab.cjs');
+ for(const id of ['google-tts','lavadspx']){const p=matrixProfile(id);validateProfile(p);assert.equal(p.plugins[0].provenance,'single-source-audited');}
+ const yaml=renderConfig(2333,password,matrixProfile('google-tts'));assert.match(yaml,/clientEmail: ""/);assert.match(yaml,/privateKey: ""/);
 });

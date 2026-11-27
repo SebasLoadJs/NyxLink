@@ -44,6 +44,16 @@ const id=process.argv[2];
      assert.equal(typeof xm.data?.encoded,'string');
      checks.push('generated MOD and XM recognized through native REST and SDK');
     }
+    if(id==='lavadspx'){
+     stage='DSPX_FILTER_CONTRACT';
+     assert.equal(node.backend.supports('lavadspx'),true);
+     const guild='923456789012345678';
+     try{
+      const ack=await node.rest.updatePlayer(guild,{volume:0,paused:true,filters:{pluginFilters:{'high-pass':{cutoffFrequency:80}}}});
+      assert.ok(ack);
+     }finally{await node.rest.destroyPlayer(guild);}
+     checks.push('LavaDSPX high-pass control acknowledged (not measured audio)');
+    }
     if(id==='java-lyrics'||id==='lyrics-kt'){
      // A paused player without a track exercises the actual REST route
      // without contacting YouTube or Genius.
@@ -54,7 +64,7 @@ const id=process.argv[2];
      finally {await node.rest.destroyPlayer(guild);}
      checks.push('standalone lyrics current-track no-track response');
     }
-    return {passed:true,plugin:installed,plugins:context.versions,jars:context.jars,image:context.image,checks,providersConfigured:false,providerPlaybackVerified:false,discordVoice:false};
+    return {passed:true,plugin:installed,provenance:profile.plugins.at(-1).provenance??'release-or-mirror-digest',plugins:context.versions,jars:context.jars,image:context.image,checks,providersConfigured:false,providerPlaybackVerified:false,discordVoice:false};
    }catch(error){
     if(error instanceof PluginLabFailure)throw error;
     const status=Number.isInteger(error?.statusCode)&&error.statusCode>=400&&error.statusCode<=599?'_HTTP_'+error.statusCode:error?.code==='INVALID_PROTOCOL_RESPONSE'?'_INVALID_PROTOCOL':error?.code==='ERR_ASSERTION'?'_ASSERTION':'';

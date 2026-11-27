@@ -23,9 +23,16 @@ function jarUrl(plugin) {
   }
   if (plugin.repository !== undefined) {
     const pinned = Object.values(releasePins).find(p => p.name === plugin.name && p.repository === plugin.repository && p.version === plugin.version);
-    if (!pinned || pinned.sha256 !== plugin.sha256 || pinned.size !== plugin.size || pinned.advertised !== plugin.advertised || pinned.tag !== plugin.tag) throw new PluginIntegrityError('PLUGIN_INVALID_RELEASE_PIN');
+    if (!pinned || pinned.sha256 !== plugin.sha256 || pinned.size !== plugin.size || pinned.advertised !== plugin.advertised || pinned.tag !== plugin.tag || pinned.provenance !== plugin.provenance) throw new PluginIntegrityError('PLUGIN_INVALID_RELEASE_PIN');
     const filename = plugin.name + '-' + plugin.version + '.jar';
     return {url:'https://github.com/' + pinned.repository + '/releases/download/' + (pinned.tag ?? pinned.version) + '/' + filename, filename};
+  }
+  if (plugin.jitpack !== undefined) {
+    const pinned=releasePins.lavadspx;
+    if (plugin.name!==pinned.name||plugin.version!==pinned.version||plugin.jitpack!==pinned.jitpack||
+        plugin.sha256!==pinned.sha256||plugin.size!==pinned.size||plugin.advertised!==pinned.advertised||plugin.provenance!==pinned.provenance) throw new PluginIntegrityError('PLUGIN_INVALID_RELEASE_PIN');
+    const filename=plugin.name+'-'+plugin.version+'.jar';
+    return {url:'https://jitpack.io/'+pinned.jitpack+'/'+pinned.version+'/'+filename,filename};
   }
   const parts = plugin.dependency?.split(':');
   if (!parts || parts.length !== 3 ||
@@ -54,7 +61,7 @@ async function verifiedJar(plugin, fetcher = fetch) {
     const target = new URL(location, url);
     const releaseHost = plugin.repository !== undefined && ['release-assets.githubusercontent.com','objects.githubusercontent.com'].includes(target.hostname);
     if (target.protocol !== 'https:' || target.username || target.password || target.port ||
-        (plugin.repository !== undefined ? !releaseHost : target.origin !== new URL(BASE).origin)) {
+        (plugin.repository !== undefined ? !releaseHost : plugin.jitpack !== undefined ? target.origin !== 'https://jitpack.io' : target.origin !== new URL(BASE).origin)) {
       throw new PluginIntegrityError('PLUGIN_ARTIFACT_REDIRECT_REJECTED');
     }
     await response.body?.cancel();
