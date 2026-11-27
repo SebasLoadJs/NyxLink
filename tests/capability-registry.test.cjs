@@ -74,3 +74,10 @@ for(const status of [200,501]){
     assert.equal(replacement.featureStatus('mix:list'),'unknown');
   });
 }
+
+test('reused detection inputs cannot mutate the previous capability inventory',()=>{
+ const advertised=new Set();const first=BackendDetector.detect({version:{semver:'4.2.2'},sourceManagers:['http'],plugins:[{name:'example',version:'1.0.0'}]}, {}, advertised);
+ const second=BackendDetector.detect({version:{semver:'4.2.2'},sourceManagers:['local']}, {}, advertised);
+ assert.equal(first.supports('source:http'),true);assert.equal(first.supports('plugin:example'),true);
+ assert.equal(first.supports('source:local'),false);assert.equal(second.supports('source:http'),false);assert.equal(second.supports('source:local'),true);
+});

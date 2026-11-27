@@ -43,3 +43,11 @@ test('advertised Lavalink plugins expose native plugin contracts, not NodeLink r
     assert.equal(BackendDetector.detect({ ...info, isNodelink: true }).featureStatus('lavalyrics'), 'unavailable');
     assert.equal(BackendDetector.detect({ ...info, plugins: [] }).featureStatus('lavasearch'), 'unknown');
 });
+
+test('ambiguous lyrics provider capabilities remain unavailable despite endpoint observations',()=>{
+ const backend=BackendDetector.detect({version:{semver:'4.2.2'},plugins:[{name:'lyrics',version:'2.6.1'},{name:'java-lyrics-plugin',version:'1.6.6'}]});
+ for(const feature of ['lyricskt:video','lyricskt:current','lyricskt:search','java-lyrics:video','java-lyrics:current','java-lyrics:search:youtube','java-lyrics:search:genius']){
+  assert.equal(backend.featureStatus(feature),'unavailable');backend.recordFeature(feature,'available');assert.equal(backend.supports(feature),false);
+ }
+ assert.equal(backend.supports('plugin:lyrics'),true);assert.equal(backend.supports('plugin:java-lyrics-plugin'),true);
+});

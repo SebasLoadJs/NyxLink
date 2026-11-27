@@ -21,6 +21,10 @@ export abstract class BackendAdapter {
         const pluginsOnly = new Set(['lavasearch', 'lyricskt:video', 'lyricskt:current', 'lyricskt:search', 'java-lyrics:video', 'java-lyrics:current', 'java-lyrics:search:youtube', 'java-lyrics:search:genius', 'lavalyrics', 'lavalyrics:current', 'lavalyrics:subscribe', 'lavalyrics:unsubscribe', 'lavalink:sponsorblock', 'lavadspx', 'lavasrc', 'lavalink:youtube:config:get', 'lavalink:youtube:config:update', 'lavalink:youtube:oauth', 'lavalink:youtube:stream']);
         const known = new Set([...native, ...pluginsOnly]);
         const unavailable = kind === 'lavalink' ? native : kind === 'nodelink' ? pluginsOnly : new Set<string>();
+        if (kind === 'lavalink' && plugins.some(p=>p.name.toLowerCase()==='lyrics') &&
+            plugins.some(p=>p.name.toLowerCase()==='java-lyrics-plugin')) {
+            for (const feature of pluginsOnly) if (feature.startsWith('lyricskt:') || feature.startsWith('java-lyrics:')) unavailable.add(feature);
+        }
         this.registry = new CapabilityRegistry(capabilities, known, unavailable);
         this.plugins = Object.freeze(plugins.map(plugin => Object.freeze({ ...plugin })));
     }

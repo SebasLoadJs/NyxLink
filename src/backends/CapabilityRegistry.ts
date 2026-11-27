@@ -10,7 +10,12 @@ export class CapabilityRegistry {
         private readonly advertised: ReadonlySet<string>,
         private readonly known: ReadonlySet<string> = new Set(),
         private readonly unavailable: ReadonlySet<string> = new Set(),
-    ) {}
+    ) {
+        // The detector may reuse and clear the input capability set on reconnect.
+        this.advertised = new Set(advertised);
+        this.known = new Set(known);
+        this.unavailable = new Set(unavailable);
+    }
 
     public describe(feature: string): CapabilityDescription {
         if (this.unavailable.has(feature)) return { feature, state: 'unavailable', evidence: 'protocol' };
