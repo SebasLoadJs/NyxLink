@@ -48,3 +48,7 @@ Para cada ID: `estado = pendiente | aprobado | falló`, SHA completo, fecha, bac
 ### Evidencia de soak
 
 El ensayo de protocolo ahora utiliza histogramas HDR acotados y muestreo de memoria periódico. Su verificador exige misma revisión, ambas familias de backend, duración exacta y limpieza. La infraestructura sigue siendo una dependencia externa: no se ha ejecutado una sesión continua de 24–72 h. No sustituirla por el endurance de 600 s. Los ensayos del usuario permanecen separados.
+
+### External native-plugin blocker
+
+XM 0.2.8 fails in libxmp on the pinned Lavalink 4.2.2 runtime, independently of NyxLink. See [reproduction and deployment guidance](xm-native-compatibility.md). This is not a human Discord listening task. Do not deploy the affected plugin on a production playback node while the upstream compatibility problem remains unresolved.

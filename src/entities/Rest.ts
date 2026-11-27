@@ -702,6 +702,11 @@ export class Rest {
         const backend = this.node.backend, socket = this.node.socket, session = this.node.sessionId;
         if (backend?.kind !== 'lavalink' || !backend.getPlugin(plugin) ||
             backend.featureStatus(feature) === 'unavailable') throw new FeatureUnavailableError(feature, backend?.kind ?? 'unknown');
+        // Both standalone plugins register the same video and player routes.
+        // No client-side provider selector exists for those endpoints.
+        if (backend.getPlugin('lyrics') && backend.getPlugin('java-lyrics-plugin')) {
+            throw new FeatureUnavailableError(feature, backend.kind);
+        }
         const current = () => !this.node.destroyed && !this.node.manager.destroyed &&
             this.node.backend === backend && this.node.socket === socket && this.node.sessionId === session;
         const timeout = lyricsKtTimeout(options.timeoutMs);

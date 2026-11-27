@@ -50,3 +50,23 @@ test('Java Timed Lyrics is distinct from Lyrics.kt and uses explicit provider qu
  node.backend=BackendDetector.detect({version:{semver:'4.2.2'},plugins:[{name:'java-lavalyrics',version:'1.6.6'}]});
  await assert.rejects(node.rest.searchJavaTimedLyrics('a'),{code:'FEATURE_UNAVAILABLE'});
 });
+
+test('conflicting standalone lyrics plugins cannot silently route to the wrong provider',async t=>{
+ const {node,player}=createPlayer(t);
+ node.backend=BackendDetector.detect({version:{semver:'4.2.2'},plugins:[{name:'lyrics',version:'2.6.1'},{name:'java-lyrics-plugin',version:'1.6.6'}]});
+ let calls=0;
+ const server=http.createServer((_req,res)=>{calls++;res.writeHead(500);res.end();});
+ server.listen(0,'127.0.0.1');await once(server,'listening');node.port=server.address().port;node.sessionId='fixture-session';
+ t.after(()=>{server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
+ for(const operation of [
+  ()=>node.rest.getLyricsKt('abcdefghijk'),()=>node.rest.getCurrentLyricsKt(player.guildId),
+  ()=>node.rest.searchLyricsKt('fixture'),()=>node.rest.getJavaTimedLyrics('abcdefghijk'),
+  ()=>node.rest.getCurrentJavaTimedLyrics(player.guildId),()=>node.rest.searchJavaTimedLyrics('fixture'),
+  ()=>node.rest.searchJavaTimedLyricsGenius('fixture')
+ ])await assert.rejects(operation(),{code:'FEATURE_UNAVAILABLE'});
+ assert.equal(calls,0);
+ // The LavaLyrics provider variant does not register the conflicting standalone routes.
+ node.backend=BackendDetector.detect({version:{semver:'4.2.2'},plugins:[{name:'lyrics',version:'2.6.1'},{name:'java-lavalyrics',version:'1.6.6'},{name:'lavalyrics-plugin',version:'1.1.0'}]});
+ await assert.rejects(node.rest.getLyricsKt('abcdefghijk'),e=>e.statusCode===500);
+ assert.equal(calls,1);
+});
