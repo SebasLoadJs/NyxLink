@@ -7,7 +7,7 @@ const {matrixProfile,withLavalinkPluginLab,PluginLabFailure}=require('../tests/h
 const id=process.argv[2];
 (async()=>{
  const profile=matrixProfile(id);
- let report;
+ let report;const trackerObservations={};
  try{
   const result=await withLavalinkPluginLab(async context=>{
    const manager=new Manager({nodes:[context.node],send(){throw Error('Discord intentionally unavailable');},options:{database:{type:'memory'},resume:false}});
@@ -32,16 +32,24 @@ const id=process.argv[2];
     const checks=['advertised exact plugin version','typed info inventory','local generated WAV load'];
     if(id==='xm'){
      stage='XM_LOAD';
-     const classify=result=>['track','empty','error','playlist','search'].includes(result?.loadType)?result.loadType.toUpperCase():'UNKNOWN';
-     const remote=await node.rest.loadTracks(context.moduleUrl);
-     const local=await node.rest.loadTracks(context.moduleFile);
-     const xm=await node.rest.loadTracks(context.xmUrl);
-     const direct=await fetch('http://127.0.0.1:'+context.node.port+'/v4/loadtracks?'+new URLSearchParams({identifier:context.moduleUrl}),{headers:{Authorization:context.node.password},signal:AbortSignal.timeout(10000)});
-     const wire=direct.ok?await direct.json():null;
-     if(remote?.loadType!=='track'||local?.loadType!=='track'||xm?.loadType!=='track'||wire?.loadType!=='track') throw new PluginLabFailure('PLUGIN_XM_HTTP_'+classify(remote)+'_LOCAL_'+classify(local)+'_XM_'+classify(xm)+'_WIRE_'+classify(wire));
-     assert.equal(typeof remote.data?.encoded,'string');
-     assert.equal(typeof local.data?.encoded,'string');
-     assert.equal(typeof xm.data?.encoded,'string');
+     const classify=result=>result?.loadType==='track'?typeof result.data?.encoded==='string'?'TRACK':'INVALID_TRACK':['empty','error','playlist','search'].includes(result?.loadType)?result.loadType.toUpperCase():'UNKNOWN';
+     const direct=async identifier=>{
+      const response=await fetch('http://127.0.0.1:'+context.node.port+'/v4/loadtracks?'+new URLSearchParams({identifier}),{headers:{Authorization:context.node.password},signal:AbortSignal.timeout(12000),redirect:'error'});
+      if(!response.ok)return 'HTTP_'+response.status;
+      return classify(await response.json());
+     };
+     const observe=async(key,operation)=>{
+      try{trackerObservations[key]=await operation();}
+      catch(error){trackerObservations[key]=error?.name==='TimeoutError'||error?.name==='AbortError'?'TIMEOUT':error?.code==='INVALID_PROTOCOL_RESPONSE'?'INVALID_PROTOCOL':Number.isInteger(error?.statusCode)?'HTTP_'+error.statusCode:'FAILED';}
+      console.log(JSON.stringify({trackerProbe:key,result:trackerObservations[key]}));
+     };
+     // Independently measure the server first, so an SDK exception cannot
+     // hide the native REST result. Never log payloads or arbitrary errors.
+     for(const [kind,identifier] of [['modHttp',context.moduleUrl],['modLocal',context.moduleFile],['xmHttp',context.xmUrl]]){
+      await observe(kind+'Wire',()=>direct(identifier));
+      await observe(kind+'Sdk',async()=>classify(await node.rest.loadTracks(identifier,{signal:AbortSignal.timeout(15000)})));
+     }
+     if(Object.values(trackerObservations).some(value=>value!=='TRACK'))throw new PluginLabFailure('PLUGIN_XM_TRACKER_ACCEPTANCE_FAILED');
      checks.push('generated MOD and XM recognized through native REST and SDK');
     }
     if(id==='lavadspx'){
@@ -72,7 +80,7 @@ const id=process.argv[2];
    }finally{await manager.shutdown();}
   },profile);
   report={profile:id,...result};
- }catch(error){report={profile:id,passed:false,errorCode:error instanceof PluginLabFailure?error.code:'PLUGIN_MATRIX_FAILED'};}
+ }catch(error){report={profile:id,passed:false,errorCode:error instanceof PluginLabFailure?error.code:'PLUGIN_MATRIX_FAILED',...(id==='xm'?{trackerObservations}:{})};}
  const destination=path.resolve('.runtime/plugin-matrix',id+'.json');
  await fs.mkdir(path.dirname(destination),{recursive:true,mode:0o700});
  await fs.writeFile(destination,JSON.stringify(report,null,2)+'\n',{mode:0o600});
