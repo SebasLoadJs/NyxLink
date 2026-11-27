@@ -29,10 +29,10 @@ Audit inputs: [NodeLink source 86c6a00](https://github.com/PerformanC/NodeLink/t
 | SponsorBlock | Native category methods and normalized events | Live skip and chapter acceptance |
 | LavaSrc | Collection and track metadata views, core sources | Pin provider-specific metadata and live access |
 | LavaSearch | Typed loadSearch | Pinned integration and provider acceptance |
-| LavaLyrics | Typed getLavaLyrics/getCurrentLavaLyrics/subscribeLavaLyrics/unsubscribeLavaLyrics | Event schema and real plugin/provider subscription tests |
+| LavaLyrics | Typed getLavaLyrics/getCurrentLavaLyrics/subscribeLavaLyrics/unsubscribeLavaLyrics and lavaLyricsEvent | Real provider subscription tests |
 | DuncteBot | Core sources | Exact source prefixes and runtime matrix |
 | XM | Core encoded tracks | Actual module playback acceptance |
-| Lyrics.kt | Generic source/plugin surface | Inspect plugin-specific routes and response schemas |
+| Lyrics.kt | Typed getLyricsKt/getCurrentLyricsKt/searchLyricsKt | Pinned runtime and provider acceptance pending |
 | Java Timed Lyrics | LavaLyrics provider interoperability where configured | Pin plugin/provider and test |
 | LavaDSPX | Typed setLavaDSPX and plugin filter recovery projection | Audible effects and pinned integration |
 
@@ -52,3 +52,5 @@ Cloudflare Tunnel changes server deployment rather than playback protocol. The s
 3. Add pinned plugin runtime tests separately from simulated payload tests. Preserve no-credentials cases as untested, not passed.
 4. Keep privileged profiler/relay operations out of normal player control until the authorization and transport contract is reviewed.
 5. No claim of complete API parity or release acceptance until the remaining contracts and real backend evidence are recorded.
+
+- [Lyrics.kt at d0dfbb1](https://github.com/DRSchlaubi/lyrics.kt/blob/d0dfbb1385f528a335460d16c2dd9023de70baf5/lavalink/src/main/kotlin/LyricsRestHandler.kt): three independent GET routes, advertised plugin name `lyrics`, timed/text union, nullable line ranges, search metadata and provider absence. Unlike LavaLyrics, the current-track route ends in `/lyrics`, not `/track/lyrics`. Client fixture tests are not proof of provider or runtime compatibility.

@@ -164,3 +164,5 @@ export type { NodeLinkHlsOptions, NodeLinkHlsReadOptions, NodeLinkHlsManifest } 
 export type { NodeLinkProfilerScope, NodeLinkProfilerOptions, NodeLinkProcessMemory, NodeLinkProfilerProcess, NodeLinkProfilerSnapshot, NodeLinkWorkerSnapshot } from './src/backends/NodeLinkDiagnostics';
 
 export type { NodeLinkAdminOptions, NodeLinkYoutubeConfig, NodeLinkYoutubeConfigUpdate, NodeLinkYoutubeConfigAcknowledgement, NodeLinkWorkerTarget, NodeLinkWorkerTerminationOptions, NodeLinkWorkerTermination } from './src/backends/NodeLinkAdminContracts';
+
+export type { LyricsKtTrack, LyricsKtLine, LyricsKtResult, LyricsKtSearchTrack, LyricsKtOptions } from './src/backends/LyricsKtContracts';

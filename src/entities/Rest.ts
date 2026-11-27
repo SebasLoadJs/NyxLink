@@ -1,3 +1,4 @@
+import { lyricsKtVideoPath, lyricsKtSearchPath, lyricsKtTimeout, readLyricsKtResult, readLyricsKtSearch, type LyricsKtOptions, type LyricsKtResult, type LyricsKtSearchTrack } from '../backends/LyricsKtContracts';
 import { assertNodeLinkAdmin, readNodeLinkYoutubeConfig, nodeLinkYoutubeConfigBody, readNodeLinkYoutubeConfigAcknowledgement, nodeLinkWorkerTerminationBody, readNodeLinkWorkerTermination, type NodeLinkAdminOptions, type NodeLinkYoutubeConfig, type NodeLinkYoutubeConfigUpdate, type NodeLinkYoutubeConfigAcknowledgement, type NodeLinkWorkerTarget, type NodeLinkWorkerTerminationOptions, type NodeLinkWorkerTermination } from '../backends/NodeLinkAdminContracts';
 import { profilerQuery, diagnosticsTimeout, readNodeLinkProfilerSnapshot, readNodeLinkWorkerSnapshots, type NodeLinkProfilerOptions, type NodeLinkProfilerSnapshot, type NodeLinkWorkerSnapshot } from '../backends/NodeLinkDiagnostics';
 import { hlsCreateQuery, hlsReadQuery, hlsTimeout, validateHlsManifest, type NodeLinkHlsOptions, type NodeLinkHlsReadOptions, type NodeLinkHlsManifest } from '../backends/NodeLinkHlsContracts';
@@ -623,6 +624,52 @@ export class Rest {
         if (!current()) throw new Error('LavaSearch backend session changed');
         if (result !== null) validateLavaSearch(result);
         backend.recordFeature('lavasearch', 'available');
+        return result;
+    }
+
+    private async lyricsKtRequest<T>(feature: string, path: string, options: LyricsKtOptions,
+        decode: (raw: unknown) => T, notFoundAsNull: boolean = false): Promise<T | null> {
+        const backend = this.node.backend, socket = this.node.socket, session = this.node.sessionId;
+        if (backend?.kind !== 'lavalink' || !backend.getPlugin('lyrics') ||
+            backend.featureStatus(feature) === 'unavailable') throw new FeatureUnavailableError(feature, backend?.kind ?? 'unknown');
+        const current = () => !this.node.destroyed && !this.node.manager.destroyed &&
+            this.node.backend === backend && this.node.socket === socket && this.node.sessionId === session;
+        const timeout = lyricsKtTimeout(options.timeoutMs);
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('Lyrics.kt context changed');
+        let raw: unknown;
+        try {
+            raw = await this.request<unknown>(this.url + path, {
+                method: 'GET', headers: this.authHeaders, signal: options.signal,
+                allowedOrigins: [new URL(this.url).origin], throwOnError: true,
+            }, timeout, 0, 1000, 0);
+        } catch (error) {
+            const message = error instanceof HttpError && error.body && typeof error.body === 'object' && 'message' in error.body ? String(error.body.message) : '';
+            if (notFoundAsNull && error instanceof HttpError && error.statusCode === 404 &&
+                !/requested route was not found|unknown (?:route|endpoint)|(?:endpoint|feature).*disabled|no static resource/i.test(message)) {
+                if (!current()) throw new Error('Lyrics.kt context changed');
+                return null;
+            }
+            this.featureError(feature, error, backend, current);
+        }
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('Lyrics.kt context changed');
+        const result = decode(raw);
+        backend.recordFeature(feature, 'available');
+        return result;
+    }
+
+    public getLyricsKt(videoId: string, options: LyricsKtOptions = {}): Promise<LyricsKtResult | null> {
+        return this.lyricsKtRequest('lyricskt:video', lyricsKtVideoPath(videoId), options, readLyricsKtResult, true);
+    }
+
+    public getCurrentLyricsKt(guildId: string, options: LyricsKtOptions = {}): Promise<LyricsKtResult | null> {
+        return this.lyricsKtRequest('lyricskt:current', playerPath(this.node.sessionId, guildId) + '/lyrics', options, readLyricsKtResult, true);
+    }
+
+    public async searchLyricsKt(query: string, options: LyricsKtOptions = {}): Promise<LyricsKtSearchTrack[]> {
+        const result = await this.lyricsKtRequest('lyricskt:search', lyricsKtSearchPath(query), options, readLyricsKtSearch);
+        if (result === null) throw new ProtocolResponseError('Lyrics.kt', 'search response');
         return result;
     }
 

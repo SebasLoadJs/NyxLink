@@ -2867,6 +2867,77 @@ export declare class Local extends Memory {
 }
 ```
 
+## LyricsKtLine
+
+[Source declaration](../src/backends/LyricsKtContracts.ts)
+
+```ts
+export interface LyricsKtLine {
+    line: string;
+    range: {
+        start: number;
+        end: number;
+    } | null;
+}
+```
+
+## LyricsKtOptions
+
+[Source declaration](../src/backends/LyricsKtContracts.ts)
+
+```ts
+export interface LyricsKtOptions {
+    timeoutMs?: number;
+    signal?: AbortSignal;
+}
+```
+
+## LyricsKtResult
+
+[Source declaration](../src/backends/LyricsKtContracts.ts)
+
+```ts
+export type LyricsKtResult = {
+    type: 'text';
+    track: LyricsKtTrack;
+    source: string;
+    text: string;
+} | {
+    type: 'timed';
+    track: LyricsKtTrack;
+    source: string;
+    lines: LyricsKtLine[];
+};
+```
+
+## LyricsKtSearchTrack
+
+[Source declaration](../src/backends/LyricsKtContracts.ts)
+
+```ts
+export interface LyricsKtSearchTrack {
+    videoId: string;
+    title: string;
+}
+```
+
+## LyricsKtTrack
+
+[Source declaration](../src/backends/LyricsKtContracts.ts)
+
+```ts
+export interface LyricsKtTrack {
+    title: string;
+    author: string;
+    album: string | null;
+    albumArt: Array<{
+        url: string;
+        height: number;
+        width: number;
+    }>;
+}
+```
+
 ## LyricsRequestOptions
 
 [Source declaration](../src/backends/NodeLinkContracts.ts)
@@ -4785,6 +4856,9 @@ export declare class Rest {
     updateMixLayerVolume(guildId: string, mixId: string, volume: number): Promise<void>;
     removeMixLayer(guildId: string, mixId: string): Promise<void>;
     loadSearch(query: string, options?: LavaSearchOptions): Promise<LavaSearchResult | null>;
+    getLyricsKt(videoId: string, options?: LyricsKtOptions): Promise<LyricsKtResult | null>;
+    getCurrentLyricsKt(guildId: string, options?: LyricsKtOptions): Promise<LyricsKtResult | null>;
+    searchLyricsKt(query: string, options?: LyricsKtOptions): Promise<LyricsKtSearchTrack[]>;
     getLavaLyrics(encodedTrack: string, options?: LavaLyricsOptions): Promise<LavaLyricsData | null>;
     getCurrentLavaLyrics(guildId: string, options?: LavaLyricsOptions): Promise<LavaLyricsData | null>;
     subscribeLavaLyrics(guildId: string, options?: LavaLyricsOptions): Promise<void>;

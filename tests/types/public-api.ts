@@ -374,3 +374,7 @@ const pluginResult: Promise<string> = node.rest.callPlugin(dynamicPluginRoute, {
 // @ts-expect-error Dynamic path segments must be strings.
 node.rest.callPlugin(dynamicPluginRoute, { params: { id: 42 } });
 void pluginResult;
+
+const lyricsKt: Promise<import('../../dist').LyricsKtResult | null> = node.rest.getLyricsKt('abcdefghijk');
+const lyricsKtSearch: Promise<import('../../dist').LyricsKtSearchTrack[]> = node.rest.searchLyricsKt('fixture');
+void [lyricsKt, lyricsKtSearch];
