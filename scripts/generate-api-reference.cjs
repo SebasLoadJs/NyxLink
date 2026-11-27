@@ -47,7 +47,16 @@ if (require.main === module) {
     const result = generate(), target = output ?? path.join(root, 'docs/api-generated.md');
     if (args.includes('--check')) {
       const actual = fs.readFileSync(target, 'utf8').replace(/\r\n/g, '\n');
-      if (actual !== result.content) throw new Error('Public API reference is stale; run pnpm run docs:api');
+      if (actual !== result.content) {
+        const expectedLines = result.content.split('\n'), actualLines = actual.split('\n');
+        const first = expectedLines.findIndex((line, index) => line !== actualLines[index]);
+        const index = first < 0 ? Math.min(expectedLines.length, actualLines.length) : first;
+        // Both inputs are public declaration reference text, never provider payloads.
+        console.error('First API reference mismatch at line ' + (index + 1));
+        console.error('Committed: ' + JSON.stringify(actualLines[index]));
+        console.error('Generated: ' + JSON.stringify(expectedLines[index]));
+        throw new Error('Public API reference is stale; run pnpm run docs:api');
+      }
       console.log('Public API reference verified: ' + result.exports + ' exports');
     } else {
       fs.writeFileSync(target, result.content);

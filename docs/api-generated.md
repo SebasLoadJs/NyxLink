@@ -3642,6 +3642,20 @@ export interface NodeLinkLyricWord {
 }
 ```
 
+## NodeLinkMeaningResult
+
+[Source declaration](../src/backends/BackendRestContracts.ts)
+
+```ts
+export type NodeLinkMeaningResult = {
+    loadType: 'meaning';
+    data: NodeLinkJsonValue;
+} | {
+    loadType: 'empty';
+    data: Record<string, never>;
+};
+```
+
 ## NodeLinkMediaArtist
 
 [Source declaration](../src/backends/NodeLinkMediaMetadata.ts)
@@ -3820,20 +3834,6 @@ export interface NodeLinkMediaRecording {
         type?: string;
     }>;
 }
-```
-
-## NodeLinkMeaningResult
-
-[Source declaration](../src/backends/BackendRestContracts.ts)
-
-```ts
-export type NodeLinkMeaningResult = {
-    loadType: 'meaning';
-    data: NodeLinkJsonValue;
-} | {
-    loadType: 'empty';
-    data: Record<string, never>;
-};
 ```
 
 ## NodeLinkMetricsAuthorization
