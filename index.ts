@@ -155,7 +155,7 @@ export { OpenTelemetry } from './src/observability/OpenTelemetry';
 export type { OpenTelemetryOptions, TelemetryMeter, TelemetryTracer, TelemetrySpan, TelemetryOperation, TelemetryOutcome, TelemetryObservation, TelemetryGauge } from './src/observability/OpenTelemetry';
 
 export { BackendPluginRouteRegistry } from './src/backends/BackendPluginRoutes';
-export type { BackendPluginMethod, BackendPluginRoute, BackendPluginRequest } from './src/backends/BackendPluginRoutes';
+export type { BackendPluginMethod, BackendPluginRoute, BackendPluginRequest, BackendPluginBinaryOptions, BackendPluginBinaryResponse } from './src/backends/BackendPluginRoutes';
 
 export type { LavalinkYoutubeAdminOptions, LavalinkYoutubeConfig, LavalinkYoutubeConfigUpdate, LavalinkYoutubeOAuthToken, LavalinkYoutubeStream, LavalinkYoutubeStreamOptions } from './src/backends/LavalinkYoutubeContracts';
 

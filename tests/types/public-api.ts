@@ -399,3 +399,6 @@ void nativeMetrics;
 
 const profilerCommand:Promise<import('../../dist').NodeLinkProfilerCommandResult>=node.rest.runNodeLinkProfilerCommand({code:'fixture',confirm:true,action:'cpuStart',scope:'master'});
 void profilerCommand;
+
+const binaryPluginRoute=manager.pluginRoutes.register({backend:'lavalink',plugin:'example',id:'binary',scope:'node',method:'GET',path:'example/audio',binary:{contentTypes:['audio/ogg'],maxBytes:1048576},decode(value:unknown){return (value as import('../../dist').BackendPluginBinaryResponse).bytes;}});
+const binaryPluginResult:Promise<Buffer>=node.rest.callPlugin(binaryPluginRoute);void binaryPluginResult;

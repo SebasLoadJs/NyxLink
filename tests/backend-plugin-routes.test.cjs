@@ -94,3 +94,24 @@ test('registered dynamic plugin routes accept only explicit single segments and 
  assert.equal(await node.rest.callPlugin(playerRoute,{guildId:player.guildId,params:{profileId:'studio_3'},body:{enabled:true}}),'studio');
  assert.deepEqual(calls.map(c=>c.url),['/v4/custom/profile/studio-1','/custom-plugin/profile/studio_2','/v4/sessions/fixture-session/players/'+player.guildId+'/custom/profile/studio_3']);
 });
+
+test('binary plugin responses are bounded, typed, and never follow redirects',async t=>{
+ let mode='ok';
+ const {manager,node,calls}=await setup(t,(_req,res)=>{
+  if(mode==='redirect'){res.writeHead(302,{location:'/v4/info'});res.end();return;}
+  if(mode==='json'){res.writeHead(200,{'content-type':'application/json'});res.end('{}');return;}
+  if(mode==='compressed'){res.writeHead(200,{'content-type':'audio/ogg','content-encoding':'gzip'});res.end('audio');return;}
+  res.writeHead(200,{'content-type':'audio/ogg'});
+  res.write('audio');res.end(mode==='large'?'large':'');
+ });
+ const binary={contentTypes:['audio/ogg'],maxBytes:8};
+ const route=manager.pluginRoutes.register({...definition,id:'audio',binary,decode(v){return v;}});
+ binary.contentTypes.push('audio/wav');
+ assert.deepEqual(route.binary.contentTypes,['audio/ogg']);
+ const result=await node.rest.callPlugin(route);
+ assert.deepEqual(result,{bytes:Buffer.from('audio'),contentType:'audio/ogg',statusCode:200});
+ for(const invalid of [{contentTypes:['*/*']},{contentTypes:['application/json']},{contentTypes:['audio/ogg'],maxBytes:16777217}]) assert.throws(()=>manager.pluginRoutes.register({...definition,id:'bad',binary:invalid}),TypeError);
+ for(const next of ['large','json','compressed']){mode=next;await assert.rejects(node.rest.callPlugin(route),{code:'INVALID_PROTOCOL_RESPONSE'});}
+ mode='redirect';await assert.rejects(node.rest.callPlugin(route),e=>e.statusCode===302);
+ assert.equal(calls.length,5);
+});

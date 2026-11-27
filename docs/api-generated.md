@@ -709,6 +709,29 @@ export type BackendPlugin = Readonly<{
 }>;
 ```
 
+## BackendPluginBinaryOptions
+
+[Source declaration](../src/backends/BackendPluginRoutes.ts)
+
+```ts
+export interface BackendPluginBinaryOptions {
+    readonly contentTypes: readonly string[];
+    readonly maxBytes?: number;
+}
+```
+
+## BackendPluginBinaryResponse
+
+[Source declaration](../src/backends/BackendPluginRoutes.ts)
+
+```ts
+export interface BackendPluginBinaryResponse {
+    readonly bytes: Buffer;
+    readonly contentType: string;
+    readonly statusCode: number;
+}
+```
+
 ## BackendPluginEventContext
 
 [Source declaration](../src/backends/BackendPluginEvents.ts)
@@ -794,6 +817,7 @@ export interface BackendPluginRoute<T> {
     readonly method: BackendPluginMethod;
     readonly path: string;
     readonly prefix?: 'v4' | 'root';
+    readonly binary?: BackendPluginBinaryOptions;
     readonly decode: (response: unknown) => T;
 }
 ```

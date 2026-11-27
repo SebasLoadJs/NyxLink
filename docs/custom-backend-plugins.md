@@ -57,3 +57,7 @@ Events must match the declared backend, advertised plugin, event type and scope.
 ### Extension-owned registrations
 
 Inside `manager.useExtension({ name, setup(context) { ... } })`, use `context.onPluginEvent(definition, listener)` and `context.registerPluginRoute(definition)` to tie registrations to extension removal, failed setup and manager shutdown. The returned route is usable with `Rest.callPlugin`. Event callbacks are gated by the extension's active lifecycle; plugin route registration is available during setup for intentional initialization. In-flight remote mutations cannot be undone by disposal. Do not retain a disposed route.
+
+## Bounded binary plugin responses
+
+Register a route with `binary: { contentTypes: ['audio/ogg'], maxBytes: 1048576 }` to read a finite media response. Its decoder receives a `BackendPluginBinaryResponse` containing `bytes`, `contentType`, and `statusCode`. Media content types are explicit, compressed HTTP responses and redirects are rejected, and both the deadline and size limit apply to the full response. The default limit is 4 MiB and the maximum is 16 MiB. This is a bounded download, not a continuous audio stream or browser proxy. The application must validate the media format before playback. JSON routes remain unchanged.

@@ -2,6 +2,17 @@ import type { BackendKind } from './BackendAdapter';
 
 /** A trusted application declares a fixed server plugin endpoint, not a URL supplied by a user. */
 export type BackendPluginMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+export interface BackendPluginBinaryOptions {
+    readonly contentTypes: readonly string[];
+    readonly maxBytes?: number;
+}
+
+export interface BackendPluginBinaryResponse {
+    readonly bytes: Buffer;
+    readonly contentType: string;
+    readonly statusCode: number;
+}
+
 export interface BackendPluginRoute<T> {
     readonly backend: BackendKind;
     readonly plugin: string;
@@ -10,6 +21,7 @@ export interface BackendPluginRoute<T> {
     readonly method: BackendPluginMethod;
     readonly path: string;
     readonly prefix?: 'v4' | 'root';
+    readonly binary?: BackendPluginBinaryOptions;
     readonly decode: (response: unknown) => T;
 }
 export interface BackendPluginRequest {
@@ -25,6 +37,16 @@ const segment = /^[a-zA-Z0-9_-]{1,64}$/;
 const parameter = /^:([a-zA-Z][a-zA-Z0-9_]{0,31})$/;
 const parameterValue = /^[a-zA-Z0-9_-]{1,128}$/;
 const reserved = new Set(['sessions','players','groups','track','info','stats','version','loadtracks','decodetrack','decodetracks','encodetrack','encodedtracks','routeplanner','connection','workers','youtube','metrics','profiler','hls','loadstream','trackstream','sources','loadlyrics','loadchapters','meaning','loadmedia','loadsearch','lyrics','sponsorblock','mix','websocket']);
+const mimePattern = /^(?:audio|video|image|application)\/[a-z0-9][a-z0-9.+_-]{0,63}$/;
+function binaryOptions(value: BackendPluginBinaryOptions | undefined): BackendPluginBinaryOptions | undefined {
+    if (value === undefined) return undefined;
+    if (!value || !Array.isArray(value.contentTypes) || value.contentTypes.length < 1 || value.contentTypes.length > 16 ||
+        !value.contentTypes.every(type => typeof type === 'string' && mimePattern.test(type) && !['application/json','application/javascript','application/xhtml+xml','image/svg+xml'].includes(type)) ||
+        new Set(value.contentTypes).size !== value.contentTypes.length) throw new TypeError('Invalid binary plugin content types');
+    const maxBytes = value.maxBytes ?? 4194304;
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 16777216) throw new TypeError('Invalid binary plugin response limit');
+    return Object.freeze({contentTypes:Object.freeze([...value.contentTypes]),maxBytes});
+}
 const key = (route: BackendPluginRoute<unknown>) => route.backend + ':' + route.plugin + ':' + route.id;
 export class BackendPluginRouteRegistry {
     private readonly routes = new Map<string, BackendPluginRoute<unknown>>();
@@ -52,10 +74,12 @@ export class BackendPluginRouteRegistry {
             (prefix === 'root' && root !== 'plugins' && root !== definition.plugin)) {
             throw new TypeError('Invalid or reserved backend plugin path');
         }
+        const binary = binaryOptions(definition.binary);
         const route: BackendPluginRoute<T> = Object.freeze({
             backend: definition.backend, plugin: definition.plugin, id: definition.id,
             scope: definition.scope, method: definition.method, path: definition.path,
             ...(definition.prefix === undefined ? {} : { prefix }),
+            ...(binary === undefined ? {} : {binary}),
             decode: definition.decode,
         });
         if (this.routes.has(key(route))) throw new Error('Backend plugin route already registered');

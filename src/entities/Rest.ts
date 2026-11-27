@@ -4,7 +4,7 @@ import { assertNodeLinkAdmin, readNodeLinkYoutubeConfig, nodeLinkYoutubeConfigBo
 import { profilerCommandBody, readProfilerCommandResult, type NodeLinkProfilerCommandOptions, type NodeLinkProfilerCommandResult, profilerQuery, diagnosticsTimeout, readNodeLinkProfilerSnapshot, readNodeLinkWorkerSnapshots, type NodeLinkProfilerOptions, type NodeLinkProfilerSnapshot, type NodeLinkWorkerSnapshot } from '../backends/NodeLinkDiagnostics';
 import { hlsCreateQuery, hlsReadQuery, hlsTimeout, validateHlsManifest, type NodeLinkHlsOptions, type NodeLinkHlsReadOptions, type NodeLinkHlsManifest } from '../backends/NodeLinkHlsContracts';
 import { assertYoutubeAdmin, youtubeTimeout, youtubeConfig, youtubeConfigBody, youtubeOAuthPath, youtubeOAuthToken, youtubeStreamPath, type LavalinkYoutubeAdminOptions, type LavalinkYoutubeConfig, type LavalinkYoutubeConfigUpdate, type LavalinkYoutubeOAuthToken, type LavalinkYoutubeStreamOptions, type LavalinkYoutubeStream } from '../backends/LavalinkYoutubeContracts';
-import { renderBackendPluginPath, type BackendPluginRoute, type BackendPluginRequest } from '../backends/BackendPluginRoutes';
+import { renderBackendPluginPath, type BackendPluginRoute, type BackendPluginRequest, type BackendPluginBinaryResponse } from '../backends/BackendPluginRoutes';
 import { mediaLookupQuery, validateMediaLookup, type NodeLinkMediaLookup, type NodeLinkMediaLookupResult } from '../backends/NodeLinkMediaLookup';
 import { sessionPath, playerPath } from '../backends/SessionPath';
 import { nodeLinkDiscoveryIdentifier, type NodeLinkDiscoveryOptions } from '../backends/NodeLinkSearchContracts';
@@ -208,11 +208,14 @@ export class Rest {
         if (!current()) throw new Error('Plugin request context changed');
         let response: unknown;
         try {
-            response = await this.request<unknown>(this.url + path + (query ? '?' + query : ''), {
-                method: route.method, headers: body === undefined ? this.authHeaders : this.jsonHeaders,
-                ...(body === undefined ? {} : { body }), signal: options.signal,
-                allowedOrigins: [new URL(this.url).origin], throwOnError: true, noContentAsNull: true,
-            }, timeout, 0, 1000, 0);
+            const url = this.url + path + (query ? '?' + query : '');
+            response = route.binary
+                ? await this.readPluginBinary(route, url, body, timeout, options.signal, current)
+                : await this.request<unknown>(url, {
+                    method: route.method, headers: body === undefined ? this.authHeaders : this.jsonHeaders,
+                    ...(body === undefined ? {} : { body }), signal: options.signal,
+                    allowedOrigins: [new URL(this.url).origin], throwOnError: true, noContentAsNull: true,
+                }, timeout, 0, 1000, 0);
         } catch (error) {
             this.featureError(feature, error, backend, current);
         }
@@ -223,6 +226,49 @@ export class Rest {
         if (!current()) throw new Error('Plugin request context changed');
         backend.recordFeature(feature, 'available');
         return decoded;
+    }
+
+    private async readPluginBinary(route: BackendPluginRoute<unknown>, url: string, body: string | undefined,
+        timeout: number, callerSignal: AbortSignal | undefined, current: () => boolean): Promise<BackendPluginBinaryResponse> {
+        const binary = route.binary!;
+        const signal = callerSignal ? AbortSignal.any([callerSignal,AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout);
+        signal.throwIfAborted();
+        const response = await this.streamRequest(url, {
+            method: route.method, headers: {...(body === undefined ? this.authHeaders : this.jsonHeaders), Accept:binary.contentTypes.join(', '), 'Accept-Encoding':'identity'},
+            ...(body === undefined ? {} : {body}), signal,
+        }, timeout);
+        const stream = response.stream;
+        const abort = () => stream.destroy();
+        signal.addEventListener('abort',abort,{once:true});
+        try {
+            signal.throwIfAborted();
+            if (!current()) throw new Error('Plugin request context changed');
+            const mime = response.headers['content-type'];
+            const contentType = typeof mime === 'string' ? mime.split(';')[0].trim().toLowerCase() : '';
+            const encoding = response.headers['content-encoding'];
+            if (response.statusCode !== 200 || !binary.contentTypes.includes(contentType) ||
+                (encoding !== undefined && encoding !== 'identity')) throw new ProtocolResponseError('backend plugin', 'binary content type');
+            const limit = binary.maxBytes ?? 4194304;
+            const length = Number(response.headers['content-length']);
+            if (Number.isFinite(length) && length > limit) throw new ProtocolResponseError('backend plugin', 'binary response limit');
+            let size = 0;
+            const chunks: Buffer[] = [];
+            for await (const chunk of stream) {
+                signal.throwIfAborted();
+                if (!current()) throw new Error('Plugin request context changed');
+                const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+                size += bytes.length;
+                if (size > limit) throw new ProtocolResponseError('backend plugin', 'binary response limit');
+                chunks.push(bytes);
+            }
+            signal.throwIfAborted();
+            if (!current()) throw new Error('Plugin request context changed');
+            if (!size || (Number.isFinite(length) && size !== length)) throw new ProtocolResponseError('backend plugin', 'binary response length');
+            return {bytes:Buffer.concat(chunks),contentType,statusCode:response.statusCode};
+        } finally {
+            signal.removeEventListener('abort',abort);
+            if (!stream.complete || !stream.readableEnded) stream.destroy();
+        }
     }
 
     /** Low-level session group API: does not synchronize NyxLink's local queues or player commands. */
