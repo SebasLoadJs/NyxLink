@@ -187,11 +187,15 @@ export class Rest {
         const feature = 'custom-plugin:' + route.plugin + ':' + route.id;
         if (manager.destroyed || this.node.destroyed || backend?.kind !== route.backend || !backend.getPlugin(route.plugin) ||
             backend.featureStatus(feature) === 'unavailable') throw new FeatureUnavailableError(feature, backend?.kind ?? 'unknown');
-        const current = () => !manager.destroyed && !this.node.destroyed && registry.owns(route) &&
-            this.node.backend === backend && this.node.sessionId === session && this.node.socket === socket;
         const relative = renderBackendPluginPath(route, options.params);
-        const path = route.scope === 'player' ? playerPath(session, options.guildId) + '/' + relative : (route.prefix === 'root' ? '/' : '/v4/') + relative;
-        if (route.scope === 'node' && options.guildId !== undefined) throw new TypeError('Node-scoped plugin route does not accept a guild ID');
+        const guildId = options.guildId;
+        const path = route.scope === 'player' ? playerPath(session, guildId) + '/' + relative : (route.prefix === 'root' ? '/' : '/v4/') + relative;
+        if (route.scope === 'node' && guildId !== undefined) throw new TypeError('Node-scoped plugin route does not accept a guild ID');
+        const player = route.scope === 'player' ? manager.players.get(guildId!) : undefined;
+        if (route.scope === 'player' && (!player || player.destroyed || player.node !== this.node)) throw new Error('Plugin player is not managed by this node');
+        const current = () => !manager.destroyed && !this.node.destroyed && registry.owns(route) &&
+            this.node.backend === backend && this.node.sessionId === session && this.node.socket === socket &&
+            (!player || (!player.destroyed && player.node === this.node && manager.players.get(guildId!) === player));
         const timeout = options.timeoutMs ?? 10000;
         if (!Number.isSafeInteger(timeout) || timeout < 1 || timeout > 60000) throw new TypeError('Invalid plugin request timeout');
         if (options.query !== undefined && !(options.query instanceof URLSearchParams)) throw new TypeError('Invalid plugin query');
@@ -204,7 +208,8 @@ export class Rest {
             if (typeof body !== 'string' || Buffer.byteLength(body) > 262144) throw new TypeError('Plugin request body too large');
         }
         options.signal?.throwIfAborted();
-        if (route.scope === 'player' && route.method !== 'GET') await manager.guildOwnership?.assertCurrent(options.guildId!);
+        if (route.scope === 'player' && route.method !== 'GET') await manager.guildOwnership?.assertCurrent(guildId!);
+        options.signal?.throwIfAborted();
         if (!current()) throw new Error('Plugin request context changed');
         let response: unknown;
         try {

@@ -61,3 +61,5 @@ Inside `manager.useExtension({ name, setup(context) { ... } })`, use `context.on
 ## Bounded binary plugin responses
 
 Register a route with `binary: { contentTypes: ['audio/ogg'], maxBytes: 1048576 }` to read a finite media response. Its decoder receives a `BackendPluginBinaryResponse` containing `bytes`, `contentType`, and `statusCode`. Media content types are explicit, compressed HTTP responses and redirects are rejected, and both the deadline and size limit apply to the full response. The default limit is 4 MiB and the maximum is 16 MiB. This is a bounded download, not a continuous audio stream or browser proxy. The application must validate the media format before playback. JSON routes remain unchanged.
+
+Player-scoped custom requests require a current NyxLink-managed player on the target node, including reads. Remote-only players created outside the Manager are deliberately not accepted by this API. Replaced or migrated players invalidate in-flight results; a mutation already delivered to the server cannot be undone. Raw event observers receive a detached event payload before native and custom dispatch.

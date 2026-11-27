@@ -115,3 +115,21 @@ test('binary plugin responses are bounded, typed, and never follow redirects',as
  mode='redirect';await assert.rejects(node.rest.callPlugin(route),e=>e.statusCode===302);
  assert.equal(calls.length,5);
 });
+
+test('player-scoped plugin request rejects unowned and migrated players before accepting results',async t=>{
+ const entered=deferred(),release=deferred();
+ const {manager,node,player,calls}=await setup(t,async(_req,res)=>{entered.resolve();await release.promise;reply(res,{profile:'studio'});});
+ const route=manager.pluginRoutes.register({...definition,scope:'player',method:'GET'});
+ await assert.rejects(node.rest.callPlugin(route,{guildId:'923456789012345679'}),/not managed/);
+ assert.equal(calls.length,0);
+ const pending=node.rest.callPlugin(route,{guildId:player.guildId});
+ await entered.promise;
+ const original=player.node;
+ const fakeNode={identifier:'migrated'};
+ // The SDK exposes player.node through a getter; shadow it only for this fixture.
+ Object.defineProperty(player,'node',{value:fakeNode,configurable:true});
+ release.resolve();
+ try { await assert.rejects(pending,/context changed/); }
+ finally { Object.defineProperty(player,'node',{value:original,configurable:true}); }
+ assert.equal(node.backend.featureStatus('custom-plugin:custom-plugin:profile'),'unknown');
+});

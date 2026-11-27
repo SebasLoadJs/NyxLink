@@ -914,10 +914,16 @@ export class Node {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload) || typeof payload.op !== 'string') return;
     const messageSocket = this.socket;
     const messageGeneration = this.backendGeneration;
-    this.manager.emit("nodeRaw", this, payload);
+    const messageBackend = this.backend;
+    const messageSession = this.sessionId;
+    // Raw observers receive a detached event object. Their mutations cannot
+    // rewrite core playback events or the registered plugin contract.
+    this.manager.emit("nodeRaw", this, payload.op === 'event' ? structuredClone(payload) : payload);
     const currentPluginEvent = () => !this.destroyed && !this.manager.destroyed &&
-        this.socket === messageSocket && this.backendGeneration === messageGeneration;
+        this.socket === messageSocket && this.backendGeneration === messageGeneration &&
+        this.backend === messageBackend && this.sessionId === messageSession;
     this.manager.pluginEvents?.dispatch(this, payload, currentPluginEvent);
+    if (payload.op === 'event' && !currentPluginEvent()) return;
 
     if (payload.op === 'event' && (payload.type === 'SourceHealthSnapshotEvent' || payload.type === 'SourceHealthChangeEvent')) {
       await this.backendReady;

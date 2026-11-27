@@ -39,3 +39,12 @@ test('registry rejects invalid declarations and keeps metadata detached',()=>{
  registry.register(definition,()=>{});const list=registry.list();list[0].type='Other';
  assert.equal(registry.list()[0].type,'ProfileChanged');assert.equal(list[0].decode,undefined);
 });
+
+test('nodeRaw mutation cannot rewrite the validated custom event',async t=>{
+ const {manager,node}=createPlayer(t),seen=[];
+ node.backend=BackendDetector.detect({version:{semver:'4.2.2'},plugins:[{name:'example',version:'1'}]});
+ manager.on('nodeRaw',(_node,raw)=>{raw.type='Other';raw.profile.name='modified';});
+ manager.pluginEvents.register({...definition,scope:'node'},value=>{seen.push(value.name);});
+ await node.message({data:JSON.stringify({op:'event',type:'ProfileChanged',profile:{name:'original'}})});
+ assert.deepEqual(seen,['original']);
+});
