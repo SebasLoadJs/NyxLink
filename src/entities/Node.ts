@@ -299,7 +299,7 @@ export class Node {
   }
 
   public assertFeature(feature: string): void {
-    if (!this.isNodeLink || this.backend?.featureStatus(feature) === 'unavailable') {
+    if (!this.isNodeLink || this.backend?.kind === 'lavalink' || this.backend?.featureStatus(feature) === 'unavailable') {
       throw new FeatureUnavailableError(feature, this.backend?.kind ?? 'unknown');
     }
   }

@@ -32,13 +32,13 @@ const id=process.argv[2];
     const checks=['advertised exact plugin version','typed info inventory','local generated WAV load'];
     if(id==='xm'){
      stage='XM_LOAD';
-     const tracker=await node.rest.loadTracks(context.moduleUrl);
-     if(tracker?.loadType!=='track') {
-      const kind=['empty','error','playlist','search'].includes(tracker?.loadType)?tracker.loadType.toUpperCase():'UNKNOWN';
-      throw new PluginLabFailure('PLUGIN_XM_LOAD_'+kind);
-     }
-     assert.equal(typeof tracker.data?.encoded,'string');
-     checks.push('generated ProTracker MOD recognized and encoded');
+     const classify=result=>['track','empty','error','playlist','search'].includes(result?.loadType)?result.loadType.toUpperCase():'UNKNOWN';
+     const remote=await node.rest.loadTracks(context.moduleUrl);
+     const local=await node.rest.loadTracks(context.moduleFile);
+     if(remote?.loadType!=='track'||local?.loadType!=='track') throw new PluginLabFailure('PLUGIN_XM_HTTP_'+classify(remote)+'_LOCAL_'+classify(local));
+     assert.equal(typeof remote.data?.encoded,'string');
+     assert.equal(typeof local.data?.encoded,'string');
+     checks.push('generated ProTracker MOD recognized and encoded over HTTP and local file');
     }
     if(id==='java-lyrics'||id==='lyrics-kt'){
      // A paused player without a track exercises the actual REST route

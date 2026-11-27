@@ -82,3 +82,11 @@ test('mirror-matched release candidates become exact verified profiles only afte
  for(const id of ['lavasearch','lyrics-kt']){const p=matrixProfile(id);validateProfile(p);assert.match(p.plugins[0].sha256,/^[a-f0-9]{64}$/);}
  assert.throws(()=>matrixProfile('google-tts'));
 });
+
+test('XM local source is isolated and Spring failure classification never exposes arbitrary text',()=>{
+ const {matrixProfile}=require('./helpers/lavalink-plugin-lab.cjs');
+ assert.match(renderConfig(2333,password,matrixProfile('xm')), /local: true/);
+ assert.match(renderConfig(2333,password,matrixProfile('java-lavalyrics')), /local: false/);
+ assert.equal(startupErrorCode('No qualifying bean of type com.sedmelluq.lava.extensions.youtuberotator.planner.AbstractRoutePlanner private-data'),'PLUGIN_ROUTE_PLANNER_BEAN_MISSING');
+ assert.equal(startupErrorCode('No qualifying bean of type com.github.topi314.lavalyrics.LyricsManager'),'PLUGIN_LYRICS_MANAGER_BEAN_MISSING');
+});

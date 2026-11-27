@@ -52,7 +52,7 @@ function renderConfig(port, password, value = profile) {
     '  server:', "    password: '" + password + "'",
     '    sources:', '      youtube: false', '      soundcloud: false',
     '      bandcamp: false', '      twitch: false', '      vimeo: false',
-    '      nico: false', '      http: true', '      local: false',
+    '      nico: false', '      http: true', '      local: ' + (value.matrix === 'xm' ? 'true' : 'false'),
     'plugins:', ...pluginConfig,
     'logging:', '  level:', '    root: WARN', ''
   ].join('\n');
@@ -113,7 +113,16 @@ function startupErrorCode(logs) {
   if (/NoClassDefFoundError|ClassNotFoundException/i.test(logs)) return 'PLUGIN_CLASS_MISSING';
   if (/NoSuchMethodError|AbstractMethodError|IncompatibleClassChangeError|LinkageError/i.test(logs)) return 'PLUGIN_BINARY_INCOMPATIBLE';
   if (/UnsatisfiedLinkError|failed to load native library/i.test(logs)) return 'PLUGIN_NATIVE_LIBRARY_FAILURE';
-  if (/No qualifying bean|NoSuchBeanDefinitionException/i.test(logs)) return 'PLUGIN_REQUIRED_BEAN_MISSING';
+  if (/No qualifying bean|NoSuchBeanDefinitionException|could not be found/i.test(logs)) {
+    // Classify only fixed, public dependency names and never emit raw stack traces.
+    const missing=logs.split('\n').filter(line=>/No qualifying bean|NoSuchBeanDefinitionException|could not be found/i.test(line)).join('\n');
+    if (/AbstractRoutePlanner/.test(missing)) return 'PLUGIN_ROUTE_PLANNER_BEAN_MISSING';
+    if (/LyricsManagerConfiguration/.test(missing)) return 'PLUGIN_LYRICS_CONFIGURATION_BEAN_MISSING';
+    if (/LyricsManager/.test(missing)) return 'PLUGIN_LYRICS_MANAGER_BEAN_MISSING';
+    if (/ServerConfig/.test(missing)) return 'PLUGIN_SERVER_CONFIG_BEAN_MISSING';
+    if (/Config.*could not be found|bean of type .*Config/.test(missing)) return 'PLUGIN_CONFIG_BEAN_MISSING';
+    return 'PLUGIN_REQUIRED_BEAN_MISSING';
+  }
   if (/BeanDefinitionOverrideException|ConflictingBeanDefinitionException/i.test(logs)) return 'PLUGIN_BEAN_CONFLICT';
   if (/accessdeniedexception|permission denied|eacces/i.test(logs)) return 'PLUGIN_DIRECTORY_PERMISSION';
   if (/could not resolve|failed to download|could not find artifact|unresolved dependency|failed to transfer|unable to resolve/i.test(logs)) return 'PLUGIN_ARTIFACT_RESOLUTION';
@@ -175,6 +184,8 @@ async function withLavalinkPluginLab(run, selectedProfile = profile) {
   try {
     const mediaPort = await openPort(server);
     serverStarted = true;
+    const fixtureFile=path.join(directory,'fixture.mod');
+    if(selectedProfile.matrix==='xm') await fs.writeFile(fixtureFile,module,{mode:0o600,flag:'wx'});
     await fs.writeFile(config, renderConfig(port, password, selectedProfile), { mode: 0o600, flag: 'wx' });
     phase = 'ARTIFACT_VERIFY';
     const jars = await installVerifiedPlugins(pluginsDir, selectedProfile.plugins);
@@ -185,6 +196,7 @@ async function withLavalinkPluginLab(run, selectedProfile = profile) {
       '--network', 'host', '--memory', '1024m', '--cpus', '2', '--pids-limit', '256',
       '-v', config + ':/opt/Lavalink/application.yml:ro',
       '-v', pluginsDir + ':/opt/Lavalink/plugins:ro',
+      ...(selectedProfile.matrix==='xm'?['-v',fixtureFile+':/opt/Lavalink/fixture.mod:ro']:[]),
       '-e', 'JAVA_TOOL_OPTIONS=-Xms64m -Xmx512m', selectedProfile.image]);
     containerStarted = true;
     phase = 'BACKEND_START';
@@ -221,6 +233,7 @@ async function withLavalinkPluginLab(run, selectedProfile = profile) {
         password, secure: false, version: info.version.semver },
       mediaUrl: 'http://127.0.0.1:' + mediaPort + '/tone.wav',
       moduleUrl: 'http://127.0.0.1:' + mediaPort + '/fixture.mod',
+      moduleFile: selectedProfile.matrix==='xm'?'/opt/Lavalink/fixture.mod':undefined,
       image: selectedProfile.image,
       versions: selectedProfile.plugins.map(p => ({ name: p.advertised ?? p.name, version: p.version })),
       jars
