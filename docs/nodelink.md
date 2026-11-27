@@ -100,3 +100,7 @@ Use `node.rest.createHlsSession(encodedTrack, { segmentDuration: 4 })` to obtain
 ## Read-only operational diagnostics (5.4 development)
 
 `node.rest.getNodeLinkWorkerSnapshots()` returns validated worker metrics with unknown fields removed. `getNodeLinkProfilerStatus({ code, scope: 'all' })` calls the official profiler status endpoint; enable the server endpoint and supply its separate access code. HTTPS is required except for explicitly opted-in literal loopback HTTP. The code goes in a header, not a URL. Responses intentionally omit inspector addresses, paths, raw traces and remote errors. Partial worker failures remain visible as unsuccessful entries. No remote inspector, heap dump, process mutation, file browsing or periodic allocation sampling is triggered by this method. Real enabled-profiler verification is still pending. [Upstream source](https://github.com/PerformanC/NodeLink/blob/86c6a00d022cbf1cafdbc5eea39a2b7033637485/src/api/profiler.ts).
+
+### YouTube OAuth transport
+
+`Rest.exchangeYoutubeOAuth(refreshToken)` sends the credential in a JSON POST to `/v4/youtube/oauth` rather than a URL query. Non-loopback connections require HTTPS; literal loopback HTTP remains available for local testing. The SDK does not follow redirects, retry the exchange, or expose remote error bodies. The server may still log request bodies; configure server-side redaction before using real credentials. Older NodeLink revisions that only support GET are not automatically retried with credentials in the URL.

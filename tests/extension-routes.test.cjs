@@ -9,6 +9,7 @@ test('extension route catalog preserves method, transport and feature identity',
   const adapter=backend();
   assert.deepEqual(adapter.resolveExtension('loadstream'),{feature:'loadstream',method:'POST',path:'/v4/loadstream',transport:'stream'});
   assert.deepEqual(adapter.resolveExtension('youtube:config:update'),{feature:'youtube:config',method:'PATCH',path:'/v4/youtube/config',transport:'json'});
+  assert.deepEqual(adapter.resolveExtension('youtube:oauth'),{feature:'youtube:oauth',method:'POST',path:'/v4/youtube/oauth',transport:'json'});
   assert.equal(adapter.resolveExtension('lyrics:unsubscribe',{sessionId:'session',guildId:'guild'}).path,'/v4/sessions/session/players/guild/lyrics/subscribe');
 });
 test('route identifiers and query parameters cannot inject a new path',()=>{

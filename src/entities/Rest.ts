@@ -978,15 +978,37 @@ export class Rest {
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
     public async exchangeYoutubeOAuth(refreshToken: string): Promise<any | null> {
-        this.node.assertFeature("youtube:oauth");
-
-        const params = new URLSearchParams();
-        params.append("refreshToken", refreshToken);
-        const res = await this.featureRequest<any>("youtube:oauth", { query: params }, {
-            headers: this.authHeaders
-        });
-
-        return res || null;
+        if (typeof refreshToken !== 'string' || refreshToken.length < 1 || refreshToken.length > 16384 ||
+            /[\x00-\x20\x7f]/.test(refreshToken)) throw new TypeError('Invalid YouTube refresh token');
+        const origin = new URL(this.url);
+        if (origin.protocol !== 'https:' && !['127.0.0.1', '[::1]'].includes(origin.hostname)) {
+            throw new TypeError('NodeLink YouTube OAuth requires HTTPS or literal loopback HTTP');
+        }
+        const route = this.extensionRoute('youtube:oauth');
+        this.node.assertFeature(route.feature);
+        const backend = this.node.backend, session = this.node.sessionId, socket = this.node.socket;
+        const current = () => !this.node.destroyed && !this.node.manager.destroyed &&
+            this.node.backend === backend && this.node.sessionId === session && this.node.socket === socket;
+        if (!current()) throw new Error('NodeLink YouTube OAuth context changed');
+        let raw: unknown;
+        try {
+            raw = await this.request<unknown>(origin.origin + route.path, {
+                method: route.method, headers: this.jsonHeaders, body: { refreshToken },
+                allowedOrigins: [origin.origin], throwOnError: true,
+            }, 10000, 0, 1000, 0);
+        } catch (error) {
+            // Never propagate remote error bodies or URLs that may contain credentials.
+            if (error instanceof HttpError) this.featureError(route.feature, new HttpError(error.statusCode), backend, current);
+            throw new Error('NodeLink YouTube OAuth request failed');
+        }
+        if (!current()) throw new Error('NodeLink YouTube OAuth context changed');
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw) ||
+            typeof (raw as Record<string, unknown>).access_token !== 'string' ||
+            !(raw as Record<string, unknown>).access_token) {
+            throw new ProtocolResponseError('NodeLink YouTube OAuth', 'token response');
+        }
+        backend?.recordFeature(route.feature, 'available');
+        return raw;
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */

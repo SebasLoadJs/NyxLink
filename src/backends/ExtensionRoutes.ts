@@ -35,7 +35,7 @@ const definitions = {
     'workers:patch': { feature: 'workers:patch', method: 'PATCH', path: '/v4/workers', transport: 'json' },
     'youtube:config:get': { feature: 'youtube:config', method: 'GET', path: '/v4/youtube/config', transport: 'json' },
     'youtube:config:update': { feature: 'youtube:config', method: 'PATCH', path: '/v4/youtube/config', transport: 'json' },
-    'youtube:oauth': { feature: 'youtube:oauth', method: 'GET', path: '/v4/youtube/oauth', transport: 'json' },
+    'youtube:oauth': { feature: 'youtube:oauth', method: 'POST', path: '/v4/youtube/oauth', transport: 'json' },
     encodetrack: { feature: 'encodetrack', method: 'GET', path: '/v4/encodetrack', transport: 'json' },
     encodedtracks: { feature: 'encodedtracks', method: 'POST', path: '/v4/encodedtracks', transport: 'json' },
     trackstream: { feature: 'trackstream', method: 'GET', path: '/v4/trackstream', transport: 'json' },
