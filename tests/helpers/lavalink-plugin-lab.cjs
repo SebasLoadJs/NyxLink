@@ -251,7 +251,15 @@ async function withLavalinkPluginLab(run, selectedProfile = profile) {
       moduleFile: selectedProfile.matrix==='xm'?'/opt/Lavalink/fixture.mod':undefined,
       image: selectedProfile.image,
       versions: selectedProfile.plugins.map(p => ({ name: p.advertised ?? p.name, version: p.version })),
-      jars
+      jars,
+      inspectRuntime: async () => {
+        try {
+          const result=await command(['inspect','--format','{{json .State}}',name]);
+          const state=JSON.parse(result.stdout);
+          return {status:['running','exited','dead','created','restarting'].includes(state.Status)?state.Status:'unknown',
+            exitCode:Number.isInteger(state.ExitCode)?state.ExitCode:null,oomKilled:state.OOMKilled===true};
+        }catch{return {status:'unknown',exitCode:null,oomKilled:false};}
+      }
     });
   } catch (error) {
     if (error instanceof PluginLabFailure) throw error;

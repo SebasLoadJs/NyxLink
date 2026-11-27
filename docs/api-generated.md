@@ -3573,6 +3573,16 @@ export interface NodeLinkHlsReadOptions {
 }
 ```
 
+## NodeLinkJsonValue
+
+[Source declaration](../src/backends/BackendRestContracts.ts)
+
+```ts
+export type NodeLinkJsonValue = string | number | boolean | null | NodeLinkJsonValue[] | {
+    [key: string]: NodeLinkJsonValue;
+};
+```
+
 ## NodeLinkLyricAnnotation
 
 [Source declaration](../src/backends/NodeLinkLyricsEvents.ts)
@@ -3810,16 +3820,6 @@ export interface NodeLinkMediaRecording {
         type?: string;
     }>;
 }
-```
-
-## NodeLinkJsonValue
-
-[Source declaration](../src/backends/BackendRestContracts.ts)
-
-```ts
-export type NodeLinkJsonValue = string | number | boolean | null | NodeLinkJsonValue[] | {
-    [key: string]: NodeLinkJsonValue;
-};
 ```
 
 ## NodeLinkMeaningResult

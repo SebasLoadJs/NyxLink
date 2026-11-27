@@ -7,7 +7,7 @@ const {matrixProfile,withLavalinkPluginLab,PluginLabFailure}=require('../tests/h
 const id=process.argv[2];
 (async()=>{
  const profile=matrixProfile(id);
- let report;const trackerObservations={};
+ let report;const trackerObservations={};let trackerRuntime;
  try{
   const result=await withLavalinkPluginLab(async context=>{
    const manager=new Manager({nodes:[context.node],send(){throw Error('Discord intentionally unavailable');},options:{database:{type:'memory'},resume:false}});
@@ -40,7 +40,7 @@ const id=process.argv[2];
      };
      const observe=async(key,operation)=>{
       try{trackerObservations[key]=await operation();}
-      catch(error){trackerObservations[key]=error?.name==='TimeoutError'||error?.name==='AbortError'?'TIMEOUT':error?.code==='INVALID_PROTOCOL_RESPONSE'?'INVALID_PROTOCOL':Number.isInteger(error?.statusCode)?'HTTP_'+error.statusCode:'FAILED';}
+      catch(error){const code=error?.cause?.code??error?.code;trackerObservations[key]=error?.name==='TimeoutError'||error?.name==='AbortError'?'TIMEOUT':code==='INVALID_PROTOCOL_RESPONSE'?'INVALID_PROTOCOL':Number.isInteger(error?.statusCode)?'HTTP_'+error.statusCode:['ECONNREFUSED','ECONNRESET','EPIPE','UND_ERR_SOCKET','ETIMEDOUT'].includes(code)?code:'FAILED';}
       console.log(JSON.stringify({trackerProbe:key,result:trackerObservations[key]}));
      };
      // Independently measure the server first, so an SDK exception cannot
@@ -49,6 +49,7 @@ const id=process.argv[2];
       await observe(kind+'Wire',()=>direct(identifier));
       await observe(kind+'Sdk',async()=>classify(await node.rest.loadTracks(identifier,{timeoutMs:15000,signal:AbortSignal.timeout(15000)})));
      }
+     trackerRuntime=await context.inspectRuntime();
      if(Object.values(trackerObservations).some(value=>value!=='TRACK'))throw new PluginLabFailure('PLUGIN_XM_TRACKER_ACCEPTANCE_FAILED');
      checks.push('generated MOD and XM recognized through native REST and SDK');
     }
@@ -80,7 +81,7 @@ const id=process.argv[2];
    }finally{await manager.shutdown();}
   },profile);
   report={profile:id,...result};
- }catch(error){report={profile:id,passed:false,errorCode:error instanceof PluginLabFailure?error.code:'PLUGIN_MATRIX_FAILED',...(id==='xm'?{trackerObservations}:{})};}
+ }catch(error){report={profile:id,passed:false,errorCode:error instanceof PluginLabFailure?error.code:'PLUGIN_MATRIX_FAILED',...(id==='xm'?{trackerObservations,trackerRuntime}:{})};}
  const destination=path.resolve('.runtime/plugin-matrix',id+'.json');
  await fs.mkdir(path.dirname(destination),{recursive:true,mode:0o700});
  await fs.writeFile(destination,JSON.stringify(report,null,2)+'\n',{mode:0o600});
