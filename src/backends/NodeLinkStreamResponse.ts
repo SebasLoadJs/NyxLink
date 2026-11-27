@@ -36,7 +36,14 @@ export function validateNodeLinkStreamResponse(
             contentType !== 'audio/wave' && contentType !== 'audio/vnd.wave') {
             fail('expected decoded WAV Content-Type');
         }
-    } else if (contentType !== 'audio/l16') {
-        fail('expected 48kHz stereo raw PCM Content-Type');
+    } else {
+        if (contentType !== 'audio/l16') fail('expected 48kHz stereo raw PCM Content-Type');
+        // Older backends omit the parameters. Reject contradictions when present.
+        const raw = typeof value === 'string' ? value.toLowerCase() : '';
+        const params = raw.split(';').slice(1).map(s => s.trim());
+        for (const parameter of params) {
+            const [key, val] = parameter.split('=').map(s => s.trim().replace(/^\"|\"$/g,''));
+            if (key === 'rate' && val !== '48000' || key === 'channels' && val !== '2') fail('unexpected PCM rate or channel count');
+        }
     }
 }

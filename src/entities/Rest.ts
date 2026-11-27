@@ -1476,16 +1476,20 @@ export class Rest {
         const backend = this.node.backend;
         const socket = this.node.socket;
         const session = this.node.sessionId;
-        const current = () => !this.node.destroyed && this.node.backend === backend &&
+        const current = () => !this.node.destroyed && !this.node.manager.destroyed && this.node.backend === backend &&
             this.node.socket === socket && this.node.sessionId === session;
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('NodeLink stream context changed');
         try {
             const response = await this.request<unknown>(this.url + route.path, {
                 method: route.method, headers: this.jsonHeaders,
                 body: { encodedTrack, format: 'formats', ...(options.itag !== undefined ? { itag: options.itag } : {}) },
-                signal: options.signal, throwOnError: true,
-            }, options.timeoutMs ?? 10000, 0);
+                signal: options.signal, throwOnError: true, allowedOrigins: [new URL(this.url).origin],
+            }, options.timeoutMs ?? 10000, 0, 1000, 0);
+            options.signal?.throwIfAborted();
+            if (!current()) throw new Error('NodeLink stream context changed');
             validateNodeLinkStreamFormats(response);
-            if (current()) backend?.recordFeature('loadstream', 'available');
+            backend?.recordFeature('loadstream', 'available');
             return response;
         } catch (error) { this.featureError('loadstream', error, backend, current); }
     }
@@ -1507,6 +1511,7 @@ export class Rest {
         if (payload.format !== undefined && !['raw', 'pcm', 'wav', 'passthrough', 'original', 'source'].includes(payload.format)) {
             throw new TypeError('LoadStream format must be raw, wav or passthrough (formats JSON uses getStreamFormats)');
         }
+        if (options.timeoutMs !== undefined && (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1 || options.timeoutMs > 300000)) throw new RangeError('Invalid loadStream timeout');
         const passthrough = ['passthrough', 'original', 'source'].includes(payload.format ?? '');
         if (payload.itag !== undefined && (!passthrough || !Number.isSafeInteger(payload.itag) || payload.itag <= 0)) {
             throw new TypeError('itag is only valid for passthrough and must be positive');
@@ -1536,8 +1541,10 @@ export class Rest {
         const backend = this.node.backend;
         const socket = this.node.socket;
         const session = this.node.sessionId;
-        const current = () => !this.node.destroyed && this.node.backend === backend &&
+        const current = () => !this.node.destroyed && !this.node.manager.destroyed && this.node.backend === backend &&
             this.node.socket === socket && this.node.sessionId === session;
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('NodeLink stream context changed');
         try {
             const res = await this.streamRequest(this.url + route.path, {
                 method: route.method,
@@ -1548,13 +1555,15 @@ export class Rest {
             // NodeLink may ignore the new passthrough request and emit PCM.
             // Destroy invalid responses before they can leak into a decoder.
             try {
+                options.signal?.throwIfAborted();
+                if (!current()) throw new Error('NodeLink stream context changed');
                 validateNodeLinkStreamResponse(res.headers, passthrough ? 'passthrough' :
                     requestPayload.format === 'wav' ? 'wav' : 'raw');
             } catch (error) {
                 res.stream.destroy();
                 throw error;
             }
-            if (current()) backend?.recordFeature('loadstream', 'available');
+            backend?.recordFeature('loadstream', 'available');
             if (!clientTrim) return { stream: res.stream, headers: res.headers, statusCode: res.statusCode };
             const headers = { ...res.headers };
             // Local cropping changes output length and invalidates backend

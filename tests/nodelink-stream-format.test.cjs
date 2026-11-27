@@ -91,3 +91,31 @@ test('Node.loadDirectStream forwards opt-in client seek options',async t=>{
   assert.equal(calls[0].body.position,0);
   assert.equal(calls[0].body.format,'raw');
 });
+
+test('stream responses are discarded if the node session changes before response headers',async t=>{
+ const {node}=createPlayer(t);
+ node.backend=BackendDetector.detect({version:{semver:'3.10.0'},isNodelink:true});node.isNodeLink=true;node.sessionId='original';
+ const server=http.createServer(async(req,res)=>{
+  for await(const _ of req){}
+  node.sessionId='replacement';
+  res.writeHead(200,{'content-type':'audio/l16;rate=48000;channels=2'});res.end(Buffer.alloc(4));
+ });
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
+ node.port=server.address().port;
+ await assert.rejects(node.rest.loadStream({encodedTrack:'fixture',format:'raw'}),/context changed/);
+ assert.equal(node.backend.featureStatus('loadstream'),'unknown');
+});
+test('raw stream rejects contradictory channel or sampling rate metadata',async t=>{
+ const {node}=createPlayer(t);
+ node.backend=BackendDetector.detect({version:{semver:'3.10.0'},isNodelink:true});node.isNodeLink=true;
+ let mime='audio/l16;rate=44100;channels=2';
+ const server=http.createServer(async(req,res)=>{for await(const _ of req){}res.writeHead(200,{'content-type':mime});res.end(Buffer.alloc(4));});
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
+ node.port=server.address().port;
+ await assert.rejects(node.rest.loadStream({encodedTrack:'fixture',format:'raw'}),{code:'INVALID_PROTOCOL_RESPONSE'});
+ mime='audio/l16;rate=48000;channels=1';
+ await assert.rejects(node.rest.loadStream({encodedTrack:'fixture',format:'raw'}),{code:'INVALID_PROTOCOL_RESPONSE'});
+ await assert.rejects(node.rest.loadStream({encodedTrack:'fixture',format:'raw'},{timeoutMs:0}),RangeError);
+});
