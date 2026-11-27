@@ -18,7 +18,7 @@ export abstract class BackendAdapter {
             'nodelink:discovery', 'voiceReceiver', 'youtubeLiveChat',
             'filter:echo', 'filter:chorus', 'filter:compressor', 'filter:highpass', 'filter:phaser', 'filter:spatial'
         ]);
-        const pluginsOnly = new Set(['lavasearch', 'lyricskt:video', 'lyricskt:current', 'lyricskt:search', 'lavalyrics', 'lavalyrics:current', 'lavalyrics:subscribe', 'lavalyrics:unsubscribe', 'lavalink:sponsorblock', 'lavadspx', 'lavasrc', 'lavalink:youtube:config:get', 'lavalink:youtube:config:update', 'lavalink:youtube:oauth', 'lavalink:youtube:stream']);
+        const pluginsOnly = new Set(['lavasearch', 'lyricskt:video', 'lyricskt:current', 'lyricskt:search', 'java-lyrics:video', 'java-lyrics:current', 'java-lyrics:search:youtube', 'java-lyrics:search:genius', 'lavalyrics', 'lavalyrics:current', 'lavalyrics:subscribe', 'lavalyrics:unsubscribe', 'lavalink:sponsorblock', 'lavadspx', 'lavasrc', 'lavalink:youtube:config:get', 'lavalink:youtube:config:update', 'lavalink:youtube:oauth', 'lavalink:youtube:stream']);
         const known = new Set([...native, ...pluginsOnly]);
         const unavailable = kind === 'lavalink' ? native : kind === 'nodelink' ? pluginsOnly : new Set<string>();
         this.registry = new CapabilityRegistry(capabilities, known, unavailable);

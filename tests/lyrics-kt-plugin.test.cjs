@@ -27,3 +27,26 @@ test('Lyrics.kt uses distinct plugin routes, timed/text shapes and capability ob
  node.backend=BackendDetector.detect({version:{semver:'4.2.2'},plugins:[{name:'lavalyrics-plugin',version:'1.0.0'}]});
  await assert.rejects(node.rest.getLyricsKt('abcdefghijk'),{code:'FEATURE_UNAVAILABLE'});
 });
+
+test('Java Timed Lyrics is distinct from Lyrics.kt and uses explicit provider query routing',async t=>{
+ const {node,player}=createPlayer(t),calls=[];
+ const track={title:'Fixture',author:'Artist',album:null,albumArt:[]};
+ let status=200,body={type:'text',track,source:'Genius',text:'fixture'};
+ const server=http.createServer((req,res)=>{calls.push(req.url);res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(body));});
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ t.after(()=>{server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
+ node.port=server.address().port;node.sessionId='fixture-session';
+ node.backend=BackendDetector.detect({version:{semver:'4.2.2'},plugins:[{name:'java-lyrics-plugin',version:'1.6.6'}]});
+ assert.deepEqual(await node.rest.getJavaTimedLyrics('abcdefghijk'),body);
+ assert.deepEqual(await node.rest.getCurrentJavaTimedLyrics(player.guildId),body);
+ assert.deepEqual(await node.rest.searchJavaTimedLyricsGenius('a / b & c'),body);
+ body=[{videoId:'abcdefghijk',title:'Fixture'}];
+ assert.deepEqual(await node.rest.searchJavaTimedLyrics('a / b & c'),body);
+ assert.deepEqual(calls,['/v4/lyrics/abcdefghijk','/v4/sessions/fixture-session/players/'+player.guildId+'/lyrics','/v4/lyrics/search?query=a+%2F+b+%26+c&source=genius','/v4/lyrics/search?query=a+%2F+b+%26+c&source=youtube']);
+ assert.equal(node.backend.featureStatus('java-lyrics:search:youtube'),'available');
+ await assert.rejects(node.rest.getLyricsKt('abcdefghijk'),{code:'FEATURE_UNAVAILABLE'});
+ status=404;body={message:'No lyrics'};
+ assert.equal(await node.rest.searchJavaTimedLyricsGenius('missing'),null);
+ node.backend=BackendDetector.detect({version:{semver:'4.2.2'},plugins:[{name:'java-lavalyrics',version:'1.6.6'}]});
+ await assert.rejects(node.rest.searchJavaTimedLyrics('a'),{code:'FEATURE_UNAVAILABLE'});
+});

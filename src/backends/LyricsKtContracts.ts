@@ -89,3 +89,9 @@ export function readLyricsKtSearch(value: unknown): LyricsKtSearchTrack[] {
         return {videoId:item.videoId,title:item.title};
     });
 }
+
+/** Java Timed Lyrics uses query parameters, not Lyrics.kt's search path. */
+export function javaTimedLyricsSearchPath(query: string, source: 'youtube' | 'genius'): string {
+    if (!text(query,512) || !query.trim() || /[\x00-\x1f\x7f]/.test(query) || !['youtube','genius'].includes(source)) throw new TypeError('Invalid Java Timed Lyrics search');
+    return '/v4/lyrics/search?' + new URLSearchParams({query:query.trim(),source}).toString();
+}

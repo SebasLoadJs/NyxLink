@@ -1,5 +1,5 @@
 import { readNodeLinkConnectionSnapshot, nodeLinkEncodeInput, readNodeLinkEncodedTrack, readNodeLinkEncodedTracks, type NodeLinkConnectionSnapshot, type NodeLinkTrackEncodeInput, nodeLinkMetricsHeader, type NodeLinkMetricsOptions, backendRestTimeout, readBackendInfoSnapshot, nodeLinkTrackStreamParameters, readNodeLinkTrackStreamInfo, type BackendInfoSnapshot, type BackendInfoOptions, type NodeLinkTrackStreamOptions, type NodeLinkTrackStreamInfo } from '../backends/BackendRestContracts';
-import { lyricsKtVideoPath, lyricsKtSearchPath, lyricsKtTimeout, readLyricsKtResult, readLyricsKtSearch, type LyricsKtOptions, type LyricsKtResult, type LyricsKtSearchTrack } from '../backends/LyricsKtContracts';
+import { javaTimedLyricsSearchPath, lyricsKtVideoPath, lyricsKtSearchPath, lyricsKtTimeout, readLyricsKtResult, readLyricsKtSearch, type LyricsKtOptions, type LyricsKtResult, type LyricsKtSearchTrack } from '../backends/LyricsKtContracts';
 import { assertNodeLinkAdmin, readNodeLinkYoutubeConfig, nodeLinkYoutubeConfigBody, readNodeLinkYoutubeConfigAcknowledgement, nodeLinkWorkerTerminationBody, readNodeLinkWorkerTermination, type NodeLinkAdminOptions, type NodeLinkYoutubeConfig, type NodeLinkYoutubeConfigUpdate, type NodeLinkYoutubeConfigAcknowledgement, type NodeLinkWorkerTarget, type NodeLinkWorkerTerminationOptions, type NodeLinkWorkerTermination } from '../backends/NodeLinkAdminContracts';
 import { profilerCommandBody, readProfilerCommandResult, type NodeLinkProfilerCommandOptions, type NodeLinkProfilerCommandResult, profilerQuery, diagnosticsTimeout, readNodeLinkProfilerSnapshot, readNodeLinkWorkerSnapshots, type NodeLinkProfilerOptions, type NodeLinkProfilerSnapshot, type NodeLinkWorkerSnapshot } from '../backends/NodeLinkDiagnostics';
 import { hlsCreateQuery, hlsReadQuery, hlsTimeout, validateHlsManifest, type NodeLinkHlsOptions, type NodeLinkHlsReadOptions, type NodeLinkHlsManifest } from '../backends/NodeLinkHlsContracts';
@@ -698,9 +698,9 @@ export class Rest {
     }
 
     private async lyricsKtRequest<T>(feature: string, path: string, options: LyricsKtOptions,
-        decode: (raw: unknown) => T, notFoundAsNull: boolean = false): Promise<T | null> {
+        decode: (raw: unknown) => T, notFoundAsNull: boolean = false, plugin = 'lyrics'): Promise<T | null> {
         const backend = this.node.backend, socket = this.node.socket, session = this.node.sessionId;
-        if (backend?.kind !== 'lavalink' || !backend.getPlugin('lyrics') ||
+        if (backend?.kind !== 'lavalink' || !backend.getPlugin(plugin) ||
             backend.featureStatus(feature) === 'unavailable') throw new FeatureUnavailableError(feature, backend?.kind ?? 'unknown');
         const current = () => !this.node.destroyed && !this.node.manager.destroyed &&
             this.node.backend === backend && this.node.socket === socket && this.node.sessionId === session;
@@ -741,6 +741,30 @@ export class Rest {
         const result = await this.lyricsKtRequest('lyricskt:search', lyricsKtSearchPath(query), options, readLyricsKtSearch);
         if (result === null) throw new ProtocolResponseError('Lyrics.kt', 'search response');
         return result;
+    }
+
+    /** Java Timed Lyrics standalone plugin, not the java-lavalyrics provider module. */
+    public getJavaTimedLyrics(videoId: string, options: LyricsKtOptions = {}): Promise<LyricsKtResult | null> {
+        return this.lyricsKtRequest('java-lyrics:video',lyricsKtVideoPath(videoId),options,readLyricsKtResult,true,'java-lyrics-plugin');
+    }
+
+    public getCurrentJavaTimedLyrics(guildId: string, options: LyricsKtOptions = {}): Promise<LyricsKtResult | null> {
+        return this.lyricsKtRequest('java-lyrics:current',playerPath(this.node.sessionId,guildId) + '/lyrics',options,readLyricsKtResult,true,'java-lyrics-plugin');
+    }
+
+    public async searchJavaTimedLyrics(query: string, options: LyricsKtOptions = {}): Promise<LyricsKtSearchTrack[]> {
+        const result = await this.lyricsKtRequest('java-lyrics:search:youtube',javaTimedLyricsSearchPath(query,'youtube'),options,readLyricsKtSearch,false,'java-lyrics-plugin');
+        if (result === null) throw new ProtocolResponseError('Java Timed Lyrics','search response');
+        return result;
+    }
+
+    /** Genius must be configured by the server operator. No automatic provider fallback. */
+    public async searchJavaTimedLyricsGenius(query: string, options: LyricsKtOptions = {}): Promise<Extract<LyricsKtResult, {type: 'text'}> | null> {
+        return this.lyricsKtRequest('java-lyrics:search:genius',javaTimedLyricsSearchPath(query,'genius'),options,raw => {
+            const result = readLyricsKtResult(raw);
+            if (result.type !== 'text') throw new ProtocolResponseError('Java Timed Lyrics','Genius text response');
+            return result;
+        },true,'java-lyrics-plugin');
     }
 
     public async getLavaLyrics(encodedTrack: string, options?: LavaLyricsOptions): Promise<LavaLyricsData | null> {

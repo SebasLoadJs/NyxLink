@@ -407,3 +407,7 @@ const connectionSnapshot:Promise<import('../../dist').NodeLinkConnectionSnapshot
 const encodeInput:import('../../dist').NodeLinkTrackEncodeInput={title:'test',author:'artist',identifier:'id',length:100,isStream:false,uri:null,artworkUrl:null,isrc:null,sourceName:'youtube',position:0,details:[]};
 const encodedNative:Promise<string>=node.rest.encodeNodeLinkTrack(encodeInput);
 void [connectionSnapshot,encodedNative];
+
+const javaLyricsSearch:Promise<import('../../dist').LyricsKtSearchTrack[]>=node.rest.searchJavaTimedLyrics('fixture');
+const geniusLyrics:Promise<Extract<import('../../dist').LyricsKtResult,{type:'text'}>|null>=node.rest.searchJavaTimedLyricsGenius('fixture');
+void [javaLyricsSearch,geniusLyrics];

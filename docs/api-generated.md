@@ -5185,6 +5185,12 @@ export declare class Rest {
     getLyricsKt(videoId: string, options?: LyricsKtOptions): Promise<LyricsKtResult | null>;
     getCurrentLyricsKt(guildId: string, options?: LyricsKtOptions): Promise<LyricsKtResult | null>;
     searchLyricsKt(query: string, options?: LyricsKtOptions): Promise<LyricsKtSearchTrack[]>;
+    getJavaTimedLyrics(videoId: string, options?: LyricsKtOptions): Promise<LyricsKtResult | null>;
+    getCurrentJavaTimedLyrics(guildId: string, options?: LyricsKtOptions): Promise<LyricsKtResult | null>;
+    searchJavaTimedLyrics(query: string, options?: LyricsKtOptions): Promise<LyricsKtSearchTrack[]>;
+    searchJavaTimedLyricsGenius(query: string, options?: LyricsKtOptions): Promise<Extract<LyricsKtResult, {
+        type: 'text';
+    }> | null>;
     getLavaLyrics(encodedTrack: string, options?: LavaLyricsOptions): Promise<LavaLyricsData | null>;
     getCurrentLavaLyrics(guildId: string, options?: LavaLyricsOptions): Promise<LavaLyricsData | null>;
     subscribeLavaLyrics(guildId: string, options?: LavaLyricsOptions): Promise<void>;

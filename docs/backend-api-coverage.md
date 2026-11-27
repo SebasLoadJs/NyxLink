@@ -33,7 +33,7 @@ Audit inputs: [NodeLink source 86c6a00](https://github.com/PerformanC/NodeLink/t
 | DuncteBot | Core sources | Exact source prefixes and runtime matrix |
 | XM | Core encoded tracks | Actual module playback acceptance |
 | Lyrics.kt | Typed getLyricsKt/getCurrentLyricsKt/searchLyricsKt | Pinned runtime and provider acceptance pending |
-| Java Timed Lyrics | LavaLyrics provider interoperability where configured | Pin plugin/provider and test |
+| Java Timed Lyrics | getJavaTimedLyrics/getCurrentJavaTimedLyrics/searchJavaTimedLyrics/searchJavaTimedLyricsGenius; LavaLyrics provider interoperability | Pinned runtime and live provider acceptance pending |
 | LavaDSPX | Typed setLavaDSPX and plugin filter recovery projection | Audible effects and pinned integration |
 
 ## NodeLink plugin catalog
@@ -70,3 +70,5 @@ The independent `Lavalink expanded plugin matrix` workflow boots one plugin at a
 ## Regression inventory
 
 Pinned public API baseline: `v5.3` at `79176cb26f171bb13f6501783651bd21101346a6`. The current reference retains all 284 declaration headings and all method names of seven core public classes (Rest, Node, Player, Manager, Filters, Track, Queue). This is a removal guard, not proof of signature or behavior equivalence; strict consumer fixtures and package tests are separate. The independent native route baseline checks 36 extension operations, including the optional proposed `loadmedia`, for method, path, transport and rejection on Lavalink. Core Lavalink routes are covered separately by protocol and backend integration tests. Raw profiler files, inspector endpoints and server UI are deliberate exclusions.
+
+- Java Timed Lyrics [1.6.6 standalone REST source](https://github.com/DuncteBot/java-timed-lyrics/blob/1.6.6/src/main/java/me/duncte123/lyrics/lavalink/RestHandler.java) advertises `java-lyrics-plugin` and uses `/v4/lyrics/search?query=...&source=youtube|genius`, distinct from Lyrics.kt. YouTube results are a list of video IDs; Genius returns text lyrics and requires operator configuration. Four separate capability keys prevent cross-plugin routing. The `java-lavalyrics` provider module is not a standalone REST API.
