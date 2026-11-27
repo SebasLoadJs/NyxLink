@@ -11,10 +11,12 @@ const id=process.argv[2];
  try{
   const result=await withLavalinkPluginLab(async context=>{
    const manager=new Manager({nodes:[context.node],send(){throw Error('Discord intentionally unavailable');},options:{database:{type:'memory'},resume:false}});
+   let stage='NODE_CONNECT';
    try{
     const ready=event(manager,'nodeReady',20000);
     await manager.init('823456789012345678');
     const [node]=await ready;
+    stage='PLUGIN_METADATA';
     const installed=context.versions.at(-1);
     assert.equal(node.backend?.kind,'lavalink');
     const info=await node.rest.getBackendInfo();
@@ -23,19 +25,25 @@ const id=process.argv[2];
      assert.equal(metadata?.version,expected.version);
      assert.ok(info.plugins.some(p=>p.name.toLowerCase()===expected.name.toLowerCase()&&p.version===expected.version));
     }
+    stage='WAV_LOAD';
     const load=await node.rest.loadTracks(context.mediaUrl);
     assert.equal(load?.loadType,'track');
     assert.equal(typeof load.data?.encoded,'string');
     const checks=['advertised exact plugin version','typed info inventory','local generated WAV load'];
     if(id==='xm'){
+     stage='XM_LOAD';
      const tracker=await node.rest.loadTracks(context.moduleUrl);
-     assert.equal(tracker?.loadType,'track');
+     if(tracker?.loadType!=='track') {
+      const kind=['empty','error','playlist','search'].includes(tracker?.loadType)?tracker.loadType.toUpperCase():'UNKNOWN';
+      throw new PluginLabFailure('PLUGIN_XM_LOAD_'+kind);
+     }
      assert.equal(typeof tracker.data?.encoded,'string');
      checks.push('generated ProTracker MOD recognized and encoded');
     }
     if(id==='java-lyrics'){
      // A paused player without a track exercises the actual REST route
      // without contacting YouTube or Genius.
+     stage='JAVA_CURRENT_TRACK';
      const guild='923456789012345678';
      await node.rest.updatePlayer(guild,{volume:0,paused:true});
      try {await assert.rejects(node.rest.getCurrentJavaTimedLyrics(guild),e=>e.statusCode===400);}
@@ -43,6 +51,10 @@ const id=process.argv[2];
      checks.push('standalone Java Timed Lyrics current-track no-track response');
     }
     return {passed:true,plugin:installed,plugins:context.versions,jars:context.jars,image:context.image,checks,providersConfigured:false,providerPlaybackVerified:false,discordVoice:false};
+   }catch(error){
+    if(error instanceof PluginLabFailure)throw error;
+    const status=Number.isInteger(error?.statusCode)&&error.statusCode>=400&&error.statusCode<=599?'_HTTP_'+error.statusCode:error?.code==='INVALID_PROTOCOL_RESPONSE'?'_INVALID_PROTOCOL':error?.code==='ERR_ASSERTION'?'_ASSERTION':'';
+    throw new PluginLabFailure('PLUGIN_'+stage+status+'_FAILED');
    }finally{await manager.shutdown();}
   },profile);
   report={profile:id,...result};

@@ -110,6 +110,11 @@ async function nextPort() {
 
 
 function startupErrorCode(logs) {
+  if (/NoClassDefFoundError|ClassNotFoundException/i.test(logs)) return 'PLUGIN_CLASS_MISSING';
+  if (/NoSuchMethodError|AbstractMethodError|IncompatibleClassChangeError|LinkageError/i.test(logs)) return 'PLUGIN_BINARY_INCOMPATIBLE';
+  if (/UnsatisfiedLinkError|failed to load native library/i.test(logs)) return 'PLUGIN_NATIVE_LIBRARY_FAILURE';
+  if (/No qualifying bean|NoSuchBeanDefinitionException/i.test(logs)) return 'PLUGIN_REQUIRED_BEAN_MISSING';
+  if (/BeanDefinitionOverrideException|ConflictingBeanDefinitionException/i.test(logs)) return 'PLUGIN_BEAN_CONFLICT';
   if (/accessdeniedexception|permission denied|eacces/i.test(logs)) return 'PLUGIN_DIRECTORY_PERMISSION';
   if (/could not resolve|failed to download|could not find artifact|unresolved dependency|failed to transfer|unable to resolve/i.test(logs)) return 'PLUGIN_ARTIFACT_RESOLUTION';
   if (/UnsupportedClassVersionError|unsupported class file major/i.test(logs)) return 'JAVA_RUNTIME_INCOMPATIBLE';
@@ -145,17 +150,22 @@ async function withLavalinkPluginLab(run, selectedProfile = profile) {
       res.writeHead(404); res.end(); return;
     }
     const media=req.url === '/fixture.mod' ? module : wave;
-    const match = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range || '');
-    const start = match ? Number(match[1]) : 0;
+    const range = req.headers.range;
+    const match = /^bytes=(\d+)-(\d*)$/.exec(range || '');
+    const suffix = /^bytes=-(\d+)$/.exec(range || '');
+    if (range && !match && !suffix) {
+      res.writeHead(416,{'content-range':'bytes */'+media.length}); res.end(); return;
+    }
+    const start = suffix ? Math.max(0,media.length-Number(suffix[1])) : match ? Number(match[1]) : 0;
     const end = match?.[2] ? Math.min(Number(match[2]), media.length - 1) : media.length - 1;
     if (start >= media.length || start > end) {
-      res.writeHead(416); res.end(); return;
+      res.writeHead(416, {'content-range':'bytes */'+media.length}); res.end(); return;
     }
-    res.writeHead(match ? 206 : 200, {
+    res.writeHead(range ? 206 : 200, {
       'content-type': req.url === '/fixture.mod' ? 'application/octet-stream' : 'audio/wav',
       'content-length': end - start + 1,
       'accept-ranges': 'bytes',
-      ...(match ? { 'content-range': 'bytes ' + start + '-' + end + '/' + media.length } : {})
+      ...(range ? { 'content-range': 'bytes ' + start + '-' + end + '/' + media.length } : {})
     });
     res.end(req.method === 'HEAD' ? undefined : media.subarray(start, end + 1));
   });
@@ -193,8 +203,8 @@ async function withLavalinkPluginLab(run, selectedProfile = profile) {
       await delay(400);
     }
     if (!info) {
-      const logs = await command(['logs', '--tail', '100', name]).catch(() => ({ stdout: '' }));
-      throw new PluginLabFailure(startupErrorCode(logs.stdout));
+      const logs = await command(['logs', '--tail', '250', name]).catch(error => ({ stdout: error.stdout ?? '', stderr: error.stderr ?? '' }));
+      throw new PluginLabFailure(startupErrorCode((logs.stdout ?? '') + '\n' + (logs.stderr ?? '')));
     }
     phase = 'PLUGIN_INVENTORY';
     const actual = (info.plugins || []).map(p => String(p.name || '').toLowerCase());
