@@ -1072,6 +1072,8 @@ export interface ExtensionContext {
     readonly manager: Manager;
     readonly signal: AbortSignal;
     on<E extends keyof IManagerEvents>(event: E, listener: (...args: Parameters<IManagerEvents[E]>) => void | Promise<void>): () => void;
+    onPluginEvent<T>(definition: BackendPluginEventDefinition<T>, listener: BackendPluginEventListener<T>): () => void;
+    registerPluginRoute<T>(definition: BackendPluginRoute<T>): BackendPluginRoute<T>;
 }
 ```
 

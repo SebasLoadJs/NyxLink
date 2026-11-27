@@ -1,4 +1,6 @@
 import { getManagerLogRoute } from '../logging/ManagerLogRoute';
+import type { BackendPluginEventDefinition, BackendPluginEventListener } from '../backends/BackendPluginEvents';
+import type { BackendPluginRoute } from '../backends/BackendPluginRoutes';
 import type { Manager } from '../core/Manager';
 import type { IManagerEvents } from '../typings/Interfaces';
 
@@ -6,6 +8,8 @@ export interface ExtensionContext {
     readonly manager: Manager;
     readonly signal: AbortSignal;
     on<E extends keyof IManagerEvents>(event: E, listener: (...args: Parameters<IManagerEvents[E]>) => void | Promise<void>): () => void;
+    onPluginEvent<T>(definition: BackendPluginEventDefinition<T>, listener: BackendPluginEventListener<T>): () => void;
+    registerPluginRoute<T>(definition: BackendPluginRoute<T>): BackendPluginRoute<T>;
 }
 export interface NyxExtension {
     readonly name: string;
@@ -60,6 +64,37 @@ export class ExtensionHost {
                 const dispose = () => { detach(); entry.listeners.delete(dispose); };
                 entry.listeners.add(dispose);
                 return dispose;
+            },
+            onPluginEvent: (definition, listener) => {
+                if (entry.controller.signal.aborted) return () => {};
+                const detach = this.manager.pluginEvents.register({
+                    ...definition,
+                    decode: value => {
+                        if (!active()) throw new Error('Extension not active');
+                        return definition.decode(value);
+                    },
+                }, (value, eventContext) => {
+                    if (!active()) return;
+                    try {
+                        const result = listener(value, eventContext);
+                        if (result) void Promise.resolve(result).catch(error => {
+                            if (active()) this.report(new ExtensionLifecycleError(extension.name, 'handler', error));
+                        });
+                    } catch (error) {
+                        if (active()) this.report(new ExtensionLifecycleError(extension.name, 'handler', error));
+                    }
+                });
+                const dispose = () => { detach(); entry.listeners.delete(dispose); };
+                entry.listeners.add(dispose);
+                return dispose;
+            },
+            registerPluginRoute: definition => {
+                entry.controller.signal.throwIfAborted();
+                if (this.manager.destroyed) throw new Error('Manager is shut down');
+                const route = this.manager.pluginRoutes.register(definition);
+                const dispose = () => { this.manager.pluginRoutes.remove(route); entry.listeners.delete(dispose); };
+                entry.listeners.add(dispose);
+                return route;
             },
         };
         let aborted: (() => void) | undefined;

@@ -386,3 +386,10 @@ const backendInfoSnapshot: Promise<import('../../dist').BackendInfoSnapshot> = n
 const streamInfo: Promise<import('../../dist').NodeLinkTrackStreamInfo> = node.rest.getNodeLinkTrackStreamInfo('fixture', {itag:251});
 const exportedFormats: Promise<import('../../dist').NodeLinkStreamFormats> = node.rest.getStreamFormats('fixture');
 void [backendInfoSnapshot,streamInfo,exportedFormats];
+
+const pluginOwnedExtension: import('../../dist').NyxExtension = {name:'plugin-owner',setup(context) {
+    context.onPluginEvent({backend:'lavalink',plugin:'example',type:'ExampleEvent',scope:'node',decode:(_raw:unknown)=>42}, value=>{const n:number=value;void n;});
+    const route=context.registerPluginRoute({backend:'lavalink',plugin:'example',id:'profile',scope:'node',method:'GET',path:'example/profile',decode:(_raw:unknown)=>42});
+    const result:Promise<number>=node.rest.callPlugin(route);void result;
+}};
+void pluginOwnedExtension;

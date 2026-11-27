@@ -87,3 +87,27 @@ test('extension identity and duplicate registration are validated without replac
   await assert.rejects(manager.useExtension({ name: 'stable', setup() {} }), /already registered/);
   await remove();
 });
+
+test('extension-owned plugin events and routes are cleaned on removal and failed setup',async t=>{
+ const {manager,node,player}=createPlayer(t);
+ const {BackendDetector}=require('../dist');
+ node.backend=BackendDetector.detect({version:{semver:'4.2.2'},plugins:[{name:'example',version:'1'}]});
+ const event={backend:'lavalink',plugin:'example',type:'ExampleEvent',scope:'player',decode:raw=>raw.value};
+ const route={backend:'lavalink',plugin:'example',id:'profile',scope:'node',method:'GET',path:'example/profile',decode:raw=>raw};
+ let seen=0,registered;
+ const remove=await manager.useExtension({name:'plugin-owner',setup(context){
+   context.onPluginEvent(event,value=>{seen+=value;});
+   registered=context.registerPluginRoute(route);
+ }});
+ const payload={op:'event',type:'ExampleEvent',guildId:player.guildId,value:2};
+ manager.pluginEvents.dispatch(node,payload,()=>true);assert.equal(seen,2);
+ assert.ok(manager.pluginRoutes.owns(registered));
+ await remove();
+ manager.pluginEvents.dispatch(node,payload,()=>true);assert.equal(seen,2);
+ assert.equal(manager.pluginRoutes.owns(registered),false);
+ assert.equal(manager.pluginEvents.list().length,0);
+ await assert.rejects(manager.useExtension({name:'broken-plugin',setup(context){
+   context.onPluginEvent(event,()=>{});context.registerPluginRoute(route);throw Error('fixture');
+ }}),{code:'EXTENSION_SETUP_FAILED'});
+ assert.equal(manager.pluginRoutes.list().length,0);assert.equal(manager.pluginEvents.list().length,0);
+});
