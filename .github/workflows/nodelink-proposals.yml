@@ -8,6 +8,10 @@ on:
       - 'scripts/test-nodelink-proposal.cjs'
       - 'src/backends/NodeLink*'
       - 'src/entities/Track.ts'
+      - 'src/entities/Node.ts'
+      - 'src/entities/Rest.ts'
+      - 'src/entities/Player.ts'
+      - 'src/typings/Interfaces.ts'
       - 'index.ts'
 permissions:
   contents: read

@@ -1,5 +1,7 @@
 import type { NodeLinkMediaLookup, NodeLinkMediaLookupResult } from '../backends/NodeLinkMediaLookup';
 import { isSessionId } from '../backends/SessionPath';
+import { readNodeLinkLyricsEvent } from '../backends/NodeLinkLyricsEvents';
+import { readLavaLyricsEvent, hasLavaLyricsPlugin } from '../backends/LavaLyricsContracts';
 import { readSponsorBlockEvent } from '../backends/SponsorBlockEvents';
 import type { NodeLinkDiscoveryOptions } from '../backends/NodeLinkSearchContracts';
 import type { IRESTLoadTracks } from '../typings/Interfaces';
@@ -1666,16 +1668,27 @@ export class Node {
     this.manager.emit("streamMetadata", player, payload);
   }
 
+  private emitLyricsObservation(player: Player, payload: LyricsFoundEvent | LyricsLineEvent | LyricsNotFoundEvent,
+    legacy: 'lyricsFound' | 'lyricsLine' | 'lyricsNotFound'): void {
+    const backend = this.backend;
+    const native = backend?.kind === 'nodelink' ? readNodeLinkLyricsEvent(payload) : undefined;
+    const lava = backend?.kind === 'lavalink' && hasLavaLyricsPlugin(backend.plugins) ? readLavaLyricsEvent(payload) : undefined;
+    this.manager.emit(legacy, player, payload);
+    if (player.destroyed || player.node !== this || this.backend !== backend || this.manager.destroyed) return;
+    if (native?.guildId === player.guildId) this.manager.emit('nodeLinkLyricsEvent', player, native);
+    if (lava?.guildId === player.guildId) this.manager.emit('lavaLyricsEvent', player, lava);
+  }
+
   private handleLyricsFound(player: any, payload: LyricsFoundEvent): void {
-    this.manager.emit("lyricsFound", player, payload);
+    this.emitLyricsObservation(player, payload, 'lyricsFound');
   }
 
   private handleLyricsLine(player: any, payload: LyricsLineEvent): void {
-    this.manager.emit("lyricsLine", player, payload);
+    this.emitLyricsObservation(player, payload, 'lyricsLine');
   }
 
   private handleLyricsNotFound(player: any, payload: LyricsNotFoundEvent): void {
-    this.manager.emit("lyricsNotFound", player, payload);
+    this.emitLyricsObservation(player, payload, 'lyricsNotFound');
   }
 
   /** @internal Cancel delayed recovery work when a player changes lifecycle. */

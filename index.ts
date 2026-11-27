@@ -45,7 +45,7 @@ export { nodeLinkDiscoveryTypes } from './src/backends/NodeLinkSearchContracts';
 export type { NodeLinkDiscoveryType, NodeLinkDiscoveryOptions } from './src/backends/NodeLinkSearchContracts';
 export { lavaSearchTypes } from './src/backends/LavaSearchContracts';
 export type { LavaSearchType, LavaSearchOptions, LavaSearchCollection, LavaSearchText, LavaSearchResult } from './src/backends/LavaSearchContracts';
-export type { LavaLyricsData, LavaLyricsLine, LavaLyricsOptions } from './src/backends/LavaLyricsContracts';
+export type { LavaLyricsData, LavaLyricsLine, LavaLyricsOptions, LavaLyricsObservation } from './src/backends/LavaLyricsContracts';
 export { lavalinkSponsorBlockCategories } from './src/backends/LavalinkSponsorBlockContracts';
 export type { LavalinkSponsorBlockCategory } from './src/backends/LavalinkSponsorBlockContracts';
 export type { ExtensionOperation, ExtensionRoute, ExtensionRouteParameters } from './src/backends/ExtensionRoutes';

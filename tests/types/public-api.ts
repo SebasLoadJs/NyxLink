@@ -348,3 +348,12 @@ const invalidMixerRecovery: import('../../dist').MixRecoveryOptions = { mode: 'r
 const invalidDiscovery: import('../../dist').RecommendationDiscoveryOptions = { providers: ['unknown'] };
 void [lavaDiscovery, nativeDiscovery, holoMetadata, providerMetadata, collectionMetadata, typedDspx,
     compatibleFilters, recoveryConfiguration, invalidMixerRecovery, invalidDiscovery];
+
+manager.on('nodeLinkLyricsEvent', (_player, event) => {
+    const observation: import('../../dist').NodeLinkLyricsObservation = event;
+    if (observation.kind === 'line') { const words: import('../../dist').NodeLinkLyricWord[] = observation.line.words; void words; }
+});
+manager.on('lavaLyricsEvent', (_player, event) => {
+    const observation: import('../../dist').LavaLyricsObservation = event;
+    if (observation.kind === 'line') { const skipped: boolean = observation.skipped; void skipped; }
+});

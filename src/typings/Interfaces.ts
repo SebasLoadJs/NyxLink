@@ -94,6 +94,8 @@ export interface IManagerEvents {
     lyricsNotFound: (player: Player, payload?: any) => void;
     lyricsFound: (player: Player, payload?: any) => void;
     lyricsLine: (player: Player, payload?: any) => void;
+    nodeLinkLyricsEvent: (player: Player, observation: import('../backends/NodeLinkLyricsEvents').NodeLinkLyricsObservation) => void;
+    lavaLyricsEvent: (player: Player, observation: import('../backends/LavaLyricsContracts').LavaLyricsObservation) => void;
 
     // Queue Events
     queueAdd: (player: Player, tracks: Track | Track[]) => void;

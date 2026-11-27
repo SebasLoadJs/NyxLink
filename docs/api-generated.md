@@ -1804,6 +1804,8 @@ export interface IManagerEvents {
     lyricsNotFound: (player: Player, payload?: any) => void;
     lyricsFound: (player: Player, payload?: any) => void;
     lyricsLine: (player: Player, payload?: any) => void;
+    nodeLinkLyricsEvent: (player: Player, observation: import('../backends/NodeLinkLyricsEvents').NodeLinkLyricsObservation) => void;
+    lavaLyricsEvent: (player: Player, observation: import('../backends/LavaLyricsContracts').LavaLyricsObservation) => void;
     queueAdd: (player: Player, tracks: Track | Track[]) => void;
     queueRemove: (player: Player, tracks: Track | Track[]) => void;
     queueMoveRange: (player: Player, tracks: Track[], fromIndex: number, toIndex: number) => void;
@@ -2683,6 +2685,27 @@ export interface LavaLyricsLine {
     line: string;
     plugin: Record<string, unknown>;
 }
+```
+
+## LavaLyricsObservation
+
+[Source declaration](../src/backends/LavaLyricsContracts.ts)
+
+```ts
+export type LavaLyricsObservation = {
+    guildId: string;
+    kind: 'notFound';
+} | {
+    guildId: string;
+    kind: 'found';
+    lyrics: LavaLyricsData;
+} | {
+    guildId: string;
+    kind: 'line';
+    lineIndex: number;
+    line: LavaLyricsLine;
+    skipped: boolean;
+};
 ```
 
 ## LavaLyricsOptions

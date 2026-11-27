@@ -1,0 +1,24 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+const {BackendDetector}=require('../dist');
+const {createPlayer}=require('./helpers/player.cjs');
+test('backend-specific lyrics observations preserve legacy events and reject foreign or malformed payloads',t=>{
+ const {node,player,manager}=createPlayer(t),legacy=[],native=[],lava=[];
+ manager.on('lyricsLine',(_p,event)=>legacy.push(event));
+ manager.on('nodeLinkLyricsEvent',(_p,event)=>native.push(event));
+ manager.on('lavaLyricsEvent',(_p,event)=>lava.push(event));
+ const raw={op:'event',type:'LyricsLineEvent',guildId:player.guildId,lineIndex:0,skipped:false,line:{timestamp:100,duration:400,line:'fixture',words:[{text:'fixture'}],plugin:{}}};
+ node.backend=BackendDetector.detect({version:{semver:'3.10.0'},isNodelink:true});
+ node.handleEvent(player,raw);
+ assert.equal(legacy[0],raw);assert.equal(native.length,1);assert.equal(lava.length,0);
+ native[0].line.words[0].text='changed';assert.equal(raw.line.words[0].text,'fixture');
+ node.handleEvent(player,{...raw,lineIndex:-1});
+ node.handleEvent(player,{...raw,guildId:'123456789012345679'});
+ assert.equal(native.length,1);assert.equal(legacy.length,3);
+ node.backend=BackendDetector.detect({version:{semver:'4.2.2'},plugins:[{name:'lavalyrics-plugin',version:'1.0.0'}]});
+ const pluginEvent={...raw,line:{timestamp:100,duration:null,line:'fixture',plugin:{extra:{nested:true}}}};
+ node.handleEvent(player,pluginEvent);
+ assert.equal(lava.length,1);assert.equal(native.length,1);assert.equal(lava[0].line.duration,null);
+ lava[0].line.plugin.extra.nested=false;assert.equal(pluginEvent.line.plugin.extra.nested,true);
+ node.backend=BackendDetector.detect({version:{semver:'4.2.2'}});
+ node.handleEvent(player,pluginEvent);assert.equal(lava.length,1);
+});
