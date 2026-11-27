@@ -21,17 +21,17 @@ jobs:
       matrix:
         include:
           - proposal: '265'
-            revision: 5c1d306b56115c4d17a90a27c3be683b48cf150d
+            revision: 39cae5066be93efe4ca9507b4b8f5cbb5a693210
           - proposal: '266'
-            revision: 51f93dfa4f53110aa506075869d6be3d9e2b4eb9
+            revision: 944cd7c3cdd5c38ca47b06a890e33e0e94c6c0f6
           - proposal: '267'
-            revision: 9da45ebc4d390c595e645be180328f2d9cff893b
+            revision: 4693b4a447647ea2d37773042489ee8f0cc63897
           - proposal: '268'
-            revision: 2a0e6211e72767651fa777a4e67471066bf5ff9b
+            revision: b3e1df8796755d1efcf05357c9c4898edd046693
           - proposal: '269'
-            revision: fa1659c6cb12953b6b6bdf3fc24f80779a689468
+            revision: 09c642906af98e0b724183bd329dae4666d7c48a
           - proposal: '270'
-            revision: e96ae5ac944a94a903cdb91cc3fc00b66290dba3
+            revision: 72f4f8db58773b655dbe1e122de2a76e3c488152
     steps:
       - uses: actions/checkout@v4
         with:
