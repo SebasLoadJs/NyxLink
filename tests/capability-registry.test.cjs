@@ -66,7 +66,7 @@ for(const status of [200,501]){
     node.backend=BackendDetector.detect(info); node.isNodeLink=true;
     node.sessionId='fixture-session';
     const request=node.rest.getMixLayers('123456789012345678');
-    const result=status===200?request:assert.rejects(request,{code:'FEATURE_UNAVAILABLE'});
+    const result=assert.rejects(request,/context changed/);
     await entered.promise;
     const replacement=BackendDetector.detect(info);
     node.backend=replacement;
@@ -80,4 +80,22 @@ test('reused detection inputs cannot mutate the previous capability inventory',(
  const second=BackendDetector.detect({version:{semver:'4.2.2'},sourceManagers:['local']}, {}, advertised);
  assert.equal(first.supports('source:http'),true);assert.equal(first.supports('plugin:example'),true);
  assert.equal(first.supports('source:local'),false);assert.equal(second.supports('source:http'),false);assert.equal(second.supports('source:local'),true);
+});
+
+test('extension commands cannot use a session that changed during the ownership check',async t=>{
+ const {node}=createPlayer(t);node.isNodeLink=true;node.backend=BackendDetector.detect({version:{semver:'3.10.0'},isNodelink:true});node.sessionId='old-session';
+ let calls=0;const server=http.createServer((_req,res)=>{calls++;res.writeHead(204);res.end();});server.listen(0,'127.0.0.1');await once(server,'listening');node.port=server.address().port;
+ t.after(()=>{server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
+ const entered=deferred(),release=deferred();const original=node.manager.guildOwnership;
+ node.manager.guildOwnership={assertCurrent:async()=>{entered.resolve();await release.promise;}};
+ try{
+  const pending=assert.rejects(node.rest.subscribeLyrics('123456789012345678'),/context changed/);
+  await entered.promise;node.sessionId='new-session';release.resolve();await pending;assert.equal(calls,0);
+ }finally{node.manager.guildOwnership=original;}
+});
+test('extension requests reject redirects without replaying credentials or commands',async t=>{
+ const {node}=createPlayer(t);node.isNodeLink=true;node.backend=BackendDetector.detect({version:{semver:'3.10.0'},isNodelink:true});node.sessionId='session';
+ let calls=0;const server=http.createServer((_req,res)=>{calls++;res.writeHead(307,{location:'/unexpected'});res.end();});server.listen(0,'127.0.0.1');await once(server,'listening');node.port=server.address().port;
+ t.after(()=>{server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
+ await assert.rejects(node.rest.getMixLayers('123456789012345678'));assert.equal(calls,1);
 });

@@ -140,27 +140,35 @@ export class Rest {
     }
 
     private async runFeatureRequest<T>(operation: ExtensionOperation, params: ExtensionRouteParameters, options: http.RequestOptions & { body?: any }, validate?: (response: unknown) => void): Promise<T> {
+        const backend = this.node.backend, socket = this.node.socket, session = this.node.sessionId;
+        const current = () => !this.node.destroyed && !this.node.manager.destroyed &&
+            this.node.backend === backend && this.node.socket === socket && this.node.sessionId === session;
         const route = this.extensionRoute(operation, params);
-        // NodeLink extension commands must obey the same guild lease as
-        // ordinary playback PATCH/DELETE, including mix and subscription APIs.
-        if (params.guildId && route.method !== 'GET') {
-            await this.node.manager.guildOwnership?.assertCurrent(params.guildId);
-        }
         const feature = route.feature;
         this.node.assertFeature(feature);
         if (route.transport !== 'json') throw new TypeError('Extension requires stream transport');
-        const backend = this.node.backend;
-        const socket = this.node.socket;
-        const session = this.node.sessionId;
-        const current = () => !this.node.destroyed && this.node.backend === backend &&
-            this.node.socket === socket && this.node.sessionId === session;
+        if (!current()) throw new Error('Backend extension context changed');
+        // Capture the route context before the asynchronous ownership check.
+        if (params.guildId && route.method !== 'GET') {
+            await this.node.manager.guildOwnership?.assertCurrent(params.guildId);
+        }
+        if (!current()) throw new Error('Backend extension context changed');
         const result = await this.node.circuit.run(async () => {
-            try { return await this.request<T>(this.url + route.path, { ...options, method: route.method, throwOnError: true }, 10000, 0); }
-            catch (error) { this.featureError(feature, error, backend, current); }
+            if (!current()) throw new Error('Backend extension context changed');
+            try {
+                return await this.request<T>(this.url + route.path, {
+                    ...options, method: route.method, throwOnError: true,
+                    allowedOrigins: [new URL(this.url).origin],
+                }, 10000, 0, 1000, 0);
+            } catch (error) {
+                if (!current()) throw new Error('Backend extension context changed');
+                this.featureError(feature, error, backend, current);
+            }
         });
+        if (!current()) throw new Error('Backend extension context changed');
         if (result === undefined) throw new Error('Backend did not acknowledge feature request');
         validate?.(result);
-        if (current()) backend?.recordFeature(feature, 'available');
+        backend?.recordFeature(feature, 'available');
         return result;
     }
 
@@ -677,15 +685,17 @@ export class Rest {
         }
         const socket = this.node.socket;
         const session = this.node.sessionId;
-        const current = () => !this.node.destroyed && this.node.backend === backend &&
+        const current = () => !this.node.destroyed && !this.node.manager.destroyed && this.node.backend === backend &&
             this.node.socket === socket && this.node.sessionId === session;
         options.signal?.throwIfAborted();
+        const timeout = backendRestTimeout(options.timeoutMs);
+        if (!current()) throw new Error('LavaSearch backend session changed');
         const result = await this.node.circuit.run(async () => {
             try {
                 return await this.request<unknown>(this.url + '/v4/loadsearch?' + params.toString(), {
                     method: 'GET', headers: this.authHeaders, throwOnError: true,
-                    noContentAsNull: true, signal: options.signal
-                }, options.timeoutMs ?? 10000, 0);
+                    noContentAsNull: true, signal: options.signal, allowedOrigins: [new URL(this.url).origin],
+                }, timeout, 0, 1000, 0);
             } catch (error) {
                 this.featureError('lavasearch', error, backend, current);
             }
