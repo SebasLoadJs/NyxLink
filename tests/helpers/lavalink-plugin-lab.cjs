@@ -50,6 +50,7 @@ function renderConfig(port, password, value = profile) {
     'server:', '  address: 127.0.0.1', '  port: ' + port,
     'lavalink:', '  pluginsDir: "/opt/Lavalink/plugins"',
     '  server:', "    password: '" + password + "'",
+    ...(value.matrix==='java-lavalyrics'?['    ratelimit:','      ipBlocks: ["127.0.0.0/30"]','      strategy: RotateOnBan','      searchTriggersFail: false','      retryLimit: 1']:[]),
     '    sources:', '      youtube: false', '      soundcloud: false',
     '      bandcamp: false', '      twitch: false', '      vimeo: false',
     '      nico: false', '      http: true', '      local: ' + (value.matrix === 'xm' ? 'true' : 'false'),
@@ -93,6 +94,19 @@ function trackerModule() {
   return data;
 }
 
+/** Original FastTracker II XM: one pattern, one instrument, delta-coded sample. */
+function xmModule(){
+  const header=Buffer.alloc(336);
+  header.write('Extended Module: ',0,'ascii');header.write('NyxLink XM fixture',17,'ascii');header[37]=0x1a;
+  header.write('NyxLink generator',38,'ascii');header.writeUInt16LE(0x0104,58);header.writeUInt32LE(276,60);
+  [1,0,4,1,1,1,6,125].forEach((v,i)=>header.writeUInt16LE(v,64+i*2));
+  const events=Buffer.alloc(64*4*5);events[0]=49;events[1]=1;
+  const pattern=Buffer.alloc(9);pattern.writeUInt32LE(9,0);pattern.writeUInt16LE(64,5);pattern.writeUInt16LE(events.length,7);
+  const instrument=Buffer.alloc(263);instrument.writeUInt32LE(263,0);instrument.write('Generated sine',4,'ascii');instrument.writeUInt16LE(1,27);instrument.writeUInt32LE(40,29);
+  const sample=Buffer.alloc(40);sample.writeUInt32LE(64,0);sample.writeUInt32LE(64,8);sample[12]=48;sample[14]=1;sample[15]=128;sample.write('Original sine',18,'ascii');
+  const audio=Buffer.alloc(64);let previous=0;for(let i=0;i<64;i++){const v=Math.round(Math.sin(i*Math.PI/32)*64);audio.writeInt8(v-previous,i);previous=v;}
+  return Buffer.concat([header,pattern,events,instrument,sample,audio]);
+}
 async function openPort(server) {
   await new Promise((resolve, reject) => {
     server.once('error', reject);
@@ -153,12 +167,12 @@ async function withLavalinkPluginLab(run, selectedProfile = profile) {
   const port = await nextPort();
   const config = path.join(directory, 'application.yml');
   const name = 'nyxlink-plugins-' + process.pid + '-' + randomBytes(4).toString('hex');
-  const wave = wav(), module = trackerModule();
+  const wave = wav(), module = trackerModule(), xm=xmModule();
   const server = http.createServer((req, res) => {
-    if (!['/tone.wav','/fixture.mod'].includes(req.url) || !['GET', 'HEAD'].includes(req.method)) {
+    if (!['/tone.wav','/fixture.mod','/fixture.xm'].includes(req.url) || !['GET', 'HEAD'].includes(req.method)) {
       res.writeHead(404); res.end(); return;
     }
-    const media=req.url === '/fixture.mod' ? module : wave;
+    const media=req.url === '/fixture.mod' ? module : req.url === '/fixture.xm' ? xm : wave;
     const range = req.headers.range;
     const match = /^bytes=(\d+)-(\d*)$/.exec(range || '');
     const suffix = /^bytes=-(\d+)$/.exec(range || '');
@@ -171,7 +185,7 @@ async function withLavalinkPluginLab(run, selectedProfile = profile) {
       res.writeHead(416, {'content-range':'bytes */'+media.length}); res.end(); return;
     }
     res.writeHead(range ? 206 : 200, {
-      'content-type': req.url === '/fixture.mod' ? 'application/octet-stream' : 'audio/wav',
+      'content-type': req.url === '/tone.wav' ? 'audio/wav' : 'application/octet-stream',
       'content-length': end - start + 1,
       'accept-ranges': 'bytes',
       ...(range ? { 'content-range': 'bytes ' + start + '-' + end + '/' + media.length } : {})
@@ -233,6 +247,7 @@ async function withLavalinkPluginLab(run, selectedProfile = profile) {
         password, secure: false, version: info.version.semver },
       mediaUrl: 'http://127.0.0.1:' + mediaPort + '/tone.wav',
       moduleUrl: 'http://127.0.0.1:' + mediaPort + '/fixture.mod',
+      xmUrl: 'http://127.0.0.1:' + mediaPort + '/fixture.xm',
       moduleFile: selectedProfile.matrix==='xm'?'/opt/Lavalink/fixture.mod':undefined,
       image: selectedProfile.image,
       versions: selectedProfile.plugins.map(p => ({ name: p.advertised ?? p.name, version: p.version })),
@@ -263,4 +278,4 @@ async function withLavalinkPluginLab(run, selectedProfile = profile) {
   }
 }
 
-module.exports = { trackerModule, matrixProfile, validateProfile, renderConfig, startupErrorCode, PluginLabFailure, withLavalinkPluginLab };
+module.exports = { xmModule, trackerModule, matrixProfile, validateProfile, renderConfig, startupErrorCode, PluginLabFailure, withLavalinkPluginLab };

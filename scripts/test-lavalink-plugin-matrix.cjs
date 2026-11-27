@@ -35,10 +35,14 @@ const id=process.argv[2];
      const classify=result=>['track','empty','error','playlist','search'].includes(result?.loadType)?result.loadType.toUpperCase():'UNKNOWN';
      const remote=await node.rest.loadTracks(context.moduleUrl);
      const local=await node.rest.loadTracks(context.moduleFile);
-     if(remote?.loadType!=='track'||local?.loadType!=='track') throw new PluginLabFailure('PLUGIN_XM_HTTP_'+classify(remote)+'_LOCAL_'+classify(local));
+     const xm=await node.rest.loadTracks(context.xmUrl);
+     const direct=await fetch('http://127.0.0.1:'+context.node.port+'/v4/loadtracks?'+new URLSearchParams({identifier:context.moduleUrl}),{headers:{Authorization:context.node.password},signal:AbortSignal.timeout(10000)});
+     const wire=direct.ok?await direct.json():null;
+     if(remote?.loadType!=='track'||local?.loadType!=='track'||xm?.loadType!=='track'||wire?.loadType!=='track') throw new PluginLabFailure('PLUGIN_XM_HTTP_'+classify(remote)+'_LOCAL_'+classify(local)+'_XM_'+classify(xm)+'_WIRE_'+classify(wire));
      assert.equal(typeof remote.data?.encoded,'string');
      assert.equal(typeof local.data?.encoded,'string');
-     checks.push('generated ProTracker MOD recognized and encoded over HTTP and local file');
+     assert.equal(typeof xm.data?.encoded,'string');
+     checks.push('generated MOD and XM recognized through native REST and SDK');
     }
     if(id==='java-lyrics'||id==='lyrics-kt'){
      // A paused player without a track exercises the actual REST route

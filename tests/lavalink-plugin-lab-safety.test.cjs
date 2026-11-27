@@ -90,3 +90,10 @@ test('XM local source is isolated and Spring failure classification never expose
  assert.equal(startupErrorCode('No qualifying bean of type com.sedmelluq.lava.extensions.youtuberotator.planner.AbstractRoutePlanner private-data'),'PLUGIN_ROUTE_PLANNER_BEAN_MISSING');
  assert.equal(startupErrorCode('No qualifying bean of type com.github.topi314.lavalyrics.LyricsManager'),'PLUGIN_LYRICS_MANAGER_BEAN_MISSING');
 });
+
+test('only Java LavaLyrics gets an isolated loopback route planner and XM fixture is structured',()=>{
+ const {matrixProfile,xmModule}=require('./helpers/lavalink-plugin-lab.cjs');
+ assert.match(renderConfig(2333,password,matrixProfile('java-lavalyrics')), /ipBlocks: \["127\.0\.0\.0\/30"\]/);
+ assert.doesNotMatch(renderConfig(2333,password,matrixProfile('java-lyrics')), /ratelimit:/);
+ const xm=xmModule();assert.equal(xm.toString('ascii',0,17),'Extended Module: ');assert.equal(xm.readUInt16LE(58),0x104);assert.equal(xm.readUInt16LE(70),1);
+});
