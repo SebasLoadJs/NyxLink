@@ -974,22 +974,45 @@ export class Rest {
      * operational endpoint, distinct from NodeLink's /v4/metrics.
      * The node operator must enable Prometheus in Lavalink.
      */
-    public async getLavalinkMetrics(names: readonly string[] = []): Promise<string | null> {
-        if (this.node.backend?.kind !== 'lavalink') {
-            throw new FeatureUnavailableError('lavalink:metrics', this.node.backend?.kind ?? 'unknown');
+    public async getLavalinkMetrics(names: readonly string[] = [], options: BackendInfoOptions = {}): Promise<string | null> {
+        const backend = this.node.backend;
+        if (backend?.kind !== 'lavalink') {
+            throw new FeatureUnavailableError('lavalink:metrics', backend?.kind ?? 'unknown');
         }
-        if (!Array.isArray(names) || names.some(name => typeof name !== 'string' || !/^[a-zA-Z_:][a-zA-Z0-9_:]*$/.test(name))) {
+        if (!Array.isArray(names) || names.length > 128 || names.some(name => typeof name !== 'string' || name.length > 256 || !/^[a-zA-Z_:][a-zA-Z0-9_:]*$/.test(name))) {
             throw new TypeError('Invalid Prometheus metric name');
         }
+        const timeout = backendRestTimeout(options.timeoutMs);
+        const socket = this.node.socket, session = this.node.sessionId;
+        const current = () => !this.node.destroyed && !this.node.manager.destroyed &&
+            this.node.backend === backend && this.node.socket === socket && this.node.sessionId === session;
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('Lavalink metrics context changed');
         const params = new URLSearchParams();
         for (const name of names) params.append('name[]', name);
         const query = params.toString();
-        const response = await this.request<unknown>(this.url + '/metrics' + (query ? '?' + query : ''), {
-            method: 'GET', headers: { ...this.authHeaders, Accept: 'text/plain' }, throwOnError: true
-        }, 10000, 0);
-        if (response == null) return null;
-        if (typeof response !== 'string') throw new TypeError('Invalid Prometheus metrics response');
-        return response;
+        if (query.length > 16384) throw new TypeError('Prometheus query too large');
+        let result;
+        try {
+            result = await this.request<unknown>(this.url + '/metrics' + (query ? '?' + query : ''), {
+                method: 'GET', headers: { ...this.authHeaders, Accept: 'text/plain, application/openmetrics-text' }, throwOnError: true,
+                returnHeaders: true, allowedOrigins: [new URL(this.url).origin], signal: options.signal,
+            }, timeout, 0, 1000, 0);
+        } catch (error) {
+            options.signal?.throwIfAborted();
+            if (!current()) throw new Error('Lavalink metrics context changed');
+            if (error instanceof HttpError) throw new HttpError(error.statusCode);
+            throw new Error('Lavalink metrics request failed');
+        }
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('Lavalink metrics context changed');
+        if (result == null) return null;
+        const contentType = result.headers['content-type'];
+        if (typeof result.data !== 'string' || typeof contentType !== 'string' ||
+            !/^(text\/plain|application\/openmetrics-text)(?:\s*;|$)/i.test(contentType)) {
+            throw new ProtocolResponseError('backend REST', 'metrics response');
+        }
+        return result.data;
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */

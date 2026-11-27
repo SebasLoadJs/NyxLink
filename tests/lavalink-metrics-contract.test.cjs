@@ -1,0 +1,20 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+const http=require('node:http'),{once}=require('node:events');
+const {BackendDetector}=require('../dist'),{createPlayer}=require('./helpers/player.cjs');
+test('Lavalink Prometheus scrape is bounded, same-origin and session-fenced',async t=>{
+ const {node}=createPlayer(t);
+ node.isNodeLink=false;node.backend=BackendDetector.detect({version:{semver:'4.2.2'}});
+ let status=200,type='text/plain; version=0.0.4',body='fixture_total 1\n',change=false;const calls=[];
+ const server=http.createServer((req,res)=>{calls.push(req.url);if(change)node.sessionId='changed';res.writeHead(status,{'content-type':type,...(status===302?{location:'/unexpected'}:{})});res.end(body);});
+ server.listen(0,'127.0.0.1');await once(server,'listening');node.port=server.address().port;
+ t.after(()=>{server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
+ assert.equal(await node.rest.getLavalinkMetrics(['fixture_total']),body);
+ assert.deepEqual(new URL(calls[0],'http://localhost').searchParams.getAll('name[]'),['fixture_total']);
+ await assert.rejects(node.rest.getLavalinkMetrics(['../']),TypeError);
+ type='text/html';await assert.rejects(node.rest.getLavalinkMetrics(),{code:'INVALID_PROTOCOL_RESPONSE'});
+ status=302;await assert.rejects(node.rest.getLavalinkMetrics(),/request failed/);
+ assert.equal(calls.length,3);
+ status=503;body='private-provider-error';await assert.rejects(node.rest.getLavalinkMetrics(),e=>e.statusCode===503&&!String(e).includes(body));
+ const c=new AbortController();c.abort();await assert.rejects(node.rest.getLavalinkMetrics([],{signal:c.signal}),{name:'AbortError'});
+ status=200;type='text/plain';change=true;await assert.rejects(node.rest.getLavalinkMetrics(),/context changed/);
+});

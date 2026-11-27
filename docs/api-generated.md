@@ -5244,7 +5244,7 @@ export declare class Rest {
     loadMeaning(encodedTrack: string, lang?: string): Promise<NodeLinkResponse<IMeaningResponse | Record<string, any>> | null>;
     getNodeLinkConnectionSnapshot(options?: BackendInfoOptions): Promise<NodeLinkConnectionSnapshot>;
     getConnectionStatus(): Promise<NodeLinkResponse<INodeConnectionStatus> | null>;
-    getLavalinkMetrics(names?: readonly string[]): Promise<string | null>;
+    getLavalinkMetrics(names?: readonly string[], options?: BackendInfoOptions): Promise<string | null>;
     getNodeLinkMetrics(options?: NodeLinkMetricsOptions): Promise<string>;
     getMetrics(): Promise<string | null>;
     getNodeLinkProfilerStatus(options: NodeLinkProfilerOptions): Promise<NodeLinkProfilerSnapshot>;
