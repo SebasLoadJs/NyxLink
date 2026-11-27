@@ -30,3 +30,18 @@ test('NodeLink OAuth sends credentials only in POST body and strips remote error
  await assert.rejects(node.rest.exchangeYoutubeOAuth('fixture-private-token'),{code:'FEATURE_UNAVAILABLE'});
  assert.equal(calls.length,3);
 });
+
+test('typed OAuth projection validates known token fields and sanitizes cancellation',async t=>{
+ const {node}=createPlayer(t);node.secure=false;node.isNodeLink=true;
+ node.backend=BackendDetector.detect({version:{semver:'3.10.0'},isNodelink:true});
+ let calls=0,body={access_token:'fixture',expires_in:3600,token_type:'Bearer',unknown:'omit'};
+ const server=http.createServer(async(req,res)=>{for await(const _ of req){}calls++;res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(body));});
+ server.listen(0,'127.0.0.1');await once(server,'listening');node.port=server.address().port;
+ t.after(()=>{server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
+ assert.deepEqual(await node.rest.exchangeNodeLinkYoutubeOAuth('fixture-refresh'),{access_token:'fixture',expires_in:3600,token_type:'Bearer'});
+ body={access_token:'fixture',expires_in:-1};
+ await assert.rejects(node.rest.exchangeNodeLinkYoutubeOAuth('fixture-refresh'),{code:'INVALID_PROTOCOL_RESPONSE'});
+ const controller=new AbortController();controller.abort(new Error('fixture-private-token'));
+ await assert.rejects(node.rest.exchangeNodeLinkYoutubeOAuth('fixture-refresh',{signal:controller.signal}),e=>/cancelled/.test(e.message)&&!e.message.includes('private-token'));
+ assert.equal(calls,2);
+});

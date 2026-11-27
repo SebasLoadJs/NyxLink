@@ -47,7 +47,7 @@ const id=process.argv[2];
      // hide the native REST result. Never log payloads or arbitrary errors.
      for(const [kind,identifier] of [['modHttp',context.moduleUrl],['modLocal',context.moduleFile],['xmHttp',context.xmUrl]]){
       await observe(kind+'Wire',()=>direct(identifier));
-      await observe(kind+'Sdk',async()=>classify(await node.rest.loadTracks(identifier,{signal:AbortSignal.timeout(15000)})));
+      await observe(kind+'Sdk',async()=>classify(await node.rest.loadTracks(identifier,{timeoutMs:15000,signal:AbortSignal.timeout(15000)})));
      }
      if(Object.values(trackerObservations).some(value=>value!=='TRACK'))throw new PluginLabFailure('PLUGIN_XM_TRACKER_ACCEPTANCE_FAILED');
      checks.push('generated MOD and XM recognized through native REST and SDK');

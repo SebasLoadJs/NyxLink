@@ -3896,6 +3896,20 @@ export interface NodeLinkMusicAnalysisSnapshot {
 }
 ```
 
+## NodeLinkOAuthTokens
+
+[Source declaration](../src/backends/BackendRestContracts.ts)
+
+```ts
+export interface NodeLinkOAuthTokens {
+    access_token: string;
+    expires_in?: number;
+    token_type?: string;
+    scope?: string;
+    refresh_token?: string;
+}
+```
+
 ## NodeLinkPlaybackLyricLine
 
 [Source declaration](../src/backends/NodeLinkLyricsEvents.ts)
@@ -5250,7 +5264,8 @@ export declare class Rest {
         refreshToken?: string;
         visitorData?: string;
     }): Promise<any | null>;
-    exchangeYoutubeOAuth(refreshToken: string): Promise<any | null>;
+    exchangeYoutubeOAuth(refreshToken: string, options?: BackendInfoOptions): Promise<any | null>;
+    exchangeNodeLinkYoutubeOAuth(refreshToken: string, options?: BackendInfoOptions): Promise<NodeLinkOAuthTokens>;
     encodeNodeLinkTrack(track: NodeLinkTrackEncodeInput, options?: BackendInfoOptions): Promise<string>;
     encodeNodeLinkTracks(tracks: readonly NodeLinkTrackEncodeInput[], options?: BackendInfoOptions): Promise<string[]>;
     encodeTrackRemote(track: string): Promise<string | null>;

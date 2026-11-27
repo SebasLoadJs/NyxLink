@@ -1,4 +1,4 @@
-import { nodeLinkMediaQuery, readNodeLinkMeaningResult, readNodeLinkChapters, type NodeLinkMeaningResult, readNodeLinkConnectionSnapshot, nodeLinkEncodeInput, readNodeLinkEncodedTrack, readNodeLinkEncodedTracks, type NodeLinkConnectionSnapshot, type NodeLinkTrackEncodeInput, nodeLinkMetricsHeader, type NodeLinkMetricsOptions, backendRestTimeout, readBackendInfoSnapshot, nodeLinkTrackStreamParameters, readNodeLinkTrackStreamInfo, type BackendInfoSnapshot, type BackendInfoOptions, type NodeLinkTrackStreamOptions, type NodeLinkTrackStreamInfo } from '../backends/BackendRestContracts';
+import { readNodeLinkOAuthTokens, type NodeLinkOAuthTokens, nodeLinkMediaQuery, readNodeLinkMeaningResult, readNodeLinkChapters, type NodeLinkMeaningResult, readNodeLinkConnectionSnapshot, nodeLinkEncodeInput, readNodeLinkEncodedTrack, readNodeLinkEncodedTracks, type NodeLinkConnectionSnapshot, type NodeLinkTrackEncodeInput, nodeLinkMetricsHeader, type NodeLinkMetricsOptions, backendRestTimeout, readBackendInfoSnapshot, nodeLinkTrackStreamParameters, readNodeLinkTrackStreamInfo, type BackendInfoSnapshot, type BackendInfoOptions, type NodeLinkTrackStreamOptions, type NodeLinkTrackStreamInfo } from '../backends/BackendRestContracts';
 import { javaTimedLyricsSearchPath, lyricsKtVideoPath, lyricsKtSearchPath, lyricsKtTimeout, readLyricsKtResult, readLyricsKtSearch, type LyricsKtOptions, type LyricsKtResult, type LyricsKtSearchTrack } from '../backends/LyricsKtContracts';
 import { assertNodeLinkAdmin, readNodeLinkYoutubeConfig, nodeLinkYoutubeConfigBody, readNodeLinkYoutubeConfigAcknowledgement, nodeLinkWorkerTerminationBody, readNodeLinkWorkerTermination, type NodeLinkAdminOptions, type NodeLinkYoutubeConfig, type NodeLinkYoutubeConfigUpdate, type NodeLinkYoutubeConfigAcknowledgement, type NodeLinkWorkerTarget, type NodeLinkWorkerTerminationOptions, type NodeLinkWorkerTermination } from '../backends/NodeLinkAdminContracts';
 import { profilerCommandBody, readProfilerCommandResult, type NodeLinkProfilerCommandOptions, type NodeLinkProfilerCommandResult, profilerQuery, diagnosticsTimeout, readNodeLinkProfilerSnapshot, readNodeLinkWorkerSnapshots, type NodeLinkProfilerOptions, type NodeLinkProfilerSnapshot, type NodeLinkWorkerSnapshot } from '../backends/NodeLinkDiagnostics';
@@ -1279,9 +1279,11 @@ export class Rest {
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
-    public async exchangeYoutubeOAuth(refreshToken: string): Promise<any | null> {
+    public async exchangeYoutubeOAuth(refreshToken: string, options: BackendInfoOptions = {}): Promise<any | null> {
         if (typeof refreshToken !== 'string' || refreshToken.length < 1 || refreshToken.length > 16384 ||
             /[\x00-\x20\x7f]/.test(refreshToken)) throw new TypeError('Invalid YouTube refresh token');
+        const timeout = backendRestTimeout(options.timeoutMs);
+        if (options.signal?.aborted) throw new Error('NodeLink YouTube OAuth cancelled');
         const origin = new URL(this.url);
         if (origin.protocol !== 'https:' && !['127.0.0.1', '[::1]'].includes(origin.hostname)) {
             throw new TypeError('NodeLink YouTube OAuth requires HTTPS or literal loopback HTTP');
@@ -1296,13 +1298,15 @@ export class Rest {
         try {
             raw = await this.request<unknown>(origin.origin + route.path, {
                 method: route.method, headers: this.jsonHeaders, body: { refreshToken },
-                allowedOrigins: [origin.origin], throwOnError: true,
-            }, 10000, 0, 1000, 0);
+                allowedOrigins: [origin.origin], throwOnError: true, signal: options.signal,
+            }, timeout, 0, 1000, 0);
         } catch (error) {
+            if (options.signal?.aborted) throw new Error('NodeLink YouTube OAuth cancelled');
             // Never propagate remote error bodies or URLs that may contain credentials.
             if (error instanceof HttpError) this.featureError(route.feature, new HttpError(error.statusCode), backend, current);
             throw new Error('NodeLink YouTube OAuth request failed');
         }
+        if (options.signal?.aborted) throw new Error('NodeLink YouTube OAuth cancelled');
         if (!current()) throw new Error('NodeLink YouTube OAuth context changed');
         if (!raw || typeof raw !== 'object' || Array.isArray(raw) ||
             typeof (raw as Record<string, unknown>).access_token !== 'string' ||
@@ -1311,6 +1315,11 @@ export class Rest {
         }
         backend?.recordFeature(route.feature, 'available');
         return raw;
+    }
+
+    /** Strict detached token projection; unknown provider fields are omitted. */
+    public async exchangeNodeLinkYoutubeOAuth(refreshToken: string, options: BackendInfoOptions = {}): Promise<NodeLinkOAuthTokens> {
+        return readNodeLinkOAuthTokens(await this.exchangeYoutubeOAuth(refreshToken,options));
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */

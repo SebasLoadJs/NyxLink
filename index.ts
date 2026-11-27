@@ -177,3 +177,5 @@ export type { NodeLinkProfilerAction, NodeLinkProfilerCommandOptions, NodeLinkPr
 export type { NodeLinkConnectionQuality, NodeLinkConnectionSnapshot, NodeLinkTrackEncodeInput } from './src/backends/BackendRestContracts';
 
 export type { NodeLinkJsonValue, NodeLinkMeaningResult } from './src/backends/BackendRestContracts';
+
+export type { NodeLinkOAuthTokens } from './src/backends/BackendRestContracts';

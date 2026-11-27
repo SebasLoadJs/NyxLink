@@ -304,3 +304,30 @@ export function readNodeLinkChapters(value: unknown): import('../typings/Interfa
         return chapter;
     });
 }
+
+/** Sensitive OAuth credentials: never log or store in diagnostics. */
+export interface NodeLinkOAuthTokens {
+    access_token: string;
+    expires_in?: number;
+    token_type?: string;
+    scope?: string;
+    refresh_token?: string;
+}
+export function readNodeLinkOAuthTokens(value: unknown): NodeLinkOAuthTokens {
+    const token = (v: unknown): v is string => text(v,16384) && !/\s/.test(v);
+    if (!record(value) || !token(value.access_token)) return invalid('OAuth token response');
+    const result: NodeLinkOAuthTokens={access_token:value.access_token};
+    if (value.refresh_token!==undefined) {
+        if (!token(value.refresh_token)) return invalid('OAuth refresh token');
+        result.refresh_token=value.refresh_token;
+    }
+    if (value.expires_in!==undefined) {
+        if (!Number.isSafeInteger(value.expires_in) || !finiteNonnegative(value.expires_in)) return invalid('OAuth token expiration');
+        result.expires_in=value.expires_in;
+    }
+    for (const key of ['token_type','scope'] as const) if (value[key]!==undefined) {
+        if (!text(value[key],8192)) return invalid('OAuth token metadata');
+        result[key]=value[key];
+    }
+    return result;
+}
