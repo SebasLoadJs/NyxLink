@@ -12,10 +12,20 @@ const pins = require('../integration/backend-servers.json');
 
 const exec = promisify(execFile);
 const profile = pins.lavalinkPlugins;
+const matrix = require('../integration/lavalink-plugin-matrix.json');
+function matrixProfile(id) {
+  assert.ok(Object.hasOwn(matrix,id),'Unknown plugin matrix profile');
+  return { image:pins.lavalink.image, plugins:[{...matrix[id]}], matrix:id };
+}
 
 function validateProfile(value = profile) {
   assert.equal(value.image, pins.lavalink.image, 'Plugin lab must reuse the immutable baseline Lavalink image');
   assert.match(value.image, /^ghcr\.io\/lavalink-devs\/lavalink@sha256:[a-f0-9]{64}$/);
+  if (value.matrix !== undefined) {
+    assert.ok(Object.hasOwn(matrix,value.matrix),'Unknown matrix profile');
+    assert.deepEqual(value.plugins,[matrix[value.matrix]]);
+    return;
+  }
   assert.equal(value.plugins.length, 2);
   const expected = [
     ['lavalyrics-plugin', 'com.github.topi314.lavalyrics'],
@@ -34,6 +44,7 @@ function renderConfig(port, password, value = profile) {
   validateProfile(value);
   assert.ok(Number.isInteger(port) && port > 0 && port <= 65535);
   assert.match(password, /^[a-f0-9]{48}$/);
+  const pluginConfig = value.matrix === 'youtube' ? ['  youtube:', '    enabled: true', '    clients: [WEB]', '    allowSearch: false'] : value.matrix === 'lavasrc' ? ['  lavasrc:', '    sources:', ...['spotify','applemusic','deezer','yandexmusic','flowerytts','youtube','vkmusic','tidal','qobuz','ytdlp','jiosaavn'].map(s=>'      '+s+': false'), '    lyrics-sources:', ...['spotify','deezer','youtube','yandexmusic','vkmusic','lrcLib'].map(s=>'      '+s+': false')] : value.matrix === 'dunctebot' ? ['  dunctebot:', '    sources:', ...['getyarn','clypit','tts','pornhub','reddit','ocremix','tiktok','mixcloud','soundgasm','pixeldrain','tumblr'].map(s=>'      '+s+': false')] : ['  lavalyrics:', '    sources: []'];
   return [
     'server:', '  address: 127.0.0.1', '  port: ' + port,
     'lavalink:', '  pluginsDir: "/opt/Lavalink/plugins"',
@@ -41,7 +52,7 @@ function renderConfig(port, password, value = profile) {
     '    sources:', '      youtube: false', '      soundcloud: false',
     '      bandcamp: false', '      twitch: false', '      vimeo: false',
     '      nico: false', '      http: true', '      local: false',
-    'plugins:', '  lavalyrics:', '    sources: []',
+    'plugins:', ...pluginConfig,
     'logging:', '  level:', '    root: WARN', ''
   ].join('\n');
 }
@@ -91,8 +102,8 @@ class PluginLabFailure extends Error {
   constructor(code) { super(code); this.name = 'PluginLabFailure'; this.code = code; }
 }
 
-async function withLavalinkPluginLab(run) {
-  validateProfile();
+async function withLavalinkPluginLab(run, selectedProfile = profile) {
+  validateProfile(selectedProfile);
   if (process.platform !== 'linux' || typeof process.getuid !== 'function') {
     throw new Error('Real plugin lab requires a Linux container host');
   }
@@ -134,9 +145,9 @@ async function withLavalinkPluginLab(run) {
   try {
     const mediaPort = await openPort(server);
     serverStarted = true;
-    await fs.writeFile(config, renderConfig(port, password), { mode: 0o600, flag: 'wx' });
+    await fs.writeFile(config, renderConfig(port, password, selectedProfile), { mode: 0o600, flag: 'wx' });
     phase = 'ARTIFACT_VERIFY';
-    const jars = await installVerifiedPlugins(pluginsDir, profile.plugins);
+    const jars = await installVerifiedPlugins(pluginsDir, selectedProfile.plugins);
     phase = 'CONTAINER_CREATE';
     await command(['run', '-d', '--name', name, '--user',
       String(process.getuid()) + ':' + String(process.getgid()),
@@ -144,7 +155,7 @@ async function withLavalinkPluginLab(run) {
       '--network', 'host', '--memory', '1024m', '--cpus', '2', '--pids-limit', '256',
       '-v', config + ':/opt/Lavalink/application.yml:ro',
       '-v', pluginsDir + ':/opt/Lavalink/plugins:ro',
-      '-e', 'JAVA_TOOL_OPTIONS=-Xms64m -Xmx512m', profile.image]);
+      '-e', 'JAVA_TOOL_OPTIONS=-Xms64m -Xmx512m', selectedProfile.image]);
     containerStarted = true;
     phase = 'BACKEND_START';
 
@@ -167,9 +178,10 @@ async function withLavalinkPluginLab(run) {
     }
     phase = 'PLUGIN_INVENTORY';
     const actual = (info.plugins || []).map(p => String(p.name || '').toLowerCase());
-    for (const plugin of profile.plugins) {
-      const short = plugin.name.replace(/-plugin$/, '');
-      if (!actual.includes(plugin.name) && !actual.includes(short)) {
+    for (const plugin of selectedProfile.plugins) {
+      const advertised = (plugin.advertised ?? plugin.name).toLowerCase();
+      const short = advertised.replace(/-plugin$/, '');
+      if (!actual.includes(advertised) && !actual.includes(short)) {
         throw new Error('Expected plugin was not advertised: ' + plugin.name);
       }
     }
@@ -178,8 +190,8 @@ async function withLavalinkPluginLab(run) {
       node: { identifier: 'lavalink-plugins', host: '127.0.0.1', port,
         password, secure: false, version: info.version.semver },
       mediaUrl: 'http://127.0.0.1:' + mediaPort + '/tone.wav',
-      image: profile.image,
-      versions: profile.plugins.map(p => ({ name: p.name, version: p.version })),
+      image: selectedProfile.image,
+      versions: selectedProfile.plugins.map(p => ({ name: p.advertised ?? p.name, version: p.version })),
       jars
     });
   } catch (error) {
@@ -207,4 +219,4 @@ async function withLavalinkPluginLab(run) {
   }
 }
 
-module.exports = { validateProfile, renderConfig, startupErrorCode, PluginLabFailure, withLavalinkPluginLab };
+module.exports = { matrixProfile, validateProfile, renderConfig, startupErrorCode, PluginLabFailure, withLavalinkPluginLab };

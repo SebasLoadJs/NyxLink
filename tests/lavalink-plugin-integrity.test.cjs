@@ -80,3 +80,15 @@ test('if the second artifact is tampered, no JAR reaches the plugin directory', 
   await assert.rejects(installVerifiedPlugins(dir,fake,fetcher),{code:'PLUGIN_ARTIFACT_HASH_MISMATCH'});
   assert.deepEqual(await fs.readdir(dir), []);
 });
+
+test('GitHub release pins constrain exact owner, filename, digest and redirect host', async()=>{
+ const matrix=require('./integration/lavalink-plugin-matrix.json');
+ const pin=matrix.youtube;
+ assert.equal(jarUrl(pin).url,'https://github.com/lavalink-devs/youtube-source/releases/download/1.18.2/youtube-plugin-1.18.2.jar');
+ assert.throws(()=>jarUrl({...pin,repository:'other/source'}),{code:'PLUGIN_INVALID_RELEASE_PIN'});
+ assert.throws(()=>jarUrl({...pin,sha256:'0'.repeat(64)}),{code:'PLUGIN_INVALID_RELEASE_PIN'});
+ await assert.rejects(verifiedJar(pin,async()=>response(null,302,{location:'https://evil.example/release.jar'})),{code:'PLUGIN_ARTIFACT_REDIRECT_REJECTED'});
+ let count=0;
+ await assert.rejects(verifiedJar(pin,async()=>++count===1?response(null,302,{location:'https://release-assets.githubusercontent.com/fixture'}):response(bytes)),{code:'PLUGIN_ARTIFACT_HASH_MISMATCH'});
+ assert.equal(count,2);
+});

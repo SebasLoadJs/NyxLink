@@ -5,6 +5,7 @@ const { createHash } = require('node:crypto');
 const BASE = 'https://maven.lavalink.dev/releases/';
 const MAX_BYTES = 32 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
+const releasePins = require('../integration/lavalink-plugin-matrix.json');
 
 class PluginIntegrityError extends Error {
   constructor(code) {
@@ -19,6 +20,12 @@ function jarUrl(plugin) {
       !/^[0-9]+\.[0-9]+\.[0-9]+$/.test(plugin.version) ||
       !/^[a-f0-9]{64}$/.test(plugin.sha256)) {
     throw new PluginIntegrityError('PLUGIN_INVALID_PIN');
+  }
+  if (plugin.repository !== undefined) {
+    const pinned = Object.values(releasePins).find(p => p.name === plugin.name && p.repository === plugin.repository && p.version === plugin.version);
+    if (!pinned || pinned.sha256 !== plugin.sha256 || pinned.size !== plugin.size || pinned.advertised !== plugin.advertised) throw new PluginIntegrityError('PLUGIN_INVALID_RELEASE_PIN');
+    const filename = plugin.name + '-' + plugin.version + '.jar';
+    return {url:'https://github.com/' + pinned.repository + '/releases/download/' + pinned.version + '/' + filename, filename};
   }
   const parts = plugin.dependency?.split(':');
   if (!parts || parts.length !== 3 ||
@@ -45,7 +52,9 @@ async function verifiedJar(plugin, fetcher = fetch) {
     const location = response.headers.get('location');
     if (!location || n === MAX_REDIRECTS) throw new PluginIntegrityError('PLUGIN_ARTIFACT_REDIRECT_REJECTED');
     const target = new URL(location, url);
-    if (target.origin !== new URL(BASE).origin || target.protocol !== 'https:') {
+    const releaseHost = plugin.repository !== undefined && ['release-assets.githubusercontent.com','objects.githubusercontent.com'].includes(target.hostname);
+    if (target.protocol !== 'https:' || target.username || target.password || target.port ||
+        (plugin.repository !== undefined ? !releaseHost : target.origin !== new URL(BASE).origin)) {
       throw new PluginIntegrityError('PLUGIN_ARTIFACT_REDIRECT_REJECTED');
     }
     await response.body?.cancel();
@@ -78,13 +87,13 @@ async function verifiedJar(plugin, fetcher = fetch) {
     reader.releaseLock();
   }
   const sha256 = hash.digest('hex');
-  if (!bytes || sha256 !== plugin.sha256) throw new PluginIntegrityError('PLUGIN_ARTIFACT_HASH_MISMATCH');
+  if (!bytes || (plugin.size !== undefined && bytes !== plugin.size) || sha256 !== plugin.sha256) throw new PluginIntegrityError('PLUGIN_ARTIFACT_HASH_MISMATCH');
   return { bytes: Buffer.concat(chunks), sha256 };
 }
 
 /** Verify all JARs before writing any; Lavalink never sees an unverified artifact. */
 async function installVerifiedPlugins(directory, plugins, fetcher = fetch) {
-  if (!Array.isArray(plugins) || plugins.length !== 2) throw new PluginIntegrityError('PLUGIN_INVALID_PINS');
+  if (!Array.isArray(plugins) || plugins.length < 1 || plugins.length > 8 || new Set(plugins.map(p=>p?.name)).size !== plugins.length) throw new PluginIntegrityError('PLUGIN_INVALID_PINS');
   const all = [];
   for (const plugin of plugins) {
     const { filename } = jarUrl(plugin);

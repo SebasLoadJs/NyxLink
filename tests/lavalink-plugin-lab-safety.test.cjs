@@ -50,3 +50,17 @@ test('startup diagnostics return only fixed classifications, never Java error te
     assert.ok(!startupErrorCode(message).includes(message));
   }
 });
+
+test('matrix isolates each verified plugin and disables credential-dependent providers',()=>{
+ const {matrixProfile}=require('./helpers/lavalink-plugin-lab.cjs');
+ for(const id of ['youtube','lavasrc','dunctebot']){
+  const profile=matrixProfile(id);validateProfile(profile);assert.equal(profile.plugins.length,1);
+  const yaml=renderConfig(2333,password,profile);
+  assert.doesNotMatch(yaml,/clientSecret|refreshToken|consumerKey|dependency:|repository:/);
+  assert.match(yaml,/youtube: false/);
+ }
+ assert.throws(()=>matrixProfile('../invalid'));
+ assert.throws(()=>validateProfile({...matrixProfile('youtube'),plugins:[]}));
+ assert.match(renderConfig(2333,password,matrixProfile('lavasrc')), /spotify: false/);
+ assert.match(renderConfig(2333,password,matrixProfile('dunctebot')), /tumblr: false/);
+});

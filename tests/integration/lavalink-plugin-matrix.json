@@ -1,0 +1,26 @@
+{
+  "youtube": {
+    "name": "youtube-plugin",
+    "advertised": "youtube-plugin",
+    "version": "1.18.2",
+    "repository": "lavalink-devs/youtube-source",
+    "sha256": "dd4b3bce50dbc7582c80776bad47bad87bef1dc683c69d66ab4a084aa3006238",
+    "size": 1618461
+  },
+  "lavasrc": {
+    "name": "lavasrc-plugin",
+    "advertised": "lavasrc-plugin",
+    "version": "4.8.3",
+    "repository": "topi314/LavaSrc",
+    "sha256": "4ec389bdae64fd381ee62fcdb902e15d9402823b1ad0b982bd5633619a07c1b3",
+    "size": 3221146
+  },
+  "dunctebot": {
+    "name": "skybot-lavalink-plugin",
+    "advertised": "DuncteBot-plugin",
+    "version": "1.7.2",
+    "repository": "DuncteBot/skybot-lavalink-plugin",
+    "sha256": "d53876857d29980aabeef64b1e7a0c0bcb4f49866b0b00761f7a5d68e1d4bd0d",
+    "size": 843413
+  }
+}
