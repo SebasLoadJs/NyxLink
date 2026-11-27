@@ -4,7 +4,10 @@ const path=require('node:path');
 const {Manager}=require('../dist');
 const {event}=require('../tests/helpers/v4-server.cjs');
 const {matrixProfile,withLavalinkPluginLab,PluginLabFailure}=require('../tests/helpers/lavalink-plugin-lab.cjs');
-const id=process.argv[2];
+const profileArg=process.argv[2];
+const trackerCases={'xm-mod-http':'modHttp','xm-mod-local':'modLocal','xm-native':'xmHttp'};
+const trackerCase=trackerCases[profileArg]??(profileArg==='xm'?'modHttp':undefined);
+const id=trackerCase?'xm':profileArg;
 (async()=>{
  const profile=matrixProfile(id);
  let report;const trackerObservations={};let trackerRuntime;
@@ -45,13 +48,14 @@ const id=process.argv[2];
      };
      // Independently measure the server first, so an SDK exception cannot
      // hide the native REST result. Never log payloads or arbitrary errors.
-     for(const [kind,identifier] of [['modHttp',context.moduleUrl],['modLocal',context.moduleFile],['xmHttp',context.xmUrl]]){
-      await observe(kind+'Wire',()=>direct(identifier));
-      await observe(kind+'Sdk',async()=>classify(await node.rest.loadTracks(identifier,{timeoutMs:15000,signal:AbortSignal.timeout(15000)})));
-     }
+     const identifier={modHttp:context.moduleUrl,modLocal:context.moduleFile,xmHttp:context.xmUrl}[trackerCase];
+     await observe(trackerCase+'Wire',()=>direct(identifier));
+     const afterWire=await context.inspectRuntime();
+     if(afterWire.status==='running') await observe(trackerCase+'Sdk',async()=>classify(await node.rest.loadTracks(identifier,{timeoutMs:15000,signal:AbortSignal.timeout(15000)})));
+     else trackerObservations[trackerCase+'Sdk']='NOT_RUN_SERVER_EXITED';
      trackerRuntime=await context.inspectRuntime();
      if(Object.values(trackerObservations).some(value=>value!=='TRACK'))throw new PluginLabFailure('PLUGIN_XM_TRACKER_ACCEPTANCE_FAILED');
-     checks.push('generated MOD and XM recognized through native REST and SDK');
+     checks.push('generated tracker fixture recognized through native REST and SDK: '+trackerCase);
     }
     if(id==='lavadspx'){
      stage='DSPX_FILTER_CONTRACT';
@@ -80,9 +84,9 @@ const id=process.argv[2];
     throw new PluginLabFailure('PLUGIN_'+stage+status+'_FAILED');
    }finally{await manager.shutdown();}
   },profile);
-  report={profile:id,...result};
- }catch(error){report={profile:id,passed:false,errorCode:error instanceof PluginLabFailure?error.code:'PLUGIN_MATRIX_FAILED',...(id==='xm'?{trackerObservations,trackerRuntime}:{})};}
- const destination=path.resolve('.runtime/plugin-matrix',id+'.json');
+  report={profile:profileArg,...result,...(id==='xm'?{trackerObservations,trackerRuntime}:{})};
+ }catch(error){report={profile:profileArg,passed:false,errorCode:error instanceof PluginLabFailure?error.code:'PLUGIN_MATRIX_FAILED',...(id==='xm'?{trackerObservations,trackerRuntime}:{})};}
+ const destination=path.resolve('.runtime/plugin-matrix',profileArg+'.json');
  await fs.mkdir(path.dirname(destination),{recursive:true,mode:0o700});
  await fs.writeFile(destination,JSON.stringify(report,null,2)+'\n',{mode:0o600});
  console.log(JSON.stringify(report));if(!report.passed)process.exitCode=1;

@@ -103,3 +103,10 @@ test('single-source profiles are explicit and TTS never gets provider credential
  for(const id of ['google-tts','lavadspx']){const p=matrixProfile(id);validateProfile(p);assert.equal(p.plugins[0].provenance,'single-source-audited');}
  const yaml=renderConfig(2333,password,matrixProfile('google-tts'));assert.match(yaml,/clientEmail: ""/);assert.match(yaml,/privateKey: ""/);
 });
+
+test('native crash classification reports only known component labels',()=>{
+ const {classifyNativeCrash}=require('./helpers/lavalink-plugin-lab.cjs');
+ assert.equal(classifyNativeCrash('# Problematic frame:\n# C  [libxmp.so+0x123] private-data'),'LIBXMP');
+ assert.equal(classifyNativeCrash('# Problematic frame:\n# V [libjvm.so+0x123]'),'JVM');
+ assert.equal(classifyNativeCrash('private-data'),'NATIVE_FRAME_UNAVAILABLE');
+});

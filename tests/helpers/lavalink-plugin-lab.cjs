@@ -145,6 +145,17 @@ function startupErrorCode(logs) {
   if (/address already in use|failed to bind/i.test(logs)) return 'SERVER_PORT_CONFLICT';
   return 'LAVALINK_START_FAILURE';
 }
+function classifyNativeCrash(logs) {
+  // Keep only known component classifications; JVM fatal logs can contain
+  // paths, arguments and credentials, so never publish their raw text.
+  const frame=logs.split('\n').find((line,i,lines)=>i>0&&/Problematic frame:/.test(lines[i-1]));
+  if (!frame) return 'NATIVE_FRAME_UNAVAILABLE';
+  if (/libxmp|xmp[_-]/i.test(frame)) return 'LIBXMP';
+  if (/libjvm/i.test(frame)) return 'JVM';
+  if (/libc\.so|libc-/i.test(frame)) return 'LIBC';
+  if (/libjava|libjni/i.test(frame)) return 'JAVA_NATIVE';
+  return 'OTHER_NATIVE';
+}
 class PluginLabFailure extends Error {
   constructor(code) { super(code); this.name = 'PluginLabFailure'; this.code = code; }
 }
@@ -256,8 +267,10 @@ async function withLavalinkPluginLab(run, selectedProfile = profile) {
         try {
           const result=await command(['inspect','--format','{{json .State}}',name]);
           const state=JSON.parse(result.stdout);
+          const logs=state.ExitCode===139?await command(['logs','--tail','100',name]).catch(error=>({stdout:error.stdout??'',stderr:error.stderr??''})):null;
+          const nativeCrash=logs?classifyNativeCrash((logs.stdout??'')+'\n'+(logs.stderr??'')):undefined;
           return {status:['running','exited','dead','created','restarting'].includes(state.Status)?state.Status:'unknown',
-            exitCode:Number.isInteger(state.ExitCode)?state.ExitCode:null,oomKilled:state.OOMKilled===true};
+            exitCode:Number.isInteger(state.ExitCode)?state.ExitCode:null,oomKilled:state.OOMKilled===true,...(nativeCrash?{nativeCrash}:{})};
         }catch{return {status:'unknown',exitCode:null,oomKilled:false};}
       }
     });
@@ -286,4 +299,4 @@ async function withLavalinkPluginLab(run, selectedProfile = profile) {
   }
 }
 
-module.exports = { xmModule, trackerModule, matrixProfile, validateProfile, renderConfig, startupErrorCode, PluginLabFailure, withLavalinkPluginLab };
+module.exports = { classifyNativeCrash, xmModule, trackerModule, matrixProfile, validateProfile, renderConfig, startupErrorCode, PluginLabFailure, withLavalinkPluginLab };
