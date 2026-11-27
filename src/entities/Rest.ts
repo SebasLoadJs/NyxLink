@@ -2,7 +2,7 @@ import { assertNodeLinkAdmin, readNodeLinkYoutubeConfig, nodeLinkYoutubeConfigBo
 import { profilerQuery, diagnosticsTimeout, readNodeLinkProfilerSnapshot, readNodeLinkWorkerSnapshots, type NodeLinkProfilerOptions, type NodeLinkProfilerSnapshot, type NodeLinkWorkerSnapshot } from '../backends/NodeLinkDiagnostics';
 import { hlsCreateQuery, hlsReadQuery, hlsTimeout, validateHlsManifest, type NodeLinkHlsOptions, type NodeLinkHlsReadOptions, type NodeLinkHlsManifest } from '../backends/NodeLinkHlsContracts';
 import { assertYoutubeAdmin, youtubeTimeout, youtubeConfig, youtubeConfigBody, youtubeOAuthPath, youtubeOAuthToken, youtubeStreamPath, type LavalinkYoutubeAdminOptions, type LavalinkYoutubeConfig, type LavalinkYoutubeConfigUpdate, type LavalinkYoutubeOAuthToken, type LavalinkYoutubeStreamOptions, type LavalinkYoutubeStream } from '../backends/LavalinkYoutubeContracts';
-import type { BackendPluginRoute, BackendPluginRequest } from '../backends/BackendPluginRoutes';
+import { renderBackendPluginPath, type BackendPluginRoute, type BackendPluginRequest } from '../backends/BackendPluginRoutes';
 import { mediaLookupQuery, validateMediaLookup, type NodeLinkMediaLookup, type NodeLinkMediaLookupResult } from '../backends/NodeLinkMediaLookup';
 import { sessionPath, playerPath } from '../backends/SessionPath';
 import { nodeLinkDiscoveryIdentifier, type NodeLinkDiscoveryOptions } from '../backends/NodeLinkSearchContracts';
@@ -187,7 +187,8 @@ export class Rest {
             backend.featureStatus(feature) === 'unavailable') throw new FeatureUnavailableError(feature, backend?.kind ?? 'unknown');
         const current = () => !manager.destroyed && !this.node.destroyed && registry.owns(route) &&
             this.node.backend === backend && this.node.sessionId === session && this.node.socket === socket;
-        const path = route.scope === 'player' ? playerPath(session, options.guildId) + '/' + route.path : '/v4/' + route.path;
+        const relative = renderBackendPluginPath(route, options.params);
+        const path = route.scope === 'player' ? playerPath(session, options.guildId) + '/' + relative : (route.prefix === 'root' ? '/' : '/v4/') + relative;
         if (route.scope === 'node' && options.guildId !== undefined) throw new TypeError('Node-scoped plugin route does not accept a guild ID');
         const timeout = options.timeoutMs ?? 10000;
         if (!Number.isSafeInteger(timeout) || timeout < 1 || timeout > 60000) throw new TypeError('Invalid plugin request timeout');

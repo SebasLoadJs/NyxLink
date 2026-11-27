@@ -76,3 +76,21 @@ test('NodeLink custom route also works when its own plugin is advertised',async 
   const route=manager.pluginRoutes.register({...definition,backend:'nodelink'});
   assert.equal(await node.rest.callPlugin(route),'native');
 });
+
+test('registered dynamic plugin routes accept only explicit single segments and namespace root paths',async t=>{
+ const {manager,node,player,calls}=await setup(t,(_req,res)=>reply(res,{profile:'studio'}));
+ const dynamic=manager.pluginRoutes.register({...definition,id:'dynamic',path:'custom/profile/:profileId'});
+ const root=manager.pluginRoutes.register({...definition,id:'root',prefix:'root',path:'custom-plugin/profile/:profileId'});
+ const playerRoute=manager.pluginRoutes.register({...definition,id:'player-dynamic',scope:'player',method:'PATCH',path:'custom/profile/:profileId'});
+ for (const params of [undefined,{}, {profileId:'a/b'}, {profileId:'..'}, {profileId:'a%2fb'}, {profileId:'a',extra:'b'}, {profileId:'a?x'}, {profileId:42}]) {
+  await assert.rejects(node.rest.callPlugin(dynamic,{params}),TypeError);
+ }
+ for (const path of [':namespace/profile','plugins/:plugin/profile','custom/:id/:id','v4/custom','custom/../profile']) assert.throws(()=>manager.pluginRoutes.register({...definition,id:'bad',path}),TypeError);
+ assert.throws(()=>manager.pluginRoutes.register({...definition,id:'bad',prefix:'root',path:'other/profile'}),TypeError);
+ assert.throws(()=>manager.pluginRoutes.register({...definition,id:'bad',prefix:'root',scope:'player',path:'custom-plugin/profile'}),TypeError);
+ assert.equal(calls.length,0);
+ assert.equal(await node.rest.callPlugin(dynamic,{params:{profileId:'studio-1'}}),'studio');
+ assert.equal(await node.rest.callPlugin(root,{params:{profileId:'studio_2'}}),'studio');
+ assert.equal(await node.rest.callPlugin(playerRoute,{guildId:player.guildId,params:{profileId:'studio_3'},body:{enabled:true}}),'studio');
+ assert.deepEqual(calls.map(c=>c.url),['/v4/custom/profile/studio-1','/custom-plugin/profile/studio_2','/v4/sessions/fixture-session/players/'+player.guildId+'/custom/profile/studio_3']);
+});

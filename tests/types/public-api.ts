@@ -365,3 +365,12 @@ const target: import('../../dist').NodeLinkWorkerTarget = { clusterId: 1 };
 // @ts-expect-error Exactly one worker identifier is permitted.
 const ambiguousWorker: import('../../dist').NodeLinkWorkerTarget = { clusterId: 1, pid: 2 };
 void [config, ack, target, ambiguousWorker];
+
+const dynamicPluginRoute = manager.pluginRoutes.register({
+    backend: 'lavalink', plugin: 'example', id: 'get-profile', scope: 'node', method: 'GET',
+    path: 'example/profile/:id', prefix: 'root', decode: (_value: unknown) => 'ok',
+});
+const pluginResult: Promise<string> = node.rest.callPlugin(dynamicPluginRoute, { params: { id: 'studio' } });
+// @ts-expect-error Dynamic path segments must be strings.
+node.rest.callPlugin(dynamicPluginRoute, { params: { id: 42 } });
+void pluginResult;

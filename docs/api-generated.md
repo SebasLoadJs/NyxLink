@@ -691,6 +691,7 @@ export type BackendPluginMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 ```ts
 export interface BackendPluginRequest {
     guildId?: string;
+    params?: Readonly<Record<string, string>>;
     query?: URLSearchParams;
     body?: Record<string, unknown>;
     timeoutMs?: number;
@@ -710,6 +711,7 @@ export interface BackendPluginRoute<T> {
     readonly scope: 'node' | 'player';
     readonly method: BackendPluginMethod;
     readonly path: string;
+    readonly prefix?: 'v4' | 'root';
     readonly decode: (response: unknown) => T;
 }
 ```
