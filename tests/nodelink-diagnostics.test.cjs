@@ -43,3 +43,27 @@ test('privileged status uses header authentication, no redirect, and explicit lo
  node.backend=BackendDetector.detect({version:{semver:'4.2.2'}});node.isNodeLink=false;
  await assert.rejects(node.rest.getNodeLinkProfilerStatus(options),{code:'FEATURE_UNAVAILABLE'});
 });
+
+test('profiler commands require explicit scope and confirmation and redact artifact paths',async t=>{
+ const {node}=createPlayer(t),calls=[];
+ let status=200,reply={action:'cpuStop',scope:'master',timestamp:1000,master:{success:true,pid:9,startedAt:100,endedAt:200,outputPath:'/private/profile.cpuprofile',inspectorUrl:'private'}};
+ const server=http.createServer(async(req,res)=>{
+  let body='';for await(const c of req)body+=c;
+  calls.push({method:req.method,url:req.url,code:req.headers['x-nodelink-code'],body:JSON.parse(body)});
+  res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(reply));
+ });
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ t.after(()=>{server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
+ node.port=server.address().port;node.backend=BackendDetector.detect({version:{semver:'3.10.0'},isNodelink:true});node.isNodeLink=true;
+ const opts={code:'fixture-secret',allowLoopbackHttp:true,confirm:true,scope:'master',action:'cpuStop'};
+ await assert.rejects(node.rest.runNodeLinkProfilerCommand({...opts,confirm:false}),TypeError);
+ await assert.rejects(node.rest.runNodeLinkProfilerCommand({...opts,scope:undefined}),TypeError);
+ await assert.rejects(node.rest.runNodeLinkProfilerCommand({...opts,action:'openInspector'}),TypeError);
+ await assert.rejects(node.rest.runNodeLinkProfilerCommand({...opts,name:'../private'}),TypeError);
+ await assert.rejects(node.rest.runNodeLinkProfilerCommand({...opts,samplingInterval:4096}),TypeError);
+ assert.equal(calls.length,0);
+ assert.deepEqual(await node.rest.runNodeLinkProfilerCommand(opts),{action:'cpuStop',scope:'master',timestamp:1000,master:{success:true,pid:9,startedAt:100,endedAt:200,artifactCreated:true}});
+ assert.deepEqual(calls,[{method:'POST',url:'/v4/profiler',code:'fixture-secret',body:{action:'cpuStop',scope:'master'}}]);
+ reply={...reply,scope:'all'};await assert.rejects(node.rest.runNodeLinkProfilerCommand(opts),{code:'INVALID_PROTOCOL_RESPONSE'});
+ status=403;reply={message:'fixture-secret'};await assert.rejects(node.rest.runNodeLinkProfilerCommand(opts),e=>e.statusCode===403&&!JSON.stringify(e).includes('fixture-secret'));
+});

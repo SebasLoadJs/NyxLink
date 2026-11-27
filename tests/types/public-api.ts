@@ -396,3 +396,6 @@ void pluginOwnedExtension;
 
 const nativeMetrics:Promise<string>=node.rest.getNodeLinkMetrics({authorization:{type:'basic',username:'fixture',password:'fixture'}});
 void nativeMetrics;
+
+const profilerCommand:Promise<import('../../dist').NodeLinkProfilerCommandResult>=node.rest.runNodeLinkProfilerCommand({code:'fixture',confirm:true,action:'cpuStart',scope:'master'});
+void profilerCommand;

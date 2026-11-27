@@ -3858,6 +3858,58 @@ export interface NodeLinkProcessMemory {
 }
 ```
 
+## NodeLinkProfilerAction
+
+[Source declaration](../src/backends/NodeLinkDiagnostics.ts)
+
+```ts
+export type NodeLinkProfilerAction = 'forceGc' | 'cpuStart' | 'cpuStop' | 'heapSamplingStart' | 'heapSamplingStop' | 'heapSnapshot';
+```
+
+## NodeLinkProfilerCommandOptions
+
+[Source declaration](../src/backends/NodeLinkDiagnostics.ts)
+
+```ts
+export interface NodeLinkProfilerCommandOptions extends NodeLinkProfilerOptions {
+    confirm: true;
+    action: NodeLinkProfilerAction;
+    name?: string;
+    samplingInterval?: number;
+}
+```
+
+## NodeLinkProfilerCommandProcess
+
+[Source declaration](../src/backends/NodeLinkDiagnostics.ts)
+
+```ts
+export interface NodeLinkProfilerCommandProcess extends NodeLinkProfilerProcess {
+    startedAt?: number;
+    endedAt?: number;
+    alreadyActive?: boolean;
+    samplingInterval?: number;
+    artifactCreated?: boolean;
+}
+```
+
+## NodeLinkProfilerCommandResult
+
+[Source declaration](../src/backends/NodeLinkDiagnostics.ts)
+
+```ts
+export interface NodeLinkProfilerCommandResult {
+    action: NodeLinkProfilerAction;
+    scope: NodeLinkProfilerScope;
+    timestamp: number;
+    master?: NodeLinkProfilerCommandProcess;
+    workers?: NodeLinkProfilerCommandProcess[];
+    sourceWorkers?: NodeLinkProfilerCommandProcess[];
+    workersUnavailable?: boolean;
+    sourceWorkersUnavailable?: boolean;
+}
+```
+
 ## NodeLinkProfilerOptions
 
 [Source declaration](../src/backends/NodeLinkDiagnostics.ts)
@@ -5054,6 +5106,7 @@ export declare class Rest {
     getNodeLinkMetrics(options?: NodeLinkMetricsOptions): Promise<string>;
     getMetrics(): Promise<string | null>;
     getNodeLinkProfilerStatus(options: NodeLinkProfilerOptions): Promise<NodeLinkProfilerSnapshot>;
+    runNodeLinkProfilerCommand(options: NodeLinkProfilerCommandOptions): Promise<NodeLinkProfilerCommandResult>;
     getNodeLinkWorkerSnapshots(): Promise<NodeLinkWorkerSnapshot[]>;
     getWorkers(): Promise<NodeLinkResponse<any[]> | null>;
     patchWorker(payload: Record<string, any>): Promise<any | null>;

@@ -1,7 +1,7 @@
 import { nodeLinkMetricsHeader, type NodeLinkMetricsOptions, backendRestTimeout, readBackendInfoSnapshot, nodeLinkTrackStreamParameters, readNodeLinkTrackStreamInfo, type BackendInfoSnapshot, type BackendInfoOptions, type NodeLinkTrackStreamOptions, type NodeLinkTrackStreamInfo } from '../backends/BackendRestContracts';
 import { lyricsKtVideoPath, lyricsKtSearchPath, lyricsKtTimeout, readLyricsKtResult, readLyricsKtSearch, type LyricsKtOptions, type LyricsKtResult, type LyricsKtSearchTrack } from '../backends/LyricsKtContracts';
 import { assertNodeLinkAdmin, readNodeLinkYoutubeConfig, nodeLinkYoutubeConfigBody, readNodeLinkYoutubeConfigAcknowledgement, nodeLinkWorkerTerminationBody, readNodeLinkWorkerTermination, type NodeLinkAdminOptions, type NodeLinkYoutubeConfig, type NodeLinkYoutubeConfigUpdate, type NodeLinkYoutubeConfigAcknowledgement, type NodeLinkWorkerTarget, type NodeLinkWorkerTerminationOptions, type NodeLinkWorkerTermination } from '../backends/NodeLinkAdminContracts';
-import { profilerQuery, diagnosticsTimeout, readNodeLinkProfilerSnapshot, readNodeLinkWorkerSnapshots, type NodeLinkProfilerOptions, type NodeLinkProfilerSnapshot, type NodeLinkWorkerSnapshot } from '../backends/NodeLinkDiagnostics';
+import { profilerCommandBody, readProfilerCommandResult, type NodeLinkProfilerCommandOptions, type NodeLinkProfilerCommandResult, profilerQuery, diagnosticsTimeout, readNodeLinkProfilerSnapshot, readNodeLinkWorkerSnapshots, type NodeLinkProfilerOptions, type NodeLinkProfilerSnapshot, type NodeLinkWorkerSnapshot } from '../backends/NodeLinkDiagnostics';
 import { hlsCreateQuery, hlsReadQuery, hlsTimeout, validateHlsManifest, type NodeLinkHlsOptions, type NodeLinkHlsReadOptions, type NodeLinkHlsManifest } from '../backends/NodeLinkHlsContracts';
 import { assertYoutubeAdmin, youtubeTimeout, youtubeConfig, youtubeConfigBody, youtubeOAuthPath, youtubeOAuthToken, youtubeStreamPath, type LavalinkYoutubeAdminOptions, type LavalinkYoutubeConfig, type LavalinkYoutubeConfigUpdate, type LavalinkYoutubeOAuthToken, type LavalinkYoutubeStreamOptions, type LavalinkYoutubeStream } from '../backends/LavalinkYoutubeContracts';
 import { renderBackendPluginPath, type BackendPluginRoute, type BackendPluginRequest } from '../backends/BackendPluginRoutes';
@@ -937,6 +937,32 @@ export class Rest {
         options.signal?.throwIfAborted();
         if (!current()) throw new Error('NodeLink profiler session changed');
         const result = readNodeLinkProfilerSnapshot(raw, options.scope ?? 'all');
+        backend?.recordFeature(route.feature, 'available');
+        return result;
+    }
+
+    /** Explicit administrative action. A timeout does not imply rollback on the remote node. */
+    public async runNodeLinkProfilerCommand(options: NodeLinkProfilerCommandOptions): Promise<NodeLinkProfilerCommandResult> {
+        const body = profilerCommandBody(this.url, options);
+        const route = this.extensionRoute('profiler:command');
+        this.node.assertFeature(route.feature);
+        const backend = this.node.backend, session = this.node.sessionId, socket = this.node.socket;
+        const current = () => !this.node.destroyed && !this.node.manager.destroyed &&
+            this.node.backend === backend && this.node.sessionId === session && this.node.socket === socket;
+        if (!current()) throw new Error('NodeLink profiler context changed');
+        let raw: unknown;
+        try {
+            raw = await this.request<unknown>(this.url + route.path, {
+                method: route.method, headers: {...this.jsonHeaders, 'X-NodeLink-Code':options.code}, body,
+                signal:options.signal, allowedOrigins:[new URL(this.url).origin], throwOnError:true,
+            }, diagnosticsTimeout(options.timeoutMs), 0, 1000, 0);
+        } catch (error) {
+            if (error instanceof HttpError) this.featureError(route.feature, new HttpError(error.statusCode), backend, current);
+            throw new Error('NodeLink profiler command failed');
+        }
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('NodeLink profiler context changed');
+        const result = readProfilerCommandResult(raw, body.action, body.scope);
         backend?.recordFeature(route.feature, 'available');
         return result;
     }

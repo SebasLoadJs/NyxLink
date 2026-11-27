@@ -166,3 +166,86 @@ export function readNodeLinkWorkerSnapshots(value: unknown): NodeLinkWorkerSnaps
         return result;
     });
 }
+
+export type NodeLinkProfilerAction = 'forceGc' | 'cpuStart' | 'cpuStop' | 'heapSamplingStart' | 'heapSamplingStop' | 'heapSnapshot';
+
+export interface NodeLinkProfilerCommandOptions extends NodeLinkProfilerOptions {
+    confirm: true;
+    action: NodeLinkProfilerAction;
+    name?: string;
+    samplingInterval?: number;
+}
+
+export interface NodeLinkProfilerCommandProcess extends NodeLinkProfilerProcess {
+    startedAt?: number;
+    endedAt?: number;
+    alreadyActive?: boolean;
+    samplingInterval?: number;
+    artifactCreated?: boolean;
+}
+
+export interface NodeLinkProfilerCommandResult {
+    action: NodeLinkProfilerAction;
+    scope: NodeLinkProfilerScope;
+    timestamp: number;
+    master?: NodeLinkProfilerCommandProcess;
+    workers?: NodeLinkProfilerCommandProcess[];
+    sourceWorkers?: NodeLinkProfilerCommandProcess[];
+    workersUnavailable?: boolean;
+    sourceWorkersUnavailable?: boolean;
+}
+
+const actions: readonly NodeLinkProfilerAction[] = ['forceGc','cpuStart','cpuStop','heapSamplingStart','heapSamplingStop','heapSnapshot'];
+/** Explicit, bounded commands. No arbitrary inspector binding, filenames or worker selector fallback. */
+export function profilerCommandBody(origin: string, options: NodeLinkProfilerCommandOptions): { action: NodeLinkProfilerAction; scope: NodeLinkProfilerScope; name?: string; samplingInterval?: number } {
+    profilerQuery(origin, options);
+    if (options.confirm !== true || !actions.includes(options.action)) throw new TypeError('Profiler command requires explicit confirmation and a supported action');
+    if (options.scope === undefined) throw new TypeError('Profiler command requires explicit scope');
+    const body: { action: NodeLinkProfilerAction; scope: NodeLinkProfilerScope; name?: string; samplingInterval?: number } = {action:options.action,scope:options.scope};
+    if (options.name !== undefined) {
+        if (options.action === 'forceGc' || typeof options.name !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(options.name)) throw new TypeError('Invalid profiler label');
+        body.name = options.name;
+    }
+    if (options.samplingInterval !== undefined) {
+        if (options.action !== 'heapSamplingStart' || !Number.isSafeInteger(options.samplingInterval) || options.samplingInterval < 4096 || options.samplingInterval > 1048576) throw new TypeError('Invalid profiler sampling interval');
+        body.samplingInterval = options.samplingInterval;
+    }
+    return body;
+}
+function commandProcess(value: unknown, wrapped: boolean): NodeLinkProfilerCommandProcess {
+    const result: NodeLinkProfilerCommandProcess = processSnapshot(value, wrapped);
+    if (!record(value)) return invalid('command process');
+    const raw = wrapped ? value.response : value;
+    if (!record(raw)) return result;
+    for (const key of ['startedAt','endedAt','samplingInterval'] as const) {
+        if (raw[key] !== undefined) {
+            if (!integer(raw[key])) return invalid(key);
+            result[key] = raw[key];
+        }
+    }
+    if (raw.alreadyActive !== undefined) {
+        if (typeof raw.alreadyActive !== 'boolean') return invalid('already active');
+        result.alreadyActive = raw.alreadyActive;
+    }
+    if (raw.outputPath !== undefined) {
+        if (typeof raw.outputPath !== 'string') return invalid('artifact result');
+        result.artifactCreated = result.success && raw.outputPath.length > 0;
+    }
+    return result;
+}
+/** Return operational acknowledgements only, never heap contents, paths or callsites. */
+export function readProfilerCommandResult(value: unknown, action: NodeLinkProfilerAction, scope: NodeLinkProfilerScope): NodeLinkProfilerCommandResult {
+    if (!record(value) || value.action !== action || !actions.includes(action) || value.scope !== scope || !scopes.includes(scope) || !integer(value.timestamp)) return invalid('command envelope');
+    const result: NodeLinkProfilerCommandResult = {action,scope,timestamp:value.timestamp};
+    if (scope === 'all' || scope === 'master') result.master = commandProcess(value.master, false);
+    for (const field of ['workers','sourceWorkers'] as const) {
+        if (scope !== 'all' && scope !== field) continue;
+        const list = value[field];
+        if (!Array.isArray(list) || list.length > 4096) return invalid(field);
+        result[field] = list.map(item => commandProcess(item,true));
+        const error = value[field + 'Error'];
+        if (error !== undefined && typeof error !== 'string') return invalid(field + 'Error');
+        if (typeof error === 'string') result[field === 'workers' ? 'workersUnavailable' : 'sourceWorkersUnavailable'] = true;
+    }
+    return result;
+}

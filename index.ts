@@ -171,3 +171,5 @@ export { BackendPluginEventRegistry } from './src/backends/BackendPluginEvents';
 export type { BackendPluginEventContext, BackendPluginEventDefinition, BackendPluginEventListener } from './src/backends/BackendPluginEvents';
 
 export type { BackendInfoSnapshot, BackendInfoOptions, NodeLinkTrackStreamOptions, NodeLinkTrackStreamInfo, NodeLinkMetricsAuthorization, NodeLinkMetricsOptions } from './src/backends/BackendRestContracts';
+
+export type { NodeLinkProfilerAction, NodeLinkProfilerCommandOptions, NodeLinkProfilerCommandProcess, NodeLinkProfilerCommandResult } from './src/backends/NodeLinkDiagnostics';
