@@ -116,3 +116,14 @@ test('advertised LavaSrc source is not misclassified as NodeLink-only', async ()
     assert.equal(calls.length, 1);
     service.close();
 });
+
+test('LavaSearch rejects redirects and stale session responses',async t=>{
+ const {createPlayer,deferred}=require('./helpers/player.cjs');const {node}=createPlayer(t);node.backend=BackendDetector.detect(info);node.sessionId='original';
+ let calls=0,redirect=true;const entered=deferred(),release=deferred();
+ const server=http.createServer(async(_req,res)=>{calls++;if(redirect){res.writeHead(302,{location:'/unexpected'});res.end();return;}entered.resolve();await release.promise;res.writeHead(204);res.end();});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));node.port=server.address().port;
+ t.after(()=>{server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
+ await assert.rejects(node.rest.loadSearch('fixture'));assert.equal(calls,1);
+ redirect=false;const pending=assert.rejects(node.rest.loadSearch('fixture'),/session changed/);await entered.promise;node.sessionId='replacement';release.resolve();await pending;
+ assert.equal(calls,2);assert.equal(node.backend.featureStatus('lavasearch'),'unknown');
+});

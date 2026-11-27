@@ -25,7 +25,8 @@ export abstract class BackendAdapter {
             plugins.some(p=>p.name.toLowerCase()==='java-lyrics-plugin')) {
             for (const feature of pluginsOnly) if (feature.startsWith('lyricskt:') || feature.startsWith('java-lyrics:')) unavailable.add(feature);
         }
-        this.registry = new CapabilityRegistry(capabilities, known, unavailable);
+        this.capabilities = new Set(capabilities);
+        this.registry = new CapabilityRegistry(this.capabilities, known, unavailable);
         this.plugins = Object.freeze(plugins.map(plugin => Object.freeze({ ...plugin })));
     }
 

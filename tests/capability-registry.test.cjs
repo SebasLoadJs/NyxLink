@@ -80,6 +80,9 @@ test('reused detection inputs cannot mutate the previous capability inventory',(
  const second=BackendDetector.detect({version:{semver:'4.2.2'},sourceManagers:['local']}, {}, advertised);
  assert.equal(first.supports('source:http'),true);assert.equal(first.supports('plugin:example'),true);
  assert.equal(first.supports('source:local'),false);assert.equal(second.supports('source:http'),false);assert.equal(second.supports('source:local'),true);
+ assert.equal(first.capabilities.has('source:http'),true);assert.equal(first.capabilities.has('source:local'),false);
+ assert.equal(second.capabilities.has('source:local'),true);assert.equal(second.capabilities.has('source:http'),false);
+ first.capabilities.clear();assert.equal(first.supports('source:http'),true);assert.equal(second.supports('source:local'),true);
 });
 
 test('extension commands cannot use a session that changed during the ownership check',async t=>{
