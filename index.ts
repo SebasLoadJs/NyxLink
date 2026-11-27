@@ -162,3 +162,5 @@ export type { LavalinkYoutubeAdminOptions, LavalinkYoutubeConfig, LavalinkYoutub
 export type { NodeLinkHlsOptions, NodeLinkHlsReadOptions, NodeLinkHlsManifest } from './src/backends/NodeLinkHlsContracts';
 
 export type { NodeLinkProfilerScope, NodeLinkProfilerOptions, NodeLinkProcessMemory, NodeLinkProfilerProcess, NodeLinkProfilerSnapshot, NodeLinkWorkerSnapshot } from './src/backends/NodeLinkDiagnostics';
+
+export type { NodeLinkAdminOptions, NodeLinkYoutubeConfig, NodeLinkYoutubeConfigUpdate, NodeLinkYoutubeConfigAcknowledgement, NodeLinkWorkerTarget, NodeLinkWorkerTerminationOptions, NodeLinkWorkerTermination } from './src/backends/NodeLinkAdminContracts';

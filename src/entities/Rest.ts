@@ -1,3 +1,4 @@
+import { assertNodeLinkAdmin, readNodeLinkYoutubeConfig, nodeLinkYoutubeConfigBody, readNodeLinkYoutubeConfigAcknowledgement, nodeLinkWorkerTerminationBody, readNodeLinkWorkerTermination, type NodeLinkAdminOptions, type NodeLinkYoutubeConfig, type NodeLinkYoutubeConfigUpdate, type NodeLinkYoutubeConfigAcknowledgement, type NodeLinkWorkerTarget, type NodeLinkWorkerTerminationOptions, type NodeLinkWorkerTermination } from '../backends/NodeLinkAdminContracts';
 import { profilerQuery, diagnosticsTimeout, readNodeLinkProfilerSnapshot, readNodeLinkWorkerSnapshots, type NodeLinkProfilerOptions, type NodeLinkProfilerSnapshot, type NodeLinkWorkerSnapshot } from '../backends/NodeLinkDiagnostics';
 import { hlsCreateQuery, hlsReadQuery, hlsTimeout, validateHlsManifest, type NodeLinkHlsOptions, type NodeLinkHlsReadOptions, type NodeLinkHlsManifest } from '../backends/NodeLinkHlsContracts';
 import { assertYoutubeAdmin, youtubeTimeout, youtubeConfig, youtubeConfigBody, youtubeOAuthPath, youtubeOAuthToken, youtubeStreamPath, type LavalinkYoutubeAdminOptions, type LavalinkYoutubeConfig, type LavalinkYoutubeConfigUpdate, type LavalinkYoutubeOAuthToken, type LavalinkYoutubeStreamOptions, type LavalinkYoutubeStream } from '../backends/LavalinkYoutubeContracts';
@@ -950,6 +951,51 @@ export class Rest {
             backend.recordFeature(feature, 'available');
             return response;
         } catch (error) { this.featureError(feature, error, backend, current); }
+    }
+
+    private async nodeLinkAdminRequest<T>(operation: ExtensionOperation, options: NodeLinkAdminOptions,
+        decode: (value: unknown) => T, body?: object, query?: URLSearchParams): Promise<T> {
+        assertNodeLinkAdmin(this.url, options);
+        const route = this.extensionRoute(operation, { query });
+        this.node.assertFeature(route.feature);
+        const backend = this.node.backend, session = this.node.sessionId, socket = this.node.socket;
+        const current = () => !this.node.destroyed && !this.node.manager.destroyed &&
+            this.node.backend === backend && this.node.sessionId === session && this.node.socket === socket;
+        if (!current()) throw new Error('NodeLink administration context changed');
+        let raw: unknown;
+        try {
+            raw = await this.request<unknown>(this.url + route.path, {
+                method: route.method, headers: body === undefined ? this.authHeaders : this.jsonHeaders,
+                ...(body === undefined ? {} : { body }), signal: options.signal,
+                allowedOrigins: [new URL(this.url).origin], throwOnError: true,
+            }, diagnosticsTimeout(options.timeoutMs), 0, 1000, 0);
+        } catch (error) {
+            if (error instanceof HttpError) this.featureError(route.feature, new HttpError(error.statusCode), backend, current);
+            throw new Error('NodeLink administrative request failed');
+        }
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('NodeLink administration context changed');
+        const result = decode(raw);
+        backend?.recordFeature(route.feature, 'available');
+        return result;
+    }
+
+    public getNodeLinkYoutubeConfig(options: NodeLinkAdminOptions, validate: boolean = false): Promise<NodeLinkYoutubeConfig> {
+        if (typeof validate !== 'boolean') throw new TypeError('Invalid YouTube validation flag');
+        return this.nodeLinkAdminRequest('youtube:config:get', options, readNodeLinkYoutubeConfig, undefined,
+            validate ? new URLSearchParams({ validate: 'true' }) : undefined);
+    }
+
+    public updateNodeLinkYoutubeConfig(payload: NodeLinkYoutubeConfigUpdate, options: NodeLinkAdminOptions): Promise<NodeLinkYoutubeConfigAcknowledgement> {
+        const body = nodeLinkYoutubeConfigBody(payload);
+        return this.nodeLinkAdminRequest('youtube:config:update', options, raw => readNodeLinkYoutubeConfigAcknowledgement(raw, body), body);
+    }
+
+    /** Explicitly privileged, potentially disruptive operation; never used by automatic failover. */
+    public terminateNodeLinkWorker(target: NodeLinkWorkerTarget, options: NodeLinkWorkerTerminationOptions): Promise<NodeLinkWorkerTermination> {
+        const body = nodeLinkWorkerTerminationBody(target, options);
+        const identity = { ...target };
+        return this.nodeLinkAdminRequest('workers:patch', options, raw => readNodeLinkWorkerTermination(raw, identity), body);
     }
 
     public async getYoutubeConfig(validate: boolean = false): Promise<any | null> {

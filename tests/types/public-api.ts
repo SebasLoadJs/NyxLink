@@ -357,3 +357,11 @@ manager.on('lavaLyricsEvent', (_player, event) => {
     const observation: import('../../dist').LavaLyricsObservation = event;
     if (observation.kind === 'line') { const skipped: boolean = observation.skipped; void skipped; }
 });
+
+const adminOptions: import('../../dist').NodeLinkAdminOptions = { allowSensitive: true };
+const config: Promise<import('../../dist').NodeLinkYoutubeConfig> = node.rest.getNodeLinkYoutubeConfig(adminOptions);
+const ack: Promise<import('../../dist').NodeLinkYoutubeConfigAcknowledgement> = node.rest.updateNodeLinkYoutubeConfig({ visitorData: 'fixture' }, adminOptions);
+const target: import('../../dist').NodeLinkWorkerTarget = { clusterId: 1 };
+// @ts-expect-error Exactly one worker identifier is permitted.
+const ambiguousWorker: import('../../dist').NodeLinkWorkerTarget = { clusterId: 1, pid: 2 };
+void [config, ack, target, ambiguousWorker];

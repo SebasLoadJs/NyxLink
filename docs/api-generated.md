@@ -3241,6 +3241,19 @@ export declare class NodeLinkAdapter extends BackendAdapter {
 }
 ```
 
+## NodeLinkAdminOptions
+
+[Source declaration](../src/backends/NodeLinkAdminContracts.ts)
+
+```ts
+export interface NodeLinkAdminOptions {
+    allowSensitive: true;
+    allowLoopbackHttp?: boolean;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+}
+```
+
 ## NodeLinkAudioProcessingSnapshot
 
 [Source declaration](../src/backends/NodeLinkPlayerTelemetry.ts)
@@ -3761,6 +3774,85 @@ export interface NodeLinkWorkerSnapshot {
     eventLoopLagP95?: number;
     eventLoopLagP99?: number;
     stuckRecoveries?: number;
+}
+```
+
+## NodeLinkWorkerTarget
+
+[Source declaration](../src/backends/NodeLinkAdminContracts.ts)
+
+```ts
+export type NodeLinkWorkerTarget = {
+    clusterId: number;
+    id?: never;
+    pid?: never;
+} | {
+    id: number;
+    clusterId?: never;
+    pid?: never;
+} | {
+    pid: number;
+    id?: never;
+    clusterId?: never;
+};
+```
+
+## NodeLinkWorkerTermination
+
+[Source declaration](../src/backends/NodeLinkAdminContracts.ts)
+
+```ts
+export interface NodeLinkWorkerTermination {
+    killed: true;
+    id: number;
+    clusterId: number;
+    pid: number | null;
+}
+```
+
+## NodeLinkWorkerTerminationOptions
+
+[Source declaration](../src/backends/NodeLinkAdminContracts.ts)
+
+```ts
+export interface NodeLinkWorkerTerminationOptions extends NodeLinkAdminOptions {
+    confirm: true;
+    code: string;
+}
+```
+
+## NodeLinkYoutubeConfig
+
+[Source declaration](../src/backends/NodeLinkAdminContracts.ts)
+
+```ts
+export interface NodeLinkYoutubeConfig {
+    refreshToken: string | null;
+    visitorData: string | null;
+    isConfigured: boolean;
+    isValid: boolean | null;
+}
+```
+
+## NodeLinkYoutubeConfigAcknowledgement
+
+[Source declaration](../src/backends/NodeLinkAdminContracts.ts)
+
+```ts
+export interface NodeLinkYoutubeConfigAcknowledgement {
+    workersUpdated: number;
+    fieldsUpdated: Array<'refreshToken' | 'visitorData'>;
+}
+```
+
+## NodeLinkYoutubeConfigUpdate
+
+[Source declaration](../src/backends/NodeLinkAdminContracts.ts)
+
+```ts
+export interface NodeLinkYoutubeConfigUpdate {
+    refreshToken?: string;
+    visitorData?: string;
 }
 ```
 
@@ -4711,6 +4803,9 @@ export declare class Rest {
     updateLavalinkYoutubeConfig(payload: LavalinkYoutubeConfigUpdate, options: LavalinkYoutubeAdminOptions): Promise<void>;
     exchangeLavalinkYoutubeOAuth(refreshToken: string, options: LavalinkYoutubeAdminOptions): Promise<LavalinkYoutubeOAuthToken>;
     loadLavalinkYoutubeStream(videoId: string, options?: LavalinkYoutubeStreamOptions): Promise<LavalinkYoutubeStream>;
+    getNodeLinkYoutubeConfig(options: NodeLinkAdminOptions, validate?: boolean): Promise<NodeLinkYoutubeConfig>;
+    updateNodeLinkYoutubeConfig(payload: NodeLinkYoutubeConfigUpdate, options: NodeLinkAdminOptions): Promise<NodeLinkYoutubeConfigAcknowledgement>;
+    terminateNodeLinkWorker(target: NodeLinkWorkerTarget, options: NodeLinkWorkerTerminationOptions): Promise<NodeLinkWorkerTermination>;
     getYoutubeConfig(validate?: boolean): Promise<any | null>;
     updateYoutubeConfig(payload: {
         refreshToken?: string;

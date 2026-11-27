@@ -104,3 +104,7 @@ Use `node.rest.createHlsSession(encodedTrack, { segmentDuration: 4 })` to obtain
 ### YouTube OAuth transport
 
 `Rest.exchangeYoutubeOAuth(refreshToken)` sends the credential in a JSON POST to `/v4/youtube/oauth` rather than a URL query. Non-loopback connections require HTTPS; literal loopback HTTP remains available for local testing. The SDK does not follow redirects, retry the exchange, or expose remote error bodies. The server may still log request bodies; configure server-side redaction before using real credentials. Older NodeLink revisions that only support GET are not automatically retried with credentials in the URL.
+
+### Typed administration
+
+Use `getNodeLinkYoutubeConfig(options, validate)`, `updateNodeLinkYoutubeConfig(payload, options)` and `terminateNodeLinkWorker(target, options)` for validated NodeLink-specific operations. The existing legacy methods remain available. Typed administration requires `allowSensitive: true` and HTTPS, or explicit literal-loopback HTTP opt-in. Worker termination additionally requires `confirm: true`, an access code and exactly one worker identifier. It is not invoked automatically by NyxLink. The worker operation can interrupt playback and a successful acknowledgement does not prove recovery. A configuration update acknowledges the number of workers updated, not successful propagation to every worker. Configure server-side credential redaction before real use.
