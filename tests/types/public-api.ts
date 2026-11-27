@@ -393,3 +393,6 @@ const pluginOwnedExtension: import('../../dist').NyxExtension = {name:'plugin-ow
     const result:Promise<number>=node.rest.callPlugin(route);void result;
 }};
 void pluginOwnedExtension;
+
+const nativeMetrics:Promise<string>=node.rest.getNodeLinkMetrics({authorization:{type:'basic',username:'fixture',password:'fixture'}});
+void nativeMetrics;

@@ -20,3 +20,25 @@ test('typed backend info and stream metadata use validated isolated transports',
  status=404;stream={message:'The requested route was not found.'};await assert.rejects(node.rest.getNodeLinkTrackStreamInfo('a'),{code:'FEATURE_UNAVAILABLE'});
  assert.equal(node.backend.featureStatus('trackstream'),'unavailable');
 });
+
+test('NodeLink metrics supports separate credentials and ignores optional service failures for playback health',async t=>{
+ const {node}=createPlayer(t),calls=[];
+ let status=200,type='text/plain; version=0.0.4',body='fixture_metric 1\n';
+ const server=http.createServer((req,res)=>{calls.push([req.url,req.headers.authorization]);res.writeHead(status,{'content-type':type});res.end(body);});
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ t.after(()=>{server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
+ node.port=server.address().port;node.secure=false;node.backend=BackendDetector.detect({version:{semver:'3.10.0'},isNodelink:true});node.isNodeLink=true;
+ const local={allowLoopbackHttp:true};
+ await assert.rejects(node.rest.getNodeLinkMetrics(),/HTTPS/);
+ assert.equal(await node.rest.getNodeLinkMetrics({...local,authorization:{type:'bearer',token:'fixture'}}),body);
+ assert.equal(await node.rest.getNodeLinkMetrics({...local,authorization:{type:'basic',username:'user',password:'pass'}}),body);
+ assert.equal(await node.rest.getNodeLinkMetrics({...local,authorization:{type:'raw',password:'fixture'}}),body);
+ assert.equal(await node.rest.getNodeLinkMetrics(local),body);
+ assert.deepEqual(calls,[['/v4/metrics','Bearer fixture'],['/v4/metrics','Basic dXNlcjpwYXNz'],['/v4/metrics','fixture'],['/v4/metrics','test-only']]);
+ await assert.rejects(node.rest.getNodeLinkMetrics({...local,authorization:{type:'bearer',token:'bad token'}}),TypeError);
+ type='application/json';body='{}';await assert.rejects(node.rest.getNodeLinkMetrics(local),{code:'INVALID_PROTOCOL_RESPONSE'});
+ status=503;body='{"message":"private fixture"}';await assert.rejects(node.rest.getNodeLinkMetrics(local),e=>e.statusCode===503&&!JSON.stringify(e).includes('private fixture'));
+ assert.equal(node.backend.featureStatus('metrics'),'available');
+ status=404;await assert.rejects(node.rest.getNodeLinkMetrics(local),{code:'FEATURE_UNAVAILABLE'});
+ assert.equal(node.backend.featureStatus('metrics'),'unavailable');
+});

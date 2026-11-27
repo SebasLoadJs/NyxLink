@@ -106,3 +106,33 @@ export function readNodeLinkTrackStreamInfo(value: unknown): NodeLinkTrackStream
     if (!result.url && !result.protocol && !result.additionalData && !result.newTrack) return invalid('empty track stream metadata');
     return result;
 }
+
+export type NodeLinkMetricsAuthorization = {
+    type: 'bearer';
+    token: string;
+} | {
+    type: 'basic';
+    username: string;
+    password: string;
+} | {
+    type: 'raw';
+    password: string;
+};
+
+export interface NodeLinkMetricsOptions extends BackendInfoOptions {
+    authorization?: NodeLinkMetricsAuthorization;
+    allowLoopbackHttp?: boolean;
+}
+
+export function nodeLinkMetricsHeader(origin: string, options: NodeLinkMetricsOptions): string | undefined {
+    const url = new URL(origin);
+    if (url.protocol !== 'https:' && !(options.allowLoopbackHttp === true && ['127.0.0.1','[::1]'].includes(url.hostname))) throw new TypeError('NodeLink metrics require HTTPS or explicitly enabled loopback HTTP');
+    const auth = options.authorization;
+    if (auth === undefined) return undefined;
+    if (!record(auth)) throw new TypeError('Invalid metrics authorization');
+    const token = (v: unknown): v is string => typeof v === 'string' && /^[\x21-\x7e]{1,4096}$/.test(v);
+    if (auth.type === 'bearer' && token(auth.token)) return 'Bearer ' + auth.token;
+    if (auth.type === 'raw' && token(auth.password)) return auth.password;
+    if (auth.type === 'basic' && text(auth.username,512) && !auth.username.includes(':') && text(auth.password,4096)) return 'Basic ' + Buffer.from(auth.username + ':' + auth.password, 'utf8').toString('base64');
+    throw new TypeError('Invalid metrics authorization');
+}

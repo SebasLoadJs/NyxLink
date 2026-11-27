@@ -3739,6 +3739,35 @@ export interface NodeLinkMediaRecording {
 }
 ```
 
+## NodeLinkMetricsAuthorization
+
+[Source declaration](../src/backends/BackendRestContracts.ts)
+
+```ts
+export type NodeLinkMetricsAuthorization = {
+    type: 'bearer';
+    token: string;
+} | {
+    type: 'basic';
+    username: string;
+    password: string;
+} | {
+    type: 'raw';
+    password: string;
+};
+```
+
+## NodeLinkMetricsOptions
+
+[Source declaration](../src/backends/BackendRestContracts.ts)
+
+```ts
+export interface NodeLinkMetricsOptions extends BackendInfoOptions {
+    authorization?: NodeLinkMetricsAuthorization;
+    allowLoopbackHttp?: boolean;
+}
+```
+
 ## NodeLinkMusicAnalysisSnapshot
 
 [Source declaration](../src/backends/NodeLinkPlayerTelemetry.ts)
@@ -5022,6 +5051,7 @@ export declare class Rest {
     loadMeaning(encodedTrack: string, lang?: string): Promise<NodeLinkResponse<IMeaningResponse | Record<string, any>> | null>;
     getConnectionStatus(): Promise<NodeLinkResponse<INodeConnectionStatus> | null>;
     getLavalinkMetrics(names?: readonly string[]): Promise<string | null>;
+    getNodeLinkMetrics(options?: NodeLinkMetricsOptions): Promise<string>;
     getMetrics(): Promise<string | null>;
     getNodeLinkProfilerStatus(options: NodeLinkProfilerOptions): Promise<NodeLinkProfilerSnapshot>;
     getNodeLinkWorkerSnapshots(): Promise<NodeLinkWorkerSnapshot[]>;

@@ -1,4 +1,4 @@
-import { backendRestTimeout, readBackendInfoSnapshot, nodeLinkTrackStreamParameters, readNodeLinkTrackStreamInfo, type BackendInfoSnapshot, type BackendInfoOptions, type NodeLinkTrackStreamOptions, type NodeLinkTrackStreamInfo } from '../backends/BackendRestContracts';
+import { nodeLinkMetricsHeader, type NodeLinkMetricsOptions, backendRestTimeout, readBackendInfoSnapshot, nodeLinkTrackStreamParameters, readNodeLinkTrackStreamInfo, type BackendInfoSnapshot, type BackendInfoOptions, type NodeLinkTrackStreamOptions, type NodeLinkTrackStreamInfo } from '../backends/BackendRestContracts';
 import { lyricsKtVideoPath, lyricsKtSearchPath, lyricsKtTimeout, readLyricsKtResult, readLyricsKtSearch, type LyricsKtOptions, type LyricsKtResult, type LyricsKtSearchTrack } from '../backends/LyricsKtContracts';
 import { assertNodeLinkAdmin, readNodeLinkYoutubeConfig, nodeLinkYoutubeConfigBody, readNodeLinkYoutubeConfigAcknowledgement, nodeLinkWorkerTerminationBody, readNodeLinkWorkerTermination, type NodeLinkAdminOptions, type NodeLinkYoutubeConfig, type NodeLinkYoutubeConfigUpdate, type NodeLinkYoutubeConfigAcknowledgement, type NodeLinkWorkerTarget, type NodeLinkWorkerTerminationOptions, type NodeLinkWorkerTermination } from '../backends/NodeLinkAdminContracts';
 import { profilerQuery, diagnosticsTimeout, readNodeLinkProfilerSnapshot, readNodeLinkWorkerSnapshots, type NodeLinkProfilerOptions, type NodeLinkProfilerSnapshot, type NodeLinkWorkerSnapshot } from '../backends/NodeLinkDiagnostics';
@@ -866,6 +866,44 @@ export class Rest {
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
+    /** Scrape optional NodeLink Prometheus metrics without changing playback health. */
+    public async getNodeLinkMetrics(options: NodeLinkMetricsOptions = {}): Promise<string> {
+        const authorization = nodeLinkMetricsHeader(this.url, options);
+        const timeout = backendRestTimeout(options.timeoutMs);
+        const route = this.extensionRoute('metrics');
+        this.node.assertFeature(route.feature);
+        const backend = this.node.backend, socket = this.node.socket, session = this.node.sessionId;
+        const current = () => !this.node.destroyed && !this.node.manager.destroyed &&
+            this.node.backend === backend && this.node.socket === socket && this.node.sessionId === session;
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('NodeLink metrics context changed');
+        let response: unknown;
+        try {
+            const result = await this.request<unknown>(this.url + route.path, {
+                method: route.method, headers: {...this.authHeaders, ...(authorization === undefined ? {} : {Authorization:authorization}), Accept:'text/plain, application/openmetrics-text'},
+                signal:options.signal, returnHeaders:true, throwOnError:true, allowedOrigins:[new URL(this.url).origin],
+            }, timeout, 0, 1000, 0);
+            if (result) {
+                const contentType = result.headers['content-type'];
+                if (typeof contentType === 'string' && /^(text\/plain|application\/openmetrics-text)(?:\s*;|$)/i.test(contentType)) response = result.data;
+            }
+        } catch (error) {
+            if (error instanceof HttpError) {
+                if (error.statusCode === 404 || error.statusCode === 501) {
+                    if (current()) backend?.recordFeature(route.feature, 'unavailable');
+                    throw new FeatureUnavailableError(route.feature, backend?.kind ?? 'unknown', error.statusCode);
+                }
+                throw new HttpError(error.statusCode);
+            }
+            throw new Error('NodeLink metrics request failed');
+        }
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('NodeLink metrics context changed');
+        if (typeof response !== 'string') throw new ProtocolResponseError('backend REST', 'metrics response');
+        backend?.recordFeature(route.feature, 'available');
+        return response;
+    }
+
     public async getMetrics(): Promise<string | null> {
         this.node.assertFeature("metrics");
 
