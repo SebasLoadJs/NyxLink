@@ -173,3 +173,5 @@ export type { BackendPluginEventContext, BackendPluginEventDefinition, BackendPl
 export type { BackendInfoSnapshot, BackendInfoOptions, NodeLinkTrackStreamOptions, NodeLinkTrackStreamInfo, NodeLinkMetricsAuthorization, NodeLinkMetricsOptions } from './src/backends/BackendRestContracts';
 
 export type { NodeLinkProfilerAction, NodeLinkProfilerCommandOptions, NodeLinkProfilerCommandProcess, NodeLinkProfilerCommandResult } from './src/backends/NodeLinkDiagnostics';
+
+export type { NodeLinkConnectionQuality, NodeLinkConnectionSnapshot, NodeLinkTrackEncodeInput } from './src/backends/BackendRestContracts';

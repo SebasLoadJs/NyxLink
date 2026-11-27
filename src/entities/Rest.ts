@@ -1,4 +1,4 @@
-import { nodeLinkMetricsHeader, type NodeLinkMetricsOptions, backendRestTimeout, readBackendInfoSnapshot, nodeLinkTrackStreamParameters, readNodeLinkTrackStreamInfo, type BackendInfoSnapshot, type BackendInfoOptions, type NodeLinkTrackStreamOptions, type NodeLinkTrackStreamInfo } from '../backends/BackendRestContracts';
+import { readNodeLinkConnectionSnapshot, nodeLinkEncodeInput, readNodeLinkEncodedTrack, readNodeLinkEncodedTracks, type NodeLinkConnectionSnapshot, type NodeLinkTrackEncodeInput, nodeLinkMetricsHeader, type NodeLinkMetricsOptions, backendRestTimeout, readBackendInfoSnapshot, nodeLinkTrackStreamParameters, readNodeLinkTrackStreamInfo, type BackendInfoSnapshot, type BackendInfoOptions, type NodeLinkTrackStreamOptions, type NodeLinkTrackStreamInfo } from '../backends/BackendRestContracts';
 import { lyricsKtVideoPath, lyricsKtSearchPath, lyricsKtTimeout, readLyricsKtResult, readLyricsKtSearch, type LyricsKtOptions, type LyricsKtResult, type LyricsKtSearchTrack } from '../backends/LyricsKtContracts';
 import { assertNodeLinkAdmin, readNodeLinkYoutubeConfig, nodeLinkYoutubeConfigBody, readNodeLinkYoutubeConfigAcknowledgement, nodeLinkWorkerTerminationBody, readNodeLinkWorkerTermination, type NodeLinkAdminOptions, type NodeLinkYoutubeConfig, type NodeLinkYoutubeConfigUpdate, type NodeLinkYoutubeConfigAcknowledgement, type NodeLinkWorkerTarget, type NodeLinkWorkerTerminationOptions, type NodeLinkWorkerTermination } from '../backends/NodeLinkAdminContracts';
 import { profilerCommandBody, readProfilerCommandResult, type NodeLinkProfilerCommandOptions, type NodeLinkProfilerCommandResult, profilerQuery, diagnosticsTimeout, readNodeLinkProfilerSnapshot, readNodeLinkWorkerSnapshots, type NodeLinkProfilerOptions, type NodeLinkProfilerSnapshot, type NodeLinkWorkerSnapshot } from '../backends/NodeLinkDiagnostics';
@@ -878,6 +878,46 @@ export class Rest {
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
+    /** Detached connection diagnostics; a disabled manager is not a failed node. */
+    public async getNodeLinkConnectionSnapshot(options: BackendInfoOptions = {}): Promise<NodeLinkConnectionSnapshot> {
+        return this.readNativeDiagnostic('connection', {}, options, readNodeLinkConnectionSnapshot);
+    }
+
+    private async readNativeDiagnostic<T>(operation: ExtensionOperation, params: ExtensionRouteParameters,
+        options: BackendInfoOptions, decode: (value: unknown) => T, body?: unknown): Promise<T> {
+        const timeout = backendRestTimeout(options.timeoutMs);
+        const route = this.extensionRoute(operation, params);
+        this.node.assertFeature(route.feature);
+        const backend = this.node.backend, socket = this.node.socket, session = this.node.sessionId;
+        const current = () => !this.node.destroyed && !this.node.manager.destroyed &&
+            this.node.backend === backend && this.node.socket === socket && this.node.sessionId === session;
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('NodeLink diagnostic context changed');
+        let raw: unknown;
+        try {
+            raw = await this.request<unknown>(this.url + route.path, {
+                method:route.method, headers:body === undefined ? this.authHeaders : this.jsonHeaders,
+                ...(body === undefined ? {} : {body}), signal:options.signal,
+                allowedOrigins:[new URL(this.url).origin], throwOnError:true,
+            },timeout,0,1000,0);
+        } catch (error) {
+            if (error instanceof HttpError) {
+                const message = error.body && typeof error.body === 'object' && 'message' in error.body ? String(error.body.message) : '';
+                if (error.statusCode === 501 || [403,404].includes(error.statusCode) && /requested route was not found|unknown (?:route|endpoint)|(?:endpoint|feature).*disabled/i.test(message)) {
+                    if (current()) backend?.recordFeature(route.feature,'unavailable');
+                    throw new FeatureUnavailableError(route.feature,backend?.kind ?? 'unknown',error.statusCode);
+                }
+                throw new HttpError(error.statusCode);
+            }
+            throw new Error('NodeLink diagnostic request failed');
+        }
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('NodeLink diagnostic context changed');
+        const result = decode(raw);
+        backend?.recordFeature(route.feature,'available');
+        return result;
+    }
+
     public async getConnectionStatus(): Promise<NodeLinkResponse<INodeConnectionStatus> | null> {
         this.node.assertFeature("connection");
 
@@ -1235,6 +1275,21 @@ export class Rest {
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
+    /** Encode a track on NodeLink using the native validated info contract. */
+    public async encodeNodeLinkTrack(track: NodeLinkTrackEncodeInput, options: BackendInfoOptions = {}): Promise<string> {
+        const body = nodeLinkEncodeInput(track);
+        const query = new URLSearchParams({track:JSON.stringify(body)});
+        if (query.toString().length > 16384) throw new TypeError('Single track encode query too large; use batch encoding');
+        return this.readNativeDiagnostic('encodetrack',{query},options,readNodeLinkEncodedTrack);
+    }
+
+    public async encodeNodeLinkTracks(tracks: readonly NodeLinkTrackEncodeInput[], options: BackendInfoOptions = {}): Promise<string[]> {
+        if (!Array.isArray(tracks) || !tracks.length || tracks.length > 128) throw new TypeError('Invalid NodeLink track batch');
+        const body = tracks.map(nodeLinkEncodeInput);
+        if (Buffer.byteLength(JSON.stringify(body)) > 262144) throw new TypeError('NodeLink track batch too large');
+        return this.readNativeDiagnostic('encodedtracks',{},options,value=>readNodeLinkEncodedTracks(value,body.length),body);
+    }
+
     public async encodeTrackRemote(track: string): Promise<string | null> {
         this.node.assertFeature("encodetrack");
 

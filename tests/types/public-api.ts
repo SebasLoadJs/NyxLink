@@ -402,3 +402,8 @@ void profilerCommand;
 
 const binaryPluginRoute=manager.pluginRoutes.register({backend:'lavalink',plugin:'example',id:'binary',scope:'node',method:'GET',path:'example/audio',binary:{contentTypes:['audio/ogg'],maxBytes:1048576},decode(value:unknown){return (value as import('../../dist').BackendPluginBinaryResponse).bytes;}});
 const binaryPluginResult:Promise<Buffer>=node.rest.callPlugin(binaryPluginRoute);void binaryPluginResult;
+
+const connectionSnapshot:Promise<import('../../dist').NodeLinkConnectionSnapshot>=node.rest.getNodeLinkConnectionSnapshot();
+const encodeInput:import('../../dist').NodeLinkTrackEncodeInput={title:'test',author:'artist',identifier:'id',length:100,isStream:false,uri:null,artworkUrl:null,isrc:null,sourceName:'youtube',position:0,details:[]};
+const encodedNative:Promise<string>=node.rest.encodeNodeLinkTrack(encodeInput);
+void [connectionSnapshot,encodedNative];

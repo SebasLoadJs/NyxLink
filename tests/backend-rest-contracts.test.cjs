@@ -42,3 +42,28 @@ test('NodeLink metrics supports separate credentials and ignores optional servic
  status=404;await assert.rejects(node.rest.getNodeLinkMetrics(local),{code:'FEATURE_UNAVAILABLE'});
  assert.equal(node.backend.featureStatus('metrics'),'unavailable');
 });
+
+test('native connection diagnostics and encoding validate wire shapes',async t=>{
+ const {node}=createPlayer(t),calls=[];
+ let connection={status:'disabled',metrics:null,reason:'connection_manager_unavailable_in_this_process'};
+ let batch=['YQ==','Yg=='];
+ const server=http.createServer(async(req,res)=>{
+  let raw='';for await(const c of req)raw+=c;calls.push([req.method,req.url,raw]);
+  res.writeHead(200,{'content-type':'application/json'});
+  res.end(JSON.stringify(req.url.startsWith('/v4/connection')?connection:req.url.startsWith('/v4/encodedtracks')?batch:'YQ=='));
+ });
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ t.after(()=>{server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
+ node.port=server.address().port;node.backend=BackendDetector.detect({version:{semver:'3.10.0'},isNodelink:true});node.isNodeLink=true;
+ assert.deepEqual(await node.rest.getNodeLinkConnectionSnapshot(),connection);
+ connection={status:'good',metrics:{timestamp:10,network:{isConnected:true,connectionType:'wifi',ipAddress:'private'},ping:{alive:true,packetLoss:0,host:'private'}}};
+ assert.deepEqual(await node.rest.getNodeLinkConnectionSnapshot(),{status:'good',metrics:{timestamp:10,network:{isConnected:true,connectionType:'wifi'},ping:{alive:true,packetLoss:0}}});
+ connection.metrics.ping.packetLoss=101;await assert.rejects(node.rest.getNodeLinkConnectionSnapshot(),{code:'INVALID_PROTOCOL_RESPONSE'});
+ const input={title:'fixture',author:'artist',length:100,identifier:'id',isStream:false,uri:null,artworkUrl:null,isrc:null,sourceName:'youtube',position:0,details:[null,'a']};
+ await assert.rejects(node.rest.encodeNodeLinkTrack({...input,details:undefined}),TypeError);
+ assert.equal(await node.rest.encodeNodeLinkTrack(input),'YQ==');
+ assert.deepEqual(JSON.parse(new URL(calls[3][1],'http://localhost').searchParams.get('track')),input);
+ assert.deepEqual(await node.rest.encodeNodeLinkTracks([input,input]),batch);
+ assert.deepEqual(JSON.parse(calls[4][2]),[input,input]);
+ batch=['YQ=='];await assert.rejects(node.rest.encodeNodeLinkTracks([input,input]),{code:'INVALID_PROTOCOL_RESPONSE'});
+});

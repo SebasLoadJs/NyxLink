@@ -136,3 +136,118 @@ export function nodeLinkMetricsHeader(origin: string, options: NodeLinkMetricsOp
     if (auth.type === 'basic' && text(auth.username,512) && !auth.username.includes(':') && text(auth.password,4096)) return 'Basic ' + Buffer.from(auth.username + ':' + auth.password, 'utf8').toString('base64');
     throw new TypeError('Invalid metrics authorization');
 }
+
+export type NodeLinkConnectionQuality = 'unknown' | 'good' | 'average' | 'bad' | 'disconnected';
+
+export type NodeLinkConnectionSnapshot = {
+    status: 'disabled';
+    metrics: null;
+    reason: 'connection_manager_unavailable_in_this_process';
+} | {
+    status: NodeLinkConnectionQuality;
+    metrics: {
+        timestamp: number;
+        speed?: {
+            bps: number;
+            kbps: number;
+            mbps: number;
+        };
+        downloadedBytes?: number;
+        durationSeconds?: number;
+        latencyMs?: number;
+        dns?: {
+            isOnline: boolean;
+            latencyMs?: number;
+        };
+        ping?: {
+            alive: boolean;
+            minMs?: number;
+            avgMs?: number;
+            maxMs?: number;
+            packetLoss?: number;
+        };
+        network?: {
+            isConnected: boolean;
+            connectionType: 'wifi' | 'ethernet' | 'mobile' | 'unknown';
+        };
+    };
+};
+
+export interface NodeLinkTrackEncodeInput {
+    title: string;
+    author: string;
+    length: number;
+    identifier: string;
+    isStream: boolean;
+    uri: string | null;
+    artworkUrl: string | null;
+    isrc: string | null;
+    sourceName: string;
+    position: number;
+    details: Array<string | null>;
+}
+
+const finiteNonnegative = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
+const connectionQualities: readonly NodeLinkConnectionQuality[] = ['unknown','good','average','bad','disconnected'];
+/** Operational projection, deliberately excluding private network addresses and hostnames. */
+export function readNodeLinkConnectionSnapshot(value: unknown): NodeLinkConnectionSnapshot {
+    if (!record(value)) return invalid('connection envelope');
+    if (value.status === 'disabled') {
+        if (value.metrics !== null || value.reason !== 'connection_manager_unavailable_in_this_process') return invalid('disabled connection');
+        return {status:'disabled',metrics:null,reason:'connection_manager_unavailable_in_this_process'};
+    }
+    if (!connectionQualities.includes(value.status as NodeLinkConnectionQuality) || !record(value.metrics) ||
+        !finiteNonnegative(value.metrics.timestamp)) return invalid('connection metrics');
+    const raw = value.metrics;
+    const metrics: NonNullable<NodeLinkConnectionSnapshot['metrics']> = {timestamp:raw.timestamp as number};
+    for (const key of ['downloadedBytes','durationSeconds','latencyMs'] as const) if (raw[key] !== undefined) {
+        if (!finiteNonnegative(raw[key])) return invalid('connection '+key);
+        metrics[key] = raw[key];
+    }
+    if (raw.speed !== undefined) {
+        if (!record(raw.speed) || !finiteNonnegative(raw.speed.bps) || !finiteNonnegative(raw.speed.kbps) || !finiteNonnegative(raw.speed.mbps)) return invalid('connection speed');
+        metrics.speed = {bps:raw.speed.bps,kbps:raw.speed.kbps,mbps:raw.speed.mbps};
+    }
+    if (raw.dns !== undefined) {
+        if (!record(raw.dns) || typeof raw.dns.isOnline !== 'boolean') return invalid('connection DNS');
+        metrics.dns = {isOnline:raw.dns.isOnline};
+        if (raw.dns.latencyMs !== undefined) {
+            if (!finiteNonnegative(raw.dns.latencyMs)) return invalid('connection DNS latency');
+            metrics.dns.latencyMs = raw.dns.latencyMs;
+        }
+    }
+    if (raw.ping !== undefined) {
+        if (!record(raw.ping) || typeof raw.ping.alive !== 'boolean') return invalid('connection ping');
+        metrics.ping = {alive:raw.ping.alive};
+        for (const key of ['minMs','avgMs','maxMs','packetLoss'] as const) if (raw.ping[key] !== undefined) {
+            if (!finiteNonnegative(raw.ping[key]) || key === 'packetLoss' && raw.ping[key] > 100) return invalid('connection ping '+key);
+            metrics.ping[key] = raw.ping[key];
+        }
+    }
+    if (raw.network !== undefined) {
+        if (!record(raw.network) || typeof raw.network.isConnected !== 'boolean' || !['wifi','ethernet','mobile','unknown'].includes(raw.network.connectionType as string)) return invalid('connection network');
+        metrics.network = {isConnected:raw.network.isConnected,connectionType:raw.network.connectionType as NonNullable<typeof metrics.network>['connectionType']};
+    }
+    return {status:value.status as NodeLinkConnectionQuality,metrics};
+}
+export function nodeLinkEncodeInput(value: NodeLinkTrackEncodeInput): NodeLinkTrackEncodeInput {
+    const nullable = (v: unknown): v is string | null => v === null || typeof v === 'string' && Buffer.byteLength(v) <= 16384;
+    if (!record(value) || !text(value.title,16384) || !text(value.author,16384) ||
+        !text(value.identifier,16384) || !text(value.sourceName,128) ||
+        !Number.isSafeInteger(value.length) || value.length < 0 || !Number.isSafeInteger(value.position) || value.position < 0 ||
+        typeof value.isStream !== 'boolean' || !nullable(value.uri) || !nullable(value.artworkUrl) || !nullable(value.isrc) ||
+        !Array.isArray(value.details) || value.details.length > 128 || !value.details.every(nullable)) throw new TypeError('Invalid NodeLink track encoding input');
+    const result = {title:value.title,author:value.author,length:value.length,identifier:value.identifier,isStream:value.isStream,
+        uri:value.uri,artworkUrl:value.artworkUrl,isrc:value.isrc,sourceName:value.sourceName,position:value.position,details:[...value.details]};
+    if (Buffer.byteLength(JSON.stringify(result)) > 65536) throw new TypeError('NodeLink track encoding input too large');
+    return result;
+}
+export function readNodeLinkEncodedTrack(value: unknown): string {
+    if (typeof value !== 'string' || value.length < 4 || value.length > 262144 ||
+        !/^[A-Za-z0-9+/]+={0,2}$/.test(value) || value.length % 4 !== 0) return invalid('encoded track');
+    return value;
+}
+export function readNodeLinkEncodedTracks(value: unknown, expected: number): string[] {
+    if (!Array.isArray(value) || value.length !== expected) return invalid('encoded track count');
+    return value.map(readNodeLinkEncodedTrack);
+}

@@ -3452,6 +3452,54 @@ export interface NodeLinkAudioProcessingSnapshot {
 }
 ```
 
+## NodeLinkConnectionQuality
+
+[Source declaration](../src/backends/BackendRestContracts.ts)
+
+```ts
+export type NodeLinkConnectionQuality = 'unknown' | 'good' | 'average' | 'bad' | 'disconnected';
+```
+
+## NodeLinkConnectionSnapshot
+
+[Source declaration](../src/backends/BackendRestContracts.ts)
+
+```ts
+export type NodeLinkConnectionSnapshot = {
+    status: 'disabled';
+    metrics: null;
+    reason: 'connection_manager_unavailable_in_this_process';
+} | {
+    status: NodeLinkConnectionQuality;
+    metrics: {
+        timestamp: number;
+        speed?: {
+            bps: number;
+            kbps: number;
+            mbps: number;
+        };
+        downloadedBytes?: number;
+        durationSeconds?: number;
+        latencyMs?: number;
+        dns?: {
+            isOnline: boolean;
+            latencyMs?: number;
+        };
+        ping?: {
+            alive: boolean;
+            minMs?: number;
+            avgMs?: number;
+            maxMs?: number;
+            packetLoss?: number;
+        };
+        network?: {
+            isConnected: boolean;
+            connectionType: 'wifi' | 'ethernet' | 'mobile' | 'unknown';
+        };
+    };
+};
+```
+
 ## NodeLinkDiscoveryOptions
 
 [Source declaration](../src/backends/NodeLinkSearchContracts.ts)
@@ -3896,6 +3944,7 @@ export type NodeLinkProfilerAction = 'forceGc' | 'cpuStart' | 'cpuStop' | 'heapS
 
 ```ts
 export interface NodeLinkProfilerCommandOptions extends NodeLinkProfilerOptions {
+    scope: NodeLinkProfilerScope;
     confirm: true;
     action: NodeLinkProfilerAction;
     name?: string;
@@ -4024,6 +4073,26 @@ export interface NodeLinkStreamFormats {
     seekable: boolean;
     byteRangeSupported: boolean;
     formats: NodeLinkStreamFormat[];
+}
+```
+
+## NodeLinkTrackEncodeInput
+
+[Source declaration](../src/backends/BackendRestContracts.ts)
+
+```ts
+export interface NodeLinkTrackEncodeInput {
+    title: string;
+    author: string;
+    length: number;
+    identifier: string;
+    isStream: boolean;
+    uri: string | null;
+    artworkUrl: string | null;
+    isrc: string | null;
+    sourceName: string;
+    position: number;
+    details: Array<string | null>;
 }
 ```
 
@@ -5125,6 +5194,7 @@ export declare class Rest {
     getSourceHealth(): Promise<SourceHealthResponse>;
     loadChapters(encodedTrack: string): Promise<NodeLinkResponse<IChapter[]> | null>;
     loadMeaning(encodedTrack: string, lang?: string): Promise<NodeLinkResponse<IMeaningResponse | Record<string, any>> | null>;
+    getNodeLinkConnectionSnapshot(options?: BackendInfoOptions): Promise<NodeLinkConnectionSnapshot>;
     getConnectionStatus(): Promise<NodeLinkResponse<INodeConnectionStatus> | null>;
     getLavalinkMetrics(names?: readonly string[]): Promise<string | null>;
     getNodeLinkMetrics(options?: NodeLinkMetricsOptions): Promise<string>;
@@ -5147,6 +5217,8 @@ export declare class Rest {
         visitorData?: string;
     }): Promise<any | null>;
     exchangeYoutubeOAuth(refreshToken: string): Promise<any | null>;
+    encodeNodeLinkTrack(track: NodeLinkTrackEncodeInput, options?: BackendInfoOptions): Promise<string>;
+    encodeNodeLinkTracks(tracks: readonly NodeLinkTrackEncodeInput[], options?: BackendInfoOptions): Promise<string[]>;
     encodeTrackRemote(track: string): Promise<string | null>;
     encodeTracksRemote(tracks: Array<{
         encoded: string;

@@ -10,13 +10,13 @@ Audit inputs: [NodeLink source 86c6a00](https://github.com/PerformanC/NodeLink/t
 | loadtracks, decodetrack, decodetracks | Rest.loadTracks/decodeTrack/decodeTracks | Existing |
 | sessions and players | Rest.updateSession/getPlayers/getPlayer/updatePlayer/destroyPlayer | Existing |
 | routeplanner/status and free operations | Rest.getRoutePlannerStatus/freeFailedAddress/freeAllFailedAddresses | Existing; revision-dependent |
-| NodeLink connection, metrics, workers | Rest.getConnectionStatus/getMetrics/getWorkers/getNodeLinkWorkerSnapshots/patchWorker | Typed worker snapshot added; other broad legacy responses remain |
+| NodeLink connection, metrics, workers | Rest.getNodeLinkConnectionSnapshot/getNodeLinkMetrics/getNodeLinkWorkerSnapshots/terminateNodeLinkWorker | Typed contracts; legacy methods retained |
 | NodeLink encode and stream | Rest.encodeTrackRemote/encodeTracksRemote/trackStream/getStreamFormats/loadStream | Existing; real seek acceptance pending |
 | NodeLink lyrics, chapters, meaning | Rest.loadLyrics/loadChapters/loadMeaning/subscribeLyrics/unsubscribeLyrics | Existing |
 | NodeLink groups, mix, SponsorBlock | Rest group, mix and SponsorBlock methods | Existing |
 | NodeLink source health and YouTube config/OAuth | Rest.getSourceHealth/getYoutubeConfig/updateYoutubeConfig/exchangeYoutubeOAuth | Existing; review administrative contracts |
 | NodeLink HLS relay | Rest.createHlsSession/getHlsPlaylist/getHlsInitSegment/getHlsSegment | Native HLS contracts implemented; real playback pending |
-| NodeLink profiler HTTP/UI/file/socket | Rest.getNodeLinkProfilerStatus (read-only, sanitized) | POST actions, file/UI and realtime transports remain separate privileged scope |
+| NodeLink profiler HTTP/UI/file/socket | Rest.getNodeLinkProfilerStatus/runNodeLinkProfilerCommand | Typed read/status and six explicit POST actions; raw file/UI and remote inspector deliberately excluded |
 | NodeLink rich media/lyrics/analysis/visualization/protected audio/AutoMix | Optional 5.4 contracts | Six open upstream proposals; fixture interoperability only |
 | WebSocket playback and plugin events | Node events, nodeRaw, VoiceReceiver | Core exists; audit plugin-specific event schemas |
 
@@ -60,3 +60,5 @@ Cloudflare Tunnel changes server deployment rather than playback protocol. The s
 - `Rest.getNodeLinkMetrics()` supports separately configured raw, Bearer and Basic credentials, strict same-origin transport, HTTPS (explicit literal-loopback HTTP opt-in), Prometheus response validation, cancellation, and optional capability observations without treating a scrape failure as a playback outage. The upstream router may log invalid credentials; configure server-side log redaction before real use.
 
 - `Rest.runNodeLinkProfilerCommand()` exposes the explicit POST actions `forceGc`, `cpuStart`, `cpuStop`, `heapSamplingStart`, `heapSamplingStop` and `heapSnapshot` with explicit scope and confirmation, HTTPS or literal-loopback opt-in, no redirect or retry, header-only access code and a detached acknowledgement. These operations can affect latency, memory, storage and playback; never invoke them automatically. Server-side completion is not guaranteed after timeout or cancellation. Raw heap artifacts, inspector exposure, arbitrary file access and remote debug UI remain outside the SDK. Use a controlled administrative environment.
+
+- Typed connection diagnostics model the native disabled sentinel without triggering failover and exclude network addresses, hostnames and free-form errors. Typed single/batch track encoders validate the upstream input shape, response encoding and batch cardinality; legacy encoder methods remain available.

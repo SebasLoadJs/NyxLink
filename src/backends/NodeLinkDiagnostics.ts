@@ -170,6 +170,7 @@ export function readNodeLinkWorkerSnapshots(value: unknown): NodeLinkWorkerSnaps
 export type NodeLinkProfilerAction = 'forceGc' | 'cpuStart' | 'cpuStop' | 'heapSamplingStart' | 'heapSamplingStop' | 'heapSnapshot';
 
 export interface NodeLinkProfilerCommandOptions extends NodeLinkProfilerOptions {
+    scope: NodeLinkProfilerScope;
     confirm: true;
     action: NodeLinkProfilerAction;
     name?: string;
