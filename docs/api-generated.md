@@ -3621,6 +3621,76 @@ export interface NodeLinkPlayerUpdate extends CommonPlayerUpdate {
 }
 ```
 
+## NodeLinkProcessMemory
+
+[Source declaration](../src/backends/NodeLinkDiagnostics.ts)
+
+```ts
+export interface NodeLinkProcessMemory {
+    rss: number;
+    heapTotal: number;
+    heapUsed: number;
+    external: number;
+    arrayBuffers?: number;
+}
+```
+
+## NodeLinkProfilerOptions
+
+[Source declaration](../src/backends/NodeLinkDiagnostics.ts)
+
+```ts
+export interface NodeLinkProfilerOptions {
+    code: string;
+    scope?: NodeLinkProfilerScope;
+    allowLoopbackHttp?: boolean;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+}
+```
+
+## NodeLinkProfilerProcess
+
+[Source declaration](../src/backends/NodeLinkDiagnostics.ts)
+
+```ts
+export interface NodeLinkProfilerProcess {
+    success: boolean;
+    pid?: number;
+    clusterId?: number;
+    uniqueId?: number;
+    memory?: NodeLinkProcessMemory;
+    cpuProfiling?: boolean;
+    heapSamplingActive?: boolean;
+    uptimeSec?: number;
+}
+```
+
+## NodeLinkProfilerScope
+
+[Source declaration](../src/backends/NodeLinkDiagnostics.ts)
+
+```ts
+export type NodeLinkProfilerScope = 'all' | 'master' | 'workers' | 'sourceWorkers';
+```
+
+## NodeLinkProfilerSnapshot
+
+[Source declaration](../src/backends/NodeLinkDiagnostics.ts)
+
+```ts
+export interface NodeLinkProfilerSnapshot {
+    action: 'status';
+    scope: NodeLinkProfilerScope;
+    timestamp: number;
+    master?: NodeLinkProfilerProcess;
+    workers?: NodeLinkProfilerProcess[];
+    sourceWorkers?: NodeLinkProfilerProcess[];
+    workersUnavailable?: boolean;
+    sourceWorkersUnavailable?: boolean;
+}
+```
+
 ## NodeLinkVisualizationSnapshot
 
 [Source declaration](../src/backends/NodeLinkPlayerTelemetry.ts)
@@ -3643,6 +3713,31 @@ export interface NodeLinkVisualizationSnapshot {
         hz: number;
         magnitude: number;
     }>;
+}
+```
+
+## NodeLinkWorkerSnapshot
+
+[Source declaration](../src/backends/NodeLinkDiagnostics.ts)
+
+```ts
+export interface NodeLinkWorkerSnapshot {
+    id: number;
+    clusterId?: number;
+    pid?: number;
+    health?: boolean;
+    uptime?: number;
+    players?: number;
+    playingPlayers?: number;
+    commandQueueLength?: number;
+    cpuLoad?: number;
+    memoryUsed?: number;
+    memoryAllocated?: number;
+    eventLoopLag?: number;
+    eventLoopLagP50?: number;
+    eventLoopLagP95?: number;
+    eventLoopLagP99?: number;
+    stuckRecoveries?: number;
 }
 ```
 
@@ -4585,6 +4680,8 @@ export declare class Rest {
     getConnectionStatus(): Promise<NodeLinkResponse<INodeConnectionStatus> | null>;
     getLavalinkMetrics(names?: readonly string[]): Promise<string | null>;
     getMetrics(): Promise<string | null>;
+    getNodeLinkProfilerStatus(options: NodeLinkProfilerOptions): Promise<NodeLinkProfilerSnapshot>;
+    getNodeLinkWorkerSnapshots(): Promise<NodeLinkWorkerSnapshot[]>;
     getWorkers(): Promise<NodeLinkResponse<any[]> | null>;
     patchWorker(payload: Record<string, any>): Promise<any | null>;
     getLavalinkYoutubeConfig(options: LavalinkYoutubeAdminOptions): Promise<LavalinkYoutubeConfig>;

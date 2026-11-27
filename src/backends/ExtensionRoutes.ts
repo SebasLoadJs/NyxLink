@@ -30,6 +30,7 @@ const definitions = {
     meaning: { feature: 'meaning', method: 'GET', path: '/v4/meaning', transport: 'json' },
     connection: { feature: 'connection', method: 'GET', path: '/v4/connection', transport: 'json' },
     metrics: { feature: 'metrics', method: 'GET', path: '/v4/metrics', transport: 'json' },
+    'profiler:status': { feature: 'profiler:status', method: 'GET', path: '/v4/profiler', transport: 'json' },
     'workers:get': { feature: 'workers:get', method: 'GET', path: '/v4/workers', transport: 'json' },
     'workers:patch': { feature: 'workers:patch', method: 'PATCH', path: '/v4/workers', transport: 'json' },
     'youtube:config:get': { feature: 'youtube:config', method: 'GET', path: '/v4/youtube/config', transport: 'json' },

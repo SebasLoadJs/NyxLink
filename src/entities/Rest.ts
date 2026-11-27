@@ -1,3 +1,4 @@
+import { profilerQuery, diagnosticsTimeout, readNodeLinkProfilerSnapshot, readNodeLinkWorkerSnapshots, type NodeLinkProfilerOptions, type NodeLinkProfilerSnapshot, type NodeLinkWorkerSnapshot } from '../backends/NodeLinkDiagnostics';
 import { hlsCreateQuery, hlsReadQuery, hlsTimeout, validateHlsManifest, type NodeLinkHlsOptions, type NodeLinkHlsReadOptions, type NodeLinkHlsManifest } from '../backends/NodeLinkHlsContracts';
 import { assertYoutubeAdmin, youtubeTimeout, youtubeConfig, youtubeConfigBody, youtubeOAuthPath, youtubeOAuthToken, youtubeStreamPath, type LavalinkYoutubeAdminOptions, type LavalinkYoutubeConfig, type LavalinkYoutubeConfigUpdate, type LavalinkYoutubeOAuthToken, type LavalinkYoutubeStreamOptions, type LavalinkYoutubeStream } from '../backends/LavalinkYoutubeContracts';
 import type { BackendPluginRoute, BackendPluginRequest } from '../backends/BackendPluginRoutes';
@@ -808,6 +809,51 @@ export class Rest {
     }
 
     /** NodeLink-only feature. See https://github.com/PerformanC/NodeLink */
+    /** Read-only privileged diagnostics, never a remote inspector or arbitrary command channel. */
+    public async getNodeLinkProfilerStatus(options: NodeLinkProfilerOptions): Promise<NodeLinkProfilerSnapshot> {
+        const query = profilerQuery(this.url, options);
+        const route = this.extensionRoute('profiler:status', { query });
+        this.node.assertFeature(route.feature);
+        const backend = this.node.backend, session = this.node.sessionId, socket = this.node.socket;
+        const current = () => !this.node.destroyed && !this.node.manager.destroyed &&
+            this.node.backend === backend && this.node.sessionId === session && this.node.socket === socket;
+        let raw: unknown;
+        try {
+            raw = await this.request<unknown>(this.url + route.path, {
+                method: 'GET', headers: { ...this.authHeaders, 'X-NodeLink-Code': options.code },
+                signal: options.signal, allowedOrigins: [new URL(this.url).origin], throwOnError: true,
+            }, diagnosticsTimeout(options.timeoutMs), 0, 1000, 0);
+        } catch (error) {
+            // Keep remote error bodies and secrets out of diagnostics/logs.
+            if (error instanceof HttpError) this.featureError(route.feature, new HttpError(error.statusCode), backend, current);
+            throw new Error('NodeLink profiler request failed');
+        }
+        options.signal?.throwIfAborted();
+        if (!current()) throw new Error('NodeLink profiler session changed');
+        const result = readNodeLinkProfilerSnapshot(raw, options.scope ?? 'all');
+        backend?.recordFeature(route.feature, 'available');
+        return result;
+    }
+
+    /** Validated, detached worker metrics; legacy getWorkers remains compatible. */
+    public async getNodeLinkWorkerSnapshots(): Promise<NodeLinkWorkerSnapshot[]> {
+        const route = this.extensionRoute('workers:get');
+        this.node.assertFeature(route.feature);
+        const backend = this.node.backend, session = this.node.sessionId, socket = this.node.socket;
+        const current = () => !this.node.destroyed && !this.node.manager.destroyed &&
+            this.node.backend === backend && this.node.sessionId === session && this.node.socket === socket;
+        try {
+            const raw = await this.request<unknown>(this.url + route.path, {
+                method: 'GET', headers: this.authHeaders, throwOnError: true,
+                allowedOrigins: [new URL(this.url).origin],
+            }, 10000, 0, 1000, 0);
+            if (!current()) throw new Error('NodeLink worker session changed');
+            const result = readNodeLinkWorkerSnapshots(raw);
+            backend?.recordFeature(route.feature, 'available');
+            return result;
+        } catch (error) { this.featureError(route.feature, error, backend, current); }
+    }
+
     public async getWorkers(): Promise<NodeLinkResponse<any[]> | null> {
         this.node.assertFeature("workers:get");
 

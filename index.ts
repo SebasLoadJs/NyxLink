@@ -160,3 +160,5 @@ export type { BackendPluginMethod, BackendPluginRoute, BackendPluginRequest } fr
 export type { LavalinkYoutubeAdminOptions, LavalinkYoutubeConfig, LavalinkYoutubeConfigUpdate, LavalinkYoutubeOAuthToken, LavalinkYoutubeStream, LavalinkYoutubeStreamOptions } from './src/backends/LavalinkYoutubeContracts';
 
 export type { NodeLinkHlsOptions, NodeLinkHlsReadOptions, NodeLinkHlsManifest } from './src/backends/NodeLinkHlsContracts';
+
+export type { NodeLinkProfilerScope, NodeLinkProfilerOptions, NodeLinkProcessMemory, NodeLinkProfilerProcess, NodeLinkProfilerSnapshot, NodeLinkWorkerSnapshot } from './src/backends/NodeLinkDiagnostics';
