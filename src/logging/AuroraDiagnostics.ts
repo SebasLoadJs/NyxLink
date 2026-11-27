@@ -19,6 +19,7 @@ export interface MusicSnapshot {
     stream: boolean;
     estimated: boolean;
     crossfadeConfigured: boolean;
+    crossfadeStatus?: ReturnType<Player['getCrossfadeStatus']>;
 }
 
 /** Observes one explicit player. No audio processing, polling or implicit player selection. */
@@ -76,7 +77,8 @@ export class AuroraMusicStrip {
             }
         }
         if (position !== undefined && duration !== undefined && duration > 0) position = Math.min(position, duration);
-        return { state, stream, estimated, crossfadeConfigured: player.getCrossfade()?.enabled === true,
+        const crossfadeStatus = player.getCrossfadeStatus();
+        return { state, stream, estimated, crossfadeConfigured: crossfadeStatus === 'configured', crossfadeStatus,
             ...(position === undefined ? {} : { positionMs: position }),
             ...(duration && duration > 0 ? { durationMs: duration } : {}) };
     }

@@ -3242,6 +3242,7 @@ export interface MusicSnapshot {
     stream: boolean;
     estimated: boolean;
     crossfadeConfigured: boolean;
+    crossfadeStatus?: ReturnType<Player['getCrossfadeStatus']>;
 }
 ```
 
@@ -4577,6 +4578,7 @@ export declare class Player {
     setFading(fading: IFadingOptions): Promise<this>;
     clearFading(): Promise<this>;
     getCrossfade(): CrossfadeOptions | undefined;
+    getCrossfadeStatus(): 'unavailable' | 'suspended' | 'unknown' | 'disabled' | 'configured';
     setCrossfade(options: CrossfadeOptions): Promise<this>;
     clearCrossfade(): Promise<this>;
     setNextTrack(track: Track | string, userData?: Record<string, any>): Promise<this>;

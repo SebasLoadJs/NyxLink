@@ -6,7 +6,8 @@ import type { QueuePreloadOptions } from '../backends/NodeLinkContracts';
 export function desiredPreload(player: Player, options: QueuePreloadOptions | undefined, crossfadeEnabled: boolean): Track | undefined {
     const current = player.current;
     const next = player.queue.first;
-    if (!player.node.isNodeLink || player.node.backend?.featureStatus('nextTrack') === 'unavailable' ||
+    if (!player.node.isNodeLink || player.node.backend?.kind === 'lavalink' ||
+        player.node.backend?.featureStatus('crossfade') === 'unavailable' || player.node.backend?.featureStatus('nextTrack') === 'unavailable' ||
         !options?.enabled || !crossfadeEnabled || player.loop !== 'off' || !player.playing ||
         !current || !next || next === current || next.encoded === current.encoded) return undefined;
     const info = current.getInfo();

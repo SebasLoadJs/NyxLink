@@ -731,9 +731,19 @@ export class Player {
         return this.setFading({ enabled: false });
     }
 
-    /** Last acknowledged crossfade request, not an assertion of active audio mixing. */
+    /** Remembered request, including intent suspended during cross-backend recovery. */
     public getCrossfade(): CrossfadeOptions | undefined {
         return this.crossfade ? { ...this.crossfade } : undefined;
+    }
+
+    /** Configuration eligibility, not proof of an audible transition or remote DSP state. */
+    public getCrossfadeStatus(): 'unavailable' | 'suspended' | 'unknown' | 'disabled' | 'configured' {
+        const enabled = this.crossfade?.enabled === true;
+        const backend = this.node.backend;
+        if (backend?.kind === 'lavalink' || backend?.featureStatus('crossfade') === 'unavailable') return enabled ? 'suspended' : 'unavailable';
+        if (!backend || backend.kind !== 'nodelink' || !this.node.isNodeLink || !this.node.connected ||
+            this.destroyed || this.manager.destroyed || this.node.destroyed) return enabled ? 'suspended' : 'unknown';
+        return enabled ? 'configured' : 'disabled';
     }
 
     public async setCrossfade(options: CrossfadeOptions): Promise<this> {
@@ -786,6 +796,10 @@ export class Player {
         if (!options || typeof options.enabled !== 'boolean' ||
             options.leadMs !== undefined && (!Number.isSafeInteger(options.leadMs) || options.leadMs < 1000 || options.leadMs > 120000)) {
             throw new TypeError('Invalid queue preload options');
+        }
+        if (options.enabled) {
+            this.assertNodeLinkFeature('crossfade');
+            this.assertNodeLinkFeature('nextTrack');
         }
         this.preloadOptions = { enabled: options.enabled, leadMs: options.leadMs ?? 35000 };
         this.requestQueuePreload();

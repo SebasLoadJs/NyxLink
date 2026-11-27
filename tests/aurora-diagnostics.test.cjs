@@ -7,7 +7,7 @@ test('music strip observes only selected player and bounds monotonic extrapolati
     let now = 100, position = 1000;
     const track = { getInfo: () => ({ position, length: 10000, isStream: false, title: 'private-title' }) };
     const p = { manager: m, node: { connected: true }, current: track, connected: true,
-        playing: true, paused: false, destroyed: false, getCrossfade: () => ({ enabled: true }) };
+        playing: true, paused: false, destroyed: false, getCrossfadeStatus: () => 'configured' };
     const strip = new AuroraMusicStrip(p, () => now);
     try {
         assert.equal(strip.snapshot().positionMs, 1000);
@@ -34,7 +34,7 @@ test('music strip observes only selected player and bounds monotonic extrapolati
 test('music strip does not give streams a fabricated duration or buffering state', async () => {
     const m = manager();
     const p = { manager: m, node: { connected: false }, current: { getInfo: () => ({position: 0,length: 99999,isStream: true}) },
-        connected: false, playing: true, paused: false, destroyed: false, getCrossfade: () => undefined };
+        connected: false, playing: true, paused: false, destroyed: false, getCrossfadeStatus: () => 'unknown' };
     const strip = new AuroraMusicStrip(p);
     try { assert.equal(strip.snapshot().state, 'unknown'); assert.equal(strip.snapshot().durationMs, undefined);
         assert.equal(strip.snapshot().stream, true); assert.equal(strip.snapshot().crossfadeConfigured, false);
@@ -92,4 +92,18 @@ test('confirmed destination plus failed source cleanup is a degraded incident, n
  const result=engine.accept({eventCode:'FAILOVER_RECOVERED',operationId,sanitizedContext:{backend:'nodelink',reasonCode:'source-cleanup-failed'}});
  assert.equal(result.state,'degraded');assert.equal(result.reasonCode,'source-cleanup-failed');
  assert.equal(result.sourceBackend,'lavalink');
+});
+
+test('Aurora does not present a remembered crossfade on Lavalink as configured',async t=>{
+ const {createPlayer}=require('./helpers/player.cjs');
+ const {BackendDetector}=require('../dist');
+ const {player,node}=createPlayer(t);
+ node.isNodeLink=true;node.backend=BackendDetector.detect({version:{semver:'3.10.0'},isNodelink:true});node.connected=true;
+ await player.setCrossfade({enabled:true});
+ const strip=new AuroraMusicStrip(player);t.after(()=>strip.close());
+ assert.equal(strip.snapshot().crossfadeConfigured,true);
+ node.isNodeLink=false;node.backend=BackendDetector.detect({version:{semver:'4.2.2'}});
+ assert.equal(strip.snapshot().crossfadeConfigured,false);
+ assert.equal(strip.snapshot().crossfadeStatus,'suspended');
+ assert.equal(player.getCrossfade().enabled,true);
 });

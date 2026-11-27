@@ -42,3 +42,24 @@ test('crossfade updates remain ordered across asynchronous acknowledgements',asy
  release.resolve();await Promise.all([first,second]);assert.deepEqual(calls,[{enabled:true,duration:1000},{enabled:false}]);
  assert.equal(player.getCrossfade().enabled,false);
 });
+
+test('crossfade status distinguishes retained NodeLink intent from Lavalink support',async t=>{
+ const {player,node,requests}=createPlayer(t);
+ node.backend=BackendDetector.detect({version:{semver:'4.2.2'}});
+ assert.equal(player.getCrossfadeStatus(),'unavailable');
+ assert.throws(()=>player.setQueuePreload({enabled:true}),{code:'FEATURE_UNAVAILABLE'});
+ setup(node);node.connected=true;
+ await player.setCrossfade({enabled:true,duration:5000});
+ assert.equal(player.getCrossfadeStatus(),'configured');
+ const count=requests.length;
+ node.backend=BackendDetector.detect({version:{semver:'4.2.2'}});
+ node.isNodeLink=false;
+ assert.equal(player.getCrossfadeStatus(),'suspended');
+ assert.equal(player.getCrossfade().duration,5000);
+ await assert.rejects(player.setCrossfade({enabled:true}),{code:'FEATURE_UNAVAILABLE'});
+ assert.throws(()=>player.setQueuePreload({enabled:true}),{code:'FEATURE_UNAVAILABLE'});
+ assert.equal(requests.length,count);
+ setup(node);assert.equal(player.getCrossfadeStatus(),'configured');
+ node.backend.recordFeature('crossfade','unavailable');
+ assert.equal(player.getCrossfadeStatus(),'suspended');
+});

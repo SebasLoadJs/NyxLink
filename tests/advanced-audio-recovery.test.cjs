@@ -58,3 +58,11 @@ test('explicit unavailable filter on NodeLink is not sent', () => {
     assert.deepEqual(suspendNativeFilters(filters, target), ['filter:echo']);
     assert.deepEqual(filters, { rotation: { rotationHz: 0.2 } });
 });
+
+test('a stale NodeLink boolean cannot override an identified Lavalink adapter',()=>{
+ const target=node(false);target.isNodeLink=true;
+ const payload={track:{encoded:'song'}};const suspended=[];
+ projectAdvancedAudio(payload,target,intent,suspended);
+ assert.deepEqual(payload,{track:{encoded:'song'}});
+ assert.ok(suspended.includes('crossfade'));
+});

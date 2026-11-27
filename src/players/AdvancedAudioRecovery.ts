@@ -14,7 +14,7 @@ export interface AdvancedAudioIntent {
 
 /** Unknown support on NodeLink retains the existing optimistic request policy. */
 export function canSendNativeAudio(node: Pick<Node, 'isNodeLink' | 'backend'>, feature: string): boolean {
-    return node.isNodeLink && node.backend?.featureStatus?.(feature) !== 'unavailable';
+    return node.isNodeLink && (!node.backend || node.backend.kind === 'nodelink') && node.backend?.featureStatus?.(feature) !== 'unavailable';
 }
 
 /** Copy only compatible native controls; never mutate the remembered intent. */

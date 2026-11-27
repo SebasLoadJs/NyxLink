@@ -319,7 +319,7 @@ Lyrics and captions depend on enabled providers. Source health is an observation
 
 ### Crossfade, AutoMix and mixing
 
-- `player.setCrossfade(options)` configures the native transition.
+- `player.setCrossfade(options)` configures the native transition; `player.getCrossfadeStatus()` distinguishes supported configuration from suspended intent after migration to Lavalink.
 - `player.setNextTrack(track)` prepares an explicit next track.
 - `player.setQueuePreload({ enabled: true, leadMs: 35000 })` enables queue-backed preload.
 - `player.addMix(track, { volume: 0.25 })`, `getMixes()`, `updateMixVolume()` and `removeMix()` manage native audio layers.
