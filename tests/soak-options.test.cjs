@@ -12,3 +12,9 @@ test('soak configuration checks do not start containers or the worker process', 
   const result = await run(parseArguments(['--hours', '48', '--check']));
   assert.equal(result.networkActionsPerformed, false); assert.equal(result.seconds, 172800); assert.equal(result.armed, false);
 });
+
+test('dedicated soak reports are isolated by a bounded CI run/attempt identity',()=>{
+ const {soakDirectory}=require('../scripts/test-soak.cjs');const path=require('node:path');const base=path.resolve('.runtime/soak');
+ assert.equal(soakDirectory(base),base);assert.equal(soakDirectory(base,'ci-123-2'),path.join(base,'ci-123-2'));
+ for(const value of ['',null,'../escape','ci-123-0','ci-123-2/other','ci-123-2.json','ci-0001-2','ci-123456789012345678901-2'])assert.throws(()=>soakDirectory(base,value),TypeError);
+});

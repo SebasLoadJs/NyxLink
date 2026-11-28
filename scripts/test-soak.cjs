@@ -25,6 +25,12 @@ function parseArguments(args) {
   return { hours, seconds: hours * 3600, armed };
 }
 
+function soakDirectory(base, runKey) {
+  if (runKey === undefined) return base;
+  if (typeof runKey !== 'string' || !/^ci-[1-9][0-9]{0,19}-[1-9][0-9]{0,9}$/.test(runKey)) throw new TypeError('Invalid soak run identity');
+  return path.join(base, runKey);
+}
+
 async function run(options) {
   if (!options.armed) return { ...options, networkActionsPerformed: false, scope: 'configuration only; Linux and a container engine required for execution' };
   if (process.platform !== 'linux') throw new Error('Soak requires a Linux container host');
@@ -34,8 +40,12 @@ async function run(options) {
   // it from the exact revision before creating any backend containers.
   if (buildForLiveVoice(root) !== before) throw new Error('Soak build revision changed');
   const runId = new Date().toISOString().replace(/[:.]/g, '-') + '-' + randomUUID();
-  const directory = path.join(root, '.runtime/soak');
-  await fs.mkdir(directory, { recursive: true, mode: 0o700 });
+  const baseDirectory = path.join(root, '.runtime/soak');
+  const runKey = process.env.NYXLINK_SOAK_RUN_KEY;
+  const directory = soakDirectory(baseDirectory, runKey);
+  await fs.mkdir(baseDirectory, { recursive: true, mode: 0o700 });
+  // An existing CI attempt directory cannot be reused or certified.
+  if (runKey !== undefined) await fs.mkdir(directory, { mode: 0o700 });
   const original = path.join(directory, runId + '.worker.json');
   let interrupted = false, completed = false;
   try {
@@ -78,4 +88,4 @@ if (require.main === module) {
     console.log(JSON.stringify(result)); if (result.passed === false) process.exitCode = 1;
   }).catch(() => { console.error('Soak preparation failed; check duration, clean source and Linux container runtime.'); process.exitCode = 1; });
 }
-module.exports = { parseArguments, run };
+module.exports = { parseArguments, run, soakDirectory };

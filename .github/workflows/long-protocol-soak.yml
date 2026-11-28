@@ -22,6 +22,7 @@ jobs:
     env:
       NYXLINK_CONTAINER_ENGINE: docker
       SOAK_HOURS: ${{ inputs.hours }}
+      NYXLINK_SOAK_RUN_KEY: ci-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,14 +44,14 @@ jobs:
         shell: bash
         run: |
           shopt -s nullglob
-          reports=(.runtime/soak/*.json)
+          reports=(.runtime/soak/"$NYXLINK_SOAK_RUN_KEY"/*.json)
           test "${#reports[@]}" -eq 1
           mkdir -p .runtime/soak-verification
           node scripts/check-endurance-evidence.cjs --soak "$SOAK_HOURS" "${reports[0]}" > .runtime/soak-verification/result.json
       - name: Upload only sanitized verification summary
         uses: actions/upload-artifact@v4
         with:
-          name: protocol-soak-verification-${{ github.run_id }}
+          name: protocol-soak-verification-${{ github.run_id }}-${{ github.run_attempt }}
           path: .runtime/soak-verification/result.json
           if-no-files-found: error
           retention-days: 30

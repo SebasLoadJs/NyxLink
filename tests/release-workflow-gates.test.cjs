@@ -81,3 +81,10 @@ test('continuous soak is manually armed on a dedicated runner, never a PR or pus
  assert.match(data,/path: \.runtime\/soak-verification\/result\.json/);
  assert.doesNotMatch(data,/NODE_AUTH_TOKEN|NPM_TOKEN|id-token:\s*write/);
 });
+
+test('dedicated soak verifies only the report from the current CI run attempt',()=>{
+ const data=workflow('long-protocol-soak.yml');
+ assert.match(data,/NYXLINK_SOAK_RUN_KEY: ci-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/);
+ assert.ok(data.includes('reports=(.runtime/soak/"$NYXLINK_SOAK_RUN_KEY"/*.json)'));
+ assert.doesNotMatch(data,/reports=\(\.runtime\/soak\/\*\.json\)/);
+});
