@@ -68,3 +68,16 @@ test('release tags rerun Redis, backend protocols, expanded plugins and proposal
  assert.match(release,/generate-api-reference\.cjs --check/);
  assert.match(release,/validated-release-distribution-node-/);
 });
+
+test('continuous soak is manually armed on a dedicated runner, never a PR or push job',()=>{
+ const data=workflow('long-protocol-soak.yml');
+ assert.match(data,/workflow_dispatch:/);
+ assert.doesNotMatch(data,/^  (push|pull_request|schedule):/m);
+ assert.match(data,/runs-on: \[self-hosted, linux, x64, nyxlink-soak\]/);
+ assert.match(data,/cancel-in-progress: false/);
+ assert.match(data,/timeout-minutes: 4440/);
+ assert.match(data,/test-soak\.cjs --hours "\$SOAK_HOURS" --armed/);
+ assert.match(data,/check-endurance-evidence\.cjs --soak/);
+ assert.match(data,/path: \.runtime\/soak-verification\/result\.json/);
+ assert.doesNotMatch(data,/NODE_AUTH_TOKEN|NPM_TOKEN|id-token:\s*write/);
+});
