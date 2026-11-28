@@ -25,3 +25,21 @@ test('NodeLink native and proposed extension route catalog retains exact wire me
   assert.throws(()=>ll.resolveExtension(operation,params),{code:'FEATURE_UNAVAILABLE'});
  }
 });
+
+test('stable 5.3 declaration text remains an ordered subsequence of current public declarations',()=>{
+ const stable=require('./fixtures/v5.3-public-declarations.json');
+ assert.equal(stable.baseline,baseline.baseline);
+ const current=Object.fromEntries([...docs.matchAll(/^## (.+)\n[\s\S]*?^```ts\n([\s\S]*?)^```/gm)].map(m=>[m[1],m[2]]));
+ assert.deepEqual(Object.keys(stable.declarations).sort(),[...baseline.symbols].sort());
+ const exceptions={Rest:{'    exchangeYoutubeOAuth(refreshToken: string): Promise<any | null>;':'    exchangeYoutubeOAuth(refreshToken: string, options?: BackendInfoOptions): Promise<any | null>;'}};
+ for(const [name,old] of Object.entries(stable.declarations)){
+  assert.ok(current[name],'Removed declaration: '+name);
+  const lines=current[name].trimEnd().split('\n');let cursor=0;
+  for(const line of old.trimEnd().split('\n')){
+   const expected=exceptions[name]?.[line]??line;
+   while(cursor<lines.length&&lines[cursor]!==expected)cursor++;
+   assert.ok(cursor<lines.length,'Changed stable declaration '+name+': '+line);
+   cursor++;
+  }
+ }
+});
