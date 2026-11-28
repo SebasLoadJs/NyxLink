@@ -11,12 +11,12 @@ const root = path.resolve(process.env.NYXLINK_NODELINK_PROPOSAL_ROOT || '.runtim
 const expected = process.env.NYXLINK_NODELINK_PROPOSAL_REVISION;
 const proposal = process.env.NYXLINK_NODELINK_PROPOSAL;
 const revisions = Object.freeze({
-  "265": "39cae5066be93efe4ca9507b4b8f5cbb5a693210",
-  "266": "944cd7c3cdd5c38ca47b06a890e33e0e94c6c0f6",
-  "267": "4693b4a447647ea2d37773042489ee8f0cc63897",
-  "268": "b3e1df8796755d1efcf05357c9c4898edd046693",
-  "269": "09c642906af98e0b724183bd329dae4666d7c48a",
-  "270": "72f4f8db58773b655dbe1e122de2a76e3c488152"
+  "265": "d0c3f9348a28d2e3fbc5e7f689cae6e86fadad9a",
+  "266": "13c12ad1653436ed4ff96626d422f54ae65f4fca",
+  "267": "e84a0a35958650d252461418123a5c82aef8395a",
+  "268": "2f62c8b4d873636cff58062597f943ef9579a5b7",
+  "269": "7df140312bf06214366b07c8a2a93acc93c76712",
+  "270": "017c6cc7ae341ba105849647711fc90d552b1d76"
 });
 const moduleAt = file => import(pathToFileURL(path.join(root,'dist','src',file)).href);
 function tone(ms, amplitude = 0.4, floating = false) {

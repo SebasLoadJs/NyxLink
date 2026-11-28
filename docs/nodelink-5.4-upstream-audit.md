@@ -22,3 +22,18 @@ A read-only registry inventory workflow was added to obtain npm versions and dis
 The `NodeLink proposal compatibility` workflow independently compiles each of the six exact fork commits and tests the actual module output against NyxLink readers or the upstream AutoMix safety helpers using synthetic data/PCM. This does not copy or redistribute NodeLink modules. No provider credentials, Discord token, combined upstream build, server network route or audible transition are exercised. Results must be checked in Actions; creating the workflow is not evidence of a pass.
 
 The six independent proposal jobs succeeded on 37fa0793d7f567cef97a0897091635082c3c943d ([CI evidence](https://github.com/SebasLoadJs/NyxLink/actions/runs/45907683272)). The scope remains synthetic module interoperability, not live server/voice acceptance.
+
+## 2026-11-28 — upstream refresh
+
+Upstream dev advanced from `86c6a00d022cbf1cafdbc5eea39a2b7033637485` to `f0c1f5adcec3ef0c24b017ad5ef3993690bfef06` (three commits; GitHub compare lists no changes under `src/api/` or `src/typings/api/`). All six proposals remain open and unmerged. Refresh the independent module matrix and its exact-revision allowlist together to the following observed heads. Historical passing runs do not certify these new heads.
+
+| Proposal | Exact fork revision |
+| --- | --- |
+| #265 | `d0c3f9348a28d2e3fbc5e7f689cae6e86fadad9a` |
+| #266 | `13c12ad1653436ed4ff96626d422f54ae65f4fca` |
+| #267 | `e84a0a35958650d252461418123a5c82aef8395a` |
+| #268 | `2f62c8b4d873636cff58062597f943ef9579a5b7` |
+| #269 | `7df140312bf06214366b07c8a2a93acc93c76712` |
+| #270 | `017c6cc7ae341ba105849647711fc90d552b1d76` |
+
+Compatibility remains pending CI. No changes are pushed to the NodeLink proposals by this refresh.
