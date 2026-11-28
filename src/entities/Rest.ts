@@ -145,14 +145,15 @@ export class Rest {
             this.node.backend === backend && this.node.socket === socket && this.node.sessionId === session;
         const route = this.extensionRoute(operation, params);
         const feature = route.feature;
-        this.node.assertFeature(feature);
-        if (route.transport !== 'json') throw new TypeError('Extension requires stream transport');
         if (!current()) throw new Error('Backend extension context changed');
-        // Capture the route context before the asynchronous ownership check.
+        // Ownership must win over capability checks for a stale guild writer.
+        // Keep the captured context across the asynchronous lease check.
         if (params.guildId && route.method !== 'GET') {
             await this.node.manager.guildOwnership?.assertCurrent(params.guildId);
         }
         if (!current()) throw new Error('Backend extension context changed');
+        this.node.assertFeature(feature);
+        if (route.transport !== 'json') throw new TypeError('Extension requires stream transport');
         const result = await this.node.circuit.run(async () => {
             if (!current()) throw new Error('Backend extension context changed');
             try {

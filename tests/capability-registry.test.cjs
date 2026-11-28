@@ -102,3 +102,16 @@ test('extension requests reject redirects without replaying credentials or comma
  t.after(()=>{server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
  await assert.rejects(node.rest.getMixLayers('123456789012345678'));assert.equal(calls,1);
 });
+
+test('lost guild lease takes precedence over capability checks in the extension transport',async t=>{
+ const {node}=createPlayer(t);node.sessionId='session';let capabilityChecks=0;let requests=0;
+ const original=node.manager.guildOwnership;
+ node.manager.guildOwnership={assertCurrent:async()=>{throw new Error('guild lease lost');}};
+ node.rest.extensionRoute=()=>({method:'PATCH',feature:'mix:update',path:'/not-sent',transport:'json'});
+ node.assertFeature=()=>{capabilityChecks++;throw new Error('feature unavailable');};
+ node.rest.request=async()=>{requests++;throw new Error('unexpected request');};
+ try{
+  await assert.rejects(node.rest.featureRequest('mix:update',{guildId:'123456789012345678',mixId:'fixture'},{headers:{}}),/lease lost/);
+  assert.equal(capabilityChecks,0);assert.equal(requests,0);
+ }finally{node.manager.guildOwnership=original;}
+});
