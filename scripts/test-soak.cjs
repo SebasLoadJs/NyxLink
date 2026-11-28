@@ -3,7 +3,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const { withBackendLab } = require('../tests/helpers/backend-lab.cjs');
-const { sourceRevision, writePrivateReport } = require('./test-live-voice.cjs');
+const { sourceRevision, writePrivateReport, buildForLiveVoice } = require('./test-live-voice.cjs');
 const {inspectSoak}=require('./check-endurance-evidence.cjs');
 const root = path.resolve(__dirname, '..');
 
@@ -27,8 +27,12 @@ function parseArguments(args) {
 
 async function run(options) {
   if (!options.armed) return { ...options, networkActionsPerformed: false, scope: 'configuration only; Linux and a container engine required for execution' };
+  if (process.platform !== 'linux') throw new Error('Soak requires a Linux container host');
   const before = sourceRevision(root);
   if (!before) throw new Error('Soak requires a clean source checkout');
+  // dist is deliberately excluded from the source cleanliness check; rebuild
+  // it from the exact revision before creating any backend containers.
+  if (buildForLiveVoice(root) !== before) throw new Error('Soak build revision changed');
   const runId = new Date().toISOString().replace(/[:.]/g, '-') + '-' + randomUUID();
   const directory = path.join(root, '.runtime/soak');
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
@@ -58,10 +62,10 @@ async function run(options) {
   const validation=inspectSoak(before,measured,options.hours);
   delete measured.error; // Never copy arbitrary backend error text into a summary.
   const after = sourceRevision(root);
-  const report = { ...measured, timestamp: new Date().toISOString(), scope: 'isolated backend protocol soak; no Discord voice or audible playback',
+  const report = { ...measured, timestamp: new Date().toISOString(), acceptanceScope: 'isolated backend protocol soak; no Discord voice or audible playback',
     requestedHours: options.hours, sourceRevision: before === after ? before : null, interrupted,
     validation:validation.checks,
-    passed: Boolean(completed && validation.soakEvidenceComplete && before === after), audioVerified: false, releaseApproved: false };
+    completed, passed: Boolean(completed && validation.soakEvidenceComplete && before === after), audioVerified: false, releaseApproved: false };
   const target = path.join(directory, runId + '.json');
   await writePrivateReport(target, report);
   await fs.rm(original, { force: true });

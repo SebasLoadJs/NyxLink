@@ -45,16 +45,27 @@ function inspectSoak(revision,report,hours){
     boundedSampling:Number.isSafeInteger(report?.samplingEverySeconds)&&report.samplingEverySeconds===60&&Array.isArray(report?.samples)&&report.samples.length<=Math.ceil(hours*3600/60)+2&&report.samples.every((s,i,a)=>i===0||s?.elapsedSeconds-a[i-1]?.elapsedSeconds<=180)};
   return {revision,checks,soakEvidenceComplete:Object.values(checks).every(Boolean),audioVerified:false,releaseApproved:false};
 }
+function inspectSoakReport(revision,report,hours){
+  const base=inspectSoak(revision,report,hours);
+  const checks={...base.checks,requestedHours:report?.requestedHours===hours,
+    completed:report?.completed===true&&report?.interrupted===false,
+    acceptanceScope:report?.acceptanceScope==='isolated backend protocol soak; no Discord voice or audible playback',
+    scopeBoundaries:report?.audioVerified===false&&report?.releaseApproved===false};
+  return {revision,checks,soakEvidenceComplete:Object.values(checks).every(Boolean),audioVerified:false,releaseApproved:false};
+}
 if (require.main === module) {
   try {
     const revision = sourceRevision();
-    const report = JSON.parse(fs.readFileSync(path.resolve('.runtime/integration/endurance-report.json'), 'utf8'));
-    const result = inspectEndurance(revision, report);
+    const args=process.argv.slice(2);
+    if(args.length && (args.length!==3||args[0]!=='--soak'||!/^\d+$/.test(args[1]))) throw new Error('Usage: check-endurance-evidence.cjs [--soak HOURS REPORT]');
+    const filename=args.length?args[2]:'.runtime/integration/endurance-report.json';
+    const report = JSON.parse(fs.readFileSync(path.resolve(filename), 'utf8'));
+    const result = args.length?inspectSoakReport(revision,report,Number(args[1])):inspectEndurance(revision, report);
     console.log(JSON.stringify(result, null, 2));
-    if (!result.enduranceEvidenceComplete) process.exitCode = 1;
+    if (!(args.length?result.soakEvidenceComplete:result.enduranceEvidenceComplete)) process.exitCode = 1;
   } catch {
     console.error('Missing, invalid or unverifiable endurance evidence. Release approval not inferred.');
     process.exitCode = 1;
   }
 }
-module.exports = { sourceRevision, inspectEndurance, inspectSoak };
+module.exports = { sourceRevision, inspectEndurance, inspectSoak, inspectSoakReport };

@@ -155,7 +155,7 @@ async function main() {
       cleanup: { players: contexts.reduce((sum, c) => sum + c.manager.players.size, 0), nodes: contexts.reduce((sum, c) => sum + c.manager.nodes.nodes.size, 0), activeResources: process.getActiveResourcesInfo() },
       ...(errorMessage ? { error: errorMessage } : {}),
     };
-    await fs.writeFile(process.env.NYXLINK_ENDURANCE_REPORT || path.resolve(lab.directory, '../endurance-report.json'), JSON.stringify(report, null, 2) + '\n');
+    await fs.writeFile(process.env.NYXLINK_ENDURANCE_REPORT || path.resolve(lab.directory, '../endurance-report.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
     console.log(`Endurance report: passed=${report.passed}, elapsed=${report.elapsedSeconds.toFixed(1)}s`);
     if (!report.passed) process.exitCode = 1;
   }

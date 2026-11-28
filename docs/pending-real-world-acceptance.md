@@ -52,3 +52,5 @@ El ensayo de protocolo ahora utiliza histogramas HDR acotados y muestreo de memo
 ### External native-plugin blocker
 
 XM 0.2.8 fails in libxmp on the pinned Lavalink 4.2.2 runtime, independently of NyxLink. See [reproduction and deployment guidance](xm-native-compatibility.md). This is not a human Discord listening task. Do not deploy the affected plugin on a production playback node while the upstream compatibility problem remains unresolved.
+
+El runner de soak recompila `dist/` desde el SHA limpio antes de crear contenedores. El informe final conserva el scope del worker, declara finalización/interrupción y se puede verificar sin confiar en las comprobaciones almacenadas: `node scripts/check-endurance-evidence.cjs --soak 24 .runtime/soak/<informe>.json` desde el mismo SHA. Los fixtures sintéticos prueban el verificador, no certifican 24 horas de ejecución. La infraestructura self-hosted no pudo confirmarse desde el acceso disponible; no se inició ningún ensayo largo.

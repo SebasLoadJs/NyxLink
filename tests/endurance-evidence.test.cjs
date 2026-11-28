@@ -60,3 +60,14 @@ test('600 seconds cannot certify a 24-hour soak, complete synthetic schema can',
  assert.equal(inspectSoak(revision,{...report,error:'failure'},24).soakEvidenceComplete,false);
  assert.equal(inspectSoak(revision,report,24).releaseApproved,false);
 });
+
+test('final soak reports remain independently verifiable without trusting stored checks',()=>{
+ const {inspectSoakReport}=require('../scripts/check-endurance-evidence.cjs');
+ const report={...sample(),durationSeconds:86400,elapsedSeconds:86401,samplingEverySeconds:60,
+  backends:sample().backends.map(b=>({...b,cycles:43200})),samples:Array.from({length:1441},(_,i)=>({elapsedSeconds:i*60,heapUsedBytes:100,rssBytes:1000})),
+  acceptanceScope:'isolated backend protocol soak; no Discord voice or audible playback',requestedHours:24,completed:true,interrupted:false,audioVerified:false,releaseApproved:false};
+ assert.equal(inspectSoakReport(revision,report,24).soakEvidenceComplete,true);
+ for(const change of [{completed:false},{interrupted:true},{requestedHours:48},{audioVerified:true},{releaseApproved:true},{sourceRevision:'b'.repeat(40)},{acceptanceScope:'other'},{passed:false}]){
+  assert.equal(inspectSoakReport(revision,{...report,...change,validation:{all:true}},24).soakEvidenceComplete,false);
+ }
+});
