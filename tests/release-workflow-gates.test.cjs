@@ -55,3 +55,16 @@ test('only validated archives are uploaded for manual and tag release preparatio
     assert.ok(data.indexOf('pnpm run test:package') < data.indexOf('path: .runtime/validated-distribution/'));
   }
 });
+
+test('release tags rerun Redis, backend protocols, expanded plugins and proposal contracts',()=>{
+ for(const name of ['backend-integration.yml','redis-storage.yml','lavalink-plugin-matrix.yml','nodelink-proposals.yml']){
+  const data=workflow(name);
+  assert.ok(data.includes("'v[0-9]*.[0-9]*.[0-9]*-rc.[0-9]*'"),name);
+  assert.ok(data.includes("'v[0-9]*.[0-9]*.[0-9]*'"),name);
+  assert.ok(data.includes("'!v*-dev.*'"),name);
+  assert.doesNotMatch(data,/continue-on-error:\s*true/,name);
+ }
+ assert.match(release,/node: \[22, 24\]/);
+ assert.match(release,/generate-api-reference\.cjs --check/);
+ assert.match(release,/validated-release-distribution-node-/);
+});

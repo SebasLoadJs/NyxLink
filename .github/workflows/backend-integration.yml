@@ -4,6 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches: [dev, v5.2, v5.3]
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*-rc.[0-9]*'
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+      - '!v*-dev.*'
   pull_request:
     branches: [dev, v5.2, v5.3]
     paths:

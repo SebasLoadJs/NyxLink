@@ -15,12 +15,16 @@ jobs:
     name: Validate immutable release tag without publishing
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Tag, version and npm dist-tag must match
@@ -33,6 +37,8 @@ jobs:
         run: pnpm run test:coverage
       - name: Public TypeScript API
         run: pnpm run test:types
+      - name: Verify generated public API reference
+        run: node scripts/generate-api-reference.cjs --check
       - name: Pack and install isolated consumer
         run: pnpm run test:package
       - name: Exclude private files from npm tarball
@@ -42,7 +48,7 @@ jobs:
       - name: Upload the exact validated npm archive (not published)
         uses: actions/upload-artifact@v4
         with:
-          name: validated-release-distribution
+          name: validated-release-distribution-node-${{ matrix.node }}
           path: .runtime/validated-distribution/
           if-no-files-found: error
           retention-days: 30

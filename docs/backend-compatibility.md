@@ -1,6 +1,10 @@
 # Backend compatibility matrix — verified baseline
 
-## Latest verified development checkpoint — 2026-11-24
+## Latest verified development checkpoint — 2026-11-28
+
+At `c4f803aec16b376995fb69c7c3a23ac91bef5538`, all seven triggered workflows passed: [validation](https://github.com/SebasLoadJs/NyxLink/actions/runs/46109410852), [protocol integration](https://github.com/SebasLoadJs/NyxLink/actions/runs/46109410033), [Redis](https://github.com/SebasLoadJs/NyxLink/actions/runs/46109410096), [CodeQL](https://github.com/SebasLoadJs/NyxLink/actions/runs/46109410098), [local endurance](https://github.com/SebasLoadJs/NyxLink/actions/runs/46109410039), [extended endurance](https://github.com/SebasLoadJs/NyxLink/actions/runs/46109410053), and [all six refreshed proposal heads](https://github.com/SebasLoadJs/NyxLink/actions/runs/46109410124). The expanded matrix was not triggered on this revision; ten of eleven catalog entries have earlier protocol acceptance and XM remains [incompatible](xm-native-compatibility.md). No live voice or 24–72 hour soak is certified.
+
+## Historical checkpoint — 2026-11-24
 
 At NyxLink `770053d892939650cd0e44f5603ed8af49727409`, [validation](https://github.com/SebasLoadJs/NyxLink/actions/runs/45318101584), [baseline/modern protocols and plugins](https://github.com/SebasLoadJs/NyxLink/actions/runs/45318101522), [Redis](https://github.com/SebasLoadJs/NyxLink/actions/runs/45318101657) and [600-second endurance](https://github.com/SebasLoadJs/NyxLink/actions/runs/45318101691) passed. The image and plugin pins remain those in `tests/integration/backend-servers.json`. This supersedes the transient download failure recorded in the historical resume checkpoint below. New commits require their own checks in [dev CI](https://github.com/SebasLoadJs/NyxLink/actions?query=branch%3Adev).
 
